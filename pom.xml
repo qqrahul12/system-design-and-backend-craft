@@ -31,6 +31,7 @@
         <module>cache</module>
         <module>promo-service</module>
         <module>movie-booking-service</module>
+        <module>payment-service</module>
     </modules>
 
     <properties>
