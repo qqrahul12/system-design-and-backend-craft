@@ -28,6 +28,9 @@
         <module>Chat</module>
         <module>employee-manager</module>
         <module>food-chain-service</module>
+        <module>cache</module>
+        <module>promo-service</module>
+        <module>movie-booking-service</module>
     </modules>
 
     <properties>
