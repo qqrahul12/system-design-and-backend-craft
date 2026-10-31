@@ -1,0 +1,47 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: ai-assistant-service
+
+  # Disable JPA & unused Spring AI auto-configurations
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.jdbc.DataSourceAutoConfiguration
+      - org.springframework.boot.autoconfigure.orm.jpa.HibernateJpaAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.jpa.JpaRepositoriesAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioSpeechAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiAudioTranscriptionAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiImageAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiModerationAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiChatAutoConfiguration
+      - org.springframework.ai.model.openai.autoconfigure.OpenAiEmbeddingAutoConfiguration
+
+# Provider API Keys & Base URLs
+ai:
+  gemini:
+    api-key: ${GEMINI_API_KEY:your-gemini-api-key-here}
+    base-url: https://generativelanguage.googleapis.com/v1beta/openai
+    model: gemini-3.8-flash
+    temperature: 0.7
+  groq:
+    api-key: ${GROQ_API_KEY:your-groq-api-key-here}
+    base-url: https://api.groq.com/openai/v1
+    model: qwen/qwen3.8-27b
+    temperature: 0.2
+
+logging:
+  level:
+    com.skills.ai: DEBUG
+    org.springframework.ai: INFO
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: always
+

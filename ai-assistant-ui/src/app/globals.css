@@ -1,0 +1,98 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --bg-primary:   #0a0a0a;
+  --bg-sidebar:   #111111;
+  --bg-card:      #1a1a1a;
+  --border-card:  #2a2a2a;
+  --accent:       #7c3aed;
+  --text-primary: #ffffff;
+  --text-muted:   #888888;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  font-family: var(--font-inter), system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: #111111;
+}
+::-webkit-scrollbar-thumb {
+  background: #2a2a2a;
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3a3a3a;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Focus ring */
+:focus-visible {
+  outline: 2px solid #7c3aed;
+  outline-offset: 2px;
+}
+
+/* Selection */
+::selection {
+  background-color: #7c3aed44;
+  color: #ffffff;
+}
+
+@layer components {
+  .card {
+    @apply bg-[#1a1a1a] border border-[#2a2a2a] rounded-xl;
+  }
+
+  .btn-primary {
+    @apply bg-[#7c3aed] hover:bg-[#6d28d9] text-white font-medium px-4 py-2 rounded-lg
+           transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-ghost {
+    @apply bg-transparent hover:bg-[#1a1a1a] text-[#888] hover:text-white
+           border border-transparent hover:border-[#2a2a2a] font-medium px-4 py-2 rounded-lg
+           transition-all duration-200;
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .input-dark {
+    @apply bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg px-4 py-2.5 text-white
+           placeholder-[#555] focus:outline-none focus:border-[#7c3aed] focus:ring-1
+           focus:ring-[#7c3aed] transition-colors w-full;
+  }
+
+  .page-header {
+    @apply text-2xl font-bold text-white mb-1;
+  }
+
+  .page-sub {
+    @apply text-sm text-[#888];
+  }
+
+  .section-title {
+    @apply text-sm font-semibold text-[#888] uppercase tracking-wider mb-3;
+  }
+}

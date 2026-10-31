@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # ---------------------------------------------------------------------------
+  # AI Assistant Microservice (Spring Boot 3.3 / Java 21)
+  # ---------------------------------------------------------------------------
+  ai-assistant-service:
+    build:
+      context: .
+      dockerfile: ai-assistant-service/Dockerfile
+    container_name: cinemind-ai-backend
+    ports:
+      - "8080:8080"
+    environment:
+      - GEMINI_API_KEY=${GEMINI_API_KEY}
+      - GROQ_API_KEY=${GROQ_API_KEY}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/actuator/health | grep UP || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3

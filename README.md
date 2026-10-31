@@ -16,6 +16,7 @@ This repository is a production-grade showcase of **High-Level System Design (HL
 
 | Service / Module | Tech Stack | Architectural Highlights |
 | :--- | :--- | :--- |
+| 🧠 **`ai-assistant-service`** & 💻 **`ai-assistant-ui`** | Java 21, Spring AI 1.0, Gemini 3.8 Flash, Groq LPU, Next.js 14, MCP | **Enterprise AI Platform (CineMind)**: Dual-model routing (Gemini for RAG/reasoning + Groq LPU for low-latency tool calls), 768-dim Vector Embeddings RAG pipeline with Cosine Similarity citations, Model Context Protocol (MCP) JSON-RPC 2.0 server endpoint, and LLMOps SHA-256 response caching with active Prompt Injection firewall. |
 | 🎬 **`movie-booking-service`** | Java 21, Spring Boot 3, JPA, Redisson, Resilience4j | High-concurrency Flash Sales seat reservation engine with Pessimistic/Optimistic locking, Redisson Distributed Locks, Token Bucket Rate Limiter, `CompletableFuture` async checkout pipeline, and Resilience4j Circuit Breakers. |
 | ⚡ **`cache`** | Java 21, Caffeine, ReentrantLock | Thread-safe handcrafted `LruCache` with sentinel nodes & `ReentrantLock`, Caffeine Cache Adapter, and Decorator Pattern implementations. |
 | 🏷️ **`promo-service`** | Spring Boot, Dynamic AST Rule Engine | AST-based Rule Evaluator & Stacking Resolver for multi-tenant cart promotions and discount actions. |
@@ -53,6 +54,9 @@ This repository includes an extensive library of 18 deep-dive architectural refe
 | **16** | **Real-World System Architectures** | Facebook Haystack/TAO, Amazon Dynamo, Twitter Snowflake/Fan-out, WhatsApp | [`16_real_world_system_architectures_case_studies.md`](.learn/.docs/16_real_world_system_architectures_case_studies.md) |
 | **17** | **Back-of-the-Envelope Estimation** | Jeff Dean Latency Numbers, Powers of 2, SLA Availability Nines | [`17_back_of_the_envelope_estimation_and_latency_numbers.md`](.learn/.docs/17_back_of_the_envelope_estimation_and_latency_numbers.md) |
 | **18** | **The 4-Step System Design Framework** | Scope Clarification, Blueprint, Architectural Deep Dive, Bottlenecks | [`18_system_design_interview_4_step_framework.md`](.learn/.docs/18_system_design_interview_4_step_framework.md) |
+| **19** | **Structured Logging & Context Tracing (MDC)** | SLF4J, Logback, Thread-Local MDC, JSON Aggregation, Distributed Tracing | [`19_structured_application_logging_and_mdc.md`](.learn/.docs/19_structured_application_logging_and_mdc.md) |
+| **20** | **Rate Limiter Design** | Token Bucket Algorithm, Leaky Bucket, Sliding Window Counter | [`20_design_a_rate_limiter_deep_dive.md`](.learn/.docs/20_design_a_rate_limiter_deep_dive.md) |
+| **21** | **Enterprise Generative AI, RAG, MCP & LLMOps** | Vector Embeddings, Cosine Similarity, Model Context Protocol (MCP), Prompt Guard Firewall, SHA-256 Response Caching | [`21_enterprise_generative_ai_rag_mcp_and_llmops.md`](.learn/.docs/21_enterprise_generative_ai_rag_mcp_and_llmops.md) |
 
 ---
 

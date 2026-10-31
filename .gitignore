@@ -32,3 +32,19 @@ build/
 ### VS Code ###
 .vscode/
 /SplitMoney/src/main/resources/static/
+
+### Secrets & Environment Variables ###
+.env
+.env.*
+!.env.example
+
+### Node / Next.js Frontend ###
+**/node_modules/
+**/.next/
+**/.pnpm/
+**/.pnpm-store/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
