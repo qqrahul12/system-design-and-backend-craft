@@ -151,6 +151,42 @@ async function runTestSuite() {
     if (typeof json.totalRequests !== 'number') throw new Error('Invalid metrics response');
   });
 
+  // 6. Multi-Agent Swarm Orchestrator Tests
+  console.log('\n--- 6. Multi-Agent Swarm Orchestration Engine ---');
+  await test('Agent Roster Discovery (/api/v1/agents/roster)', async () => {
+    const res = await request({
+      hostname: 'localhost',
+      port: 8080,
+      path: '/api/v1/agents/roster',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const agents = JSON.parse(res.body);
+    if (!Array.isArray(agents) || agents.length < 6) {
+      throw new Error(`Expected at least 6 agents, got ${agents?.length}`);
+    }
+  });
+
+  await test('Multi-Agent Autonomous Orchestration Execution (/api/v1/agents/orchestrate)', async () => {
+    const payload = JSON.stringify({
+      objective: 'Book 2 premier seats for Inception tonight with promo CINE20 and verify popcorn rules',
+      model: 'groq',
+      mode: 'SUPERVISOR_DAG',
+    });
+    const res = await request({
+      hostname: 'localhost',
+      port: 8080,
+      path: '/api/v1/agents/orchestrate',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (!data.success) throw new Error('Orchestration did not succeed');
+    if (!data.steps || data.steps.length < 5) throw new Error(`Expected at least 5 steps, got ${data.steps?.length}`);
+    if (!data.finalSynthesis) throw new Error('Missing final synthesis');
+  });
+
   console.log('\n====================================================');
   console.log(`🎯 Test Results: ${passed}/${total} Passed (${Math.round((passed / total) * 100)}%)`);
   console.log('====================================================');

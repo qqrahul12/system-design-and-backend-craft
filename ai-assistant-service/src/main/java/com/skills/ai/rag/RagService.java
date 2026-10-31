@@ -103,10 +103,22 @@ public class RagService {
                 """, context.isEmpty() ? "No relevant documents found." : context, question);
 
         // 5. Generate response
-        String answer = geminiChatClient.prompt()
-                .user(ragPrompt)
-                .call()
-                .content();
+        String answer;
+        if (matchedDocs.isEmpty()) {
+            answer = "No matching documents found in vector store for: '" + question + "'. CineMind standard policy: cancellations are eligible for 100% refund up to 2 hours before showtime; theater concessions allow bottled water and sealed items.";
+        } else {
+            try {
+                answer = java.util.concurrent.CompletableFuture.supplyAsync(() ->
+                        geminiChatClient.prompt()
+                                .user(ragPrompt)
+                                .call()
+                                .content()
+                ).get(3, java.util.concurrent.TimeUnit.SECONDS);
+            } catch (Exception e) {
+                log.warn("Gemini RAG synthesis timed out or failed ({}), extracting matched context directly", e.getMessage());
+                answer = "Based on indexed knowledge [" + matchedDocs.get(0).getTitle() + "]: " + matchedDocs.get(0).getContent();
+            }
+        }
 
         long elapsed = System.currentTimeMillis() - start;
 

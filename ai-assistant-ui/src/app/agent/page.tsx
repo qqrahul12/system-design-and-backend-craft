@@ -1,12 +1,69 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Terminal, Wrench, Play, CheckCircle2, AlertCircle, RefreshCw, Sparkles, Send } from 'lucide-react'
+import {
+  Terminal,
+  Wrench,
+  Play,
+  CheckCircle2,
+  AlertCircle,
+  RefreshCw,
+  Sparkles,
+  Send,
+  Cpu,
+  Layers,
+  ArrowRight,
+  ShieldCheck,
+  Zap,
+  Clock,
+  ChevronDown,
+  ChevronUp,
+  Sliders,
+  DollarSign,
+  Film,
+  Compass,
+  Check,
+  Flame,
+  Info
+} from 'lucide-react'
 
 const API_BASE =
   typeof window !== 'undefined'
     ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
     : 'http://localhost:8080'
+
+interface AgentPersona {
+  id: string
+  name: string
+  avatar: string
+  role: string
+  description: string
+  assignedTools: string[]
+  modelTier: string
+}
+
+interface AgentExecutionStep {
+  stepIndex: number
+  agentId: string
+  agentName: string
+  avatar: string
+  action: string
+  thought: string
+  toolName: string | null
+  toolInput: Record<string, any> | null
+  toolOutput: string
+  isError: boolean
+  durationMs: number
+  timestamp: string
+}
+
+interface AgentGraphNode {
+  id: string
+  label: string
+  avatar: string
+  role: string
+  status: 'IDLE' | 'ACTIVE' | 'EXECUTING_TOOL' | 'COMPLETED' | 'FAILED'
+}
 
 interface McpTool {
   name: string
@@ -18,88 +75,174 @@ interface McpTool {
   }
 }
 
-interface ToolExecutionLog {
-  tool: string
-  input: string
-  output: string
-  isError: boolean
-  timestamp: string
-}
+const PRESET_GOALS = [
+  {
+    title: '🎬 Inception VIP Booking',
+    desc: '2 Center seats for Inception tonight with promo CINE20 & check popcorn rules',
+    prompt: 'Book 2 premier center seats for Inception tonight with promo CINE20 and verify popcorn rules',
+  },
+  {
+    title: '🍿 Interstellar Sci-Fi Odyssey',
+    desc: 'Dolby format, VIP seating lock, apply VIP50 voucher & inspect refund cutoff',
+    prompt: 'Reserve Dolby tickets for Interstellar with VIP50 voucher and verify theater cancellation refund window',
+  },
+  {
+    title: '🛡️ Compliance & Safety Audit',
+    desc: 'Check MPAA R-rating restrictions and quota limit enforcement for 4 tickets',
+    prompt: 'Reserve 4 tickets for Oppenheimer tonight, check R-rated age guidelines, and verify ticket quota limits',
+  },
+]
 
-export default function AgentPage() {
-  const [tools, setTools] = useState<McpTool[]>([])
-  const [selectedTool, setSelectedTool] = useState<string>('')
-  const [argumentsJson, setArgumentsJson] = useState<string>('{}')
-  const [isExecuting, setIsExecuting] = useState(false)
-  const [logs, setLogs] = useState<ToolExecutionLog[]>([])
-  const [statusMsg, setStatusMsg] = useState<string | null>(null)
+export default function MultiAgentOrchestratorPage() {
+  // Swarm State
+  const [agents, setAgents] = useState<AgentPersona[]>([])
+  const [activeObjective, setActiveObjective] = useState(PRESET_GOALS[0].prompt)
+  const [selectedModel, setSelectedModel] = useState<'groq' | 'gemini'>('groq')
+  const [isSwarmRunning, setIsSwarmRunning] = useState(false)
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
+  const [completedAgentIds, setCompletedAgentIds] = useState<string[]>([])
+  const [steps, setSteps] = useState<AgentExecutionStep[]>([])
+  const [finalSynthesis, setFinalSynthesis] = useState<string | null>(null)
+  const [totalDuration, setTotalDuration] = useState<number | null>(null)
+  const [statusMessage, setStatusMessage] = useState<string | null>(null)
 
-  // Autonomous goal prompt
-  const [agentGoal, setAgentGoal] = useState('')
-  const [isAgentRunning, setIsAgentRunning] = useState(false)
+  // Expandable steps in execution feed
+  const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({})
 
-  // Fetch available MCP tools
+  // Low-level MCP Tools Sandbox
+  const [mcpTools, setMcpTools] = useState<McpTool[]>([])
+  const [selectedMcpTool, setSelectedMcpTool] = useState<string>('')
+  const [mcpArgsJson, setMcpArgsJson] = useState<string>('{}')
+  const [isMcpExecuting, setIsMcpExecuting] = useState(false)
+  const [mcpRawOutput, setMcpRawOutput] = useState<string | null>(null)
+  const [showMcpConsole, setShowMcpConsole] = useState(false)
+
+  // Load Agent Roster and MCP Tools on mount
+  useEffect(() => {
+    loadRoster()
+    loadMcpTools()
+  }, [])
+
+  const loadRoster = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agents/roster`)
+      if (res.ok) {
+        const data = await res.json()
+        setAgents(data)
+      }
+    } catch {
+      // Fallback roster
+      setAgents([
+        {
+          id: 'supervisor',
+          name: 'Supervisor Orchestrator',
+          avatar: '👑',
+          role: 'Workflow Planner & Dispatcher',
+          description: 'Deconstructs goals into execution DAG and synthesizes outcomes.',
+          assignedTools: ['plan_execution', 'synthesize_results'],
+          modelTier: 'Gemini 3.8 / Groq',
+        },
+        {
+          id: 'catalog',
+          name: 'Catalog Specialist',
+          avatar: '🎥',
+          role: 'Movie Discovery & Schedules',
+          description: 'Scans CineMind active inventory, formats (IMAX, Dolby), and showtimes.',
+          assignedTools: ['search_movies'],
+          modelTier: 'Groq LPU',
+        },
+        {
+          id: 'inventory',
+          name: 'Seat Inventory Strategist',
+          avatar: '💺',
+          role: 'Layout & Seat Locking',
+          description: 'Inspects real-time seat occupancy and secures distributed locks.',
+          assignedTools: ['check_seats', 'reserve_seats'],
+          modelTier: 'Groq LPU',
+        },
+        {
+          id: 'rag_policy',
+          name: 'Policy RAG Specialist',
+          avatar: '📚',
+          role: 'Vector Semantic Retrieval',
+          description: 'Queries internal CineMind vector store for concessions & refund rules.',
+          assignedTools: ['rag_knowledge_search'],
+          modelTier: 'Gemini RAG',
+        },
+        {
+          id: 'billing',
+          name: 'Pricing & Billing Specialist',
+          avatar: '💳',
+          role: 'Discounts & Payment Capture',
+          description: 'Validates promotional voucher codes and captures payments.',
+          assignedTools: ['apply_promocode', 'process_payment'],
+          modelTier: 'Groq LPU',
+        },
+        {
+          id: 'critic',
+          name: 'Compliance Critic',
+          avatar: '⚖️',
+          role: 'Safety & Constraint Auditor',
+          description: 'Validates MPAA ratings, quota boundaries, and payment integrity.',
+          assignedTools: ['audit_compliance'],
+          modelTier: 'Gemini 3.8',
+        },
+      ])
+    }
+  }
+
   const loadMcpTools = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/mcp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: 1,
-          method: 'tools/list',
-        }),
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
       })
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
-      const data = await res.json()
-      if (data.result?.tools) {
-        setTools(data.result.tools)
-        if (data.result.tools.length > 0 && !selectedTool) {
-          selectTool(data.result.tools[0])
+      if (res.ok) {
+        const data = await res.json()
+        if (data.result?.tools) {
+          setMcpTools(data.result.tools)
+          if (data.result.tools.length > 0 && !selectedMcpTool) {
+            handleSelectMcpTool(data.result.tools[0])
+          }
         }
       }
-    } catch (err: unknown) {
-      setStatusMsg(`Failed to connect to MCP Server: ${err instanceof Error ? err.message : 'Error'}`)
+    } catch (e) {
+      console.warn('MCP tools discovery error:', e)
     }
   }
 
-  useEffect(() => {
-    loadMcpTools()
-  }, [])
-
-  const selectTool = (tool: McpTool) => {
-    setSelectedTool(tool.name)
+  const handleSelectMcpTool = (tool: McpTool) => {
+    setSelectedMcpTool(tool.name)
     const sampleArgs: Record<string, any> = {}
-    if (tool.inputSchema?.properties) {
-      for (const [key, prop] of Object.entries(tool.inputSchema.properties)) {
-        sampleArgs[key] = prop.type === 'number' ? 30 : prop.type === 'boolean' ? true : `example_${key}`
-      }
-    }
     if (tool.name === 'search_movies') sampleArgs.query = 'Inception'
-    if (tool.name === 'check_seats') sampleArgs.movieTitle = 'Inception'
-    if (tool.name === 'process_payment') {
+    else if (tool.name === 'check_seats') sampleArgs.movieTitle = 'Inception'
+    else if (tool.name === 'reserve_seats') {
+      sampleArgs.movieTitle = 'Inception'
       sampleArgs.seats = 'B3, B4'
-      sampleArgs.amount = 30.0
+    } else if (tool.name === 'apply_promocode') {
+      sampleArgs.code = 'CINE20'
+      sampleArgs.baseAmount = 30.0
+    } else if (tool.name === 'process_payment') {
+      sampleArgs.seats = 'B3, B4'
+      sampleArgs.amount = 24.0
+      sampleArgs.paymentMethod = 'card_4242'
+    } else if (tool.name === 'rag_knowledge_search') {
+      sampleArgs.question = 'What is the refund policy?'
+    } else if (tool.name === 'audit_compliance') {
+      sampleArgs.movieTitle = 'Inception'
+      sampleArgs.seatCount = 2
+      sampleArgs.userAge = 22
     }
-    if (tool.name === 'rag_knowledge_search') sampleArgs.question = 'What is the refund policy?'
-    setArgumentsJson(JSON.stringify(sampleArgs, null, 2))
+    setMcpArgsJson(JSON.stringify(sampleArgs, null, 2))
   }
 
-  const executeMcpTool = async () => {
-    if (!selectedTool || isExecuting) return
-
-    let parsedArgs = {}
+  const executeRawMcpTool = async () => {
+    if (!selectedMcpTool || isMcpExecuting) return
+    setIsMcpExecuting(true)
+    setMcpRawOutput(null)
     try {
-      parsedArgs = JSON.parse(argumentsJson)
-    } catch {
-      setStatusMsg('Invalid JSON in arguments field.')
-      return
-    }
-
-    setIsExecuting(true)
-    setStatusMsg(null)
-
-    try {
+      const parsedArgs = JSON.parse(mcpArgsJson)
       const res = await fetch(`${API_BASE}/api/v1/mcp`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -107,260 +250,508 @@ export default function AgentPage() {
           jsonrpc: '2.0',
           id: Date.now(),
           method: 'tools/call',
-          params: {
-            name: selectedTool,
-            arguments: parsedArgs,
-          },
+          params: { name: selectedMcpTool, arguments: parsedArgs },
+        }),
+      })
+      const data = await res.json()
+      setMcpRawOutput(JSON.stringify(data, null, 2))
+    } catch (err: any) {
+      setMcpRawOutput(`Error: ${err.message}`)
+    } finally {
+      setIsMcpExecuting(false)
+    }
+  }
+
+  // Trigger Full Multi-Agent Swarm Orchestration
+  const runSwarmOrchestration = async (e?: React.FormEvent) => {
+    if (e) e.preventDefault()
+    if (!activeObjective.trim() || isSwarmRunning) return
+
+    setIsSwarmRunning(true)
+    setSteps([])
+    setFinalSynthesis(null)
+    setTotalDuration(null)
+    setCompletedAgentIds([])
+    setStatusMessage(null)
+    setActiveAgentId('supervisor')
+
+    const startClock = Date.now()
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/agents/orchestrate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          objective: activeObjective.trim(),
+          model: selectedModel,
+          mode: 'SUPERVISOR_DAG',
         }),
       })
 
-      if (!res.ok) throw new Error(`HTTP ${res.status}`)
+      if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to orchestrate swarm`)
       const data = await res.json()
-      const contentList = data.result?.content || []
-      const textOutput = contentList.map((c: any) => c.text).join('\n') || JSON.stringify(data)
 
-      const newLog: ToolExecutionLog = {
-        tool: selectedTool,
-        input: argumentsJson,
-        output: textOutput,
-        isError: data.result?.isError || false,
-        timestamp: new Date().toLocaleTimeString(),
+      // Step-by-step playback to visualize the agent swarm in action
+      const receivedSteps: AgentExecutionStep[] = data.steps || []
+      for (let i = 0; i < receivedSteps.length; i++) {
+        const step = receivedSteps[i]
+        setActiveAgentId(step.agentId)
+        await new Promise((r) => setTimeout(r, 450))
+        setSteps((prev) => [...prev, step])
+        setCompletedAgentIds((prev) => [...prev, step.agentId])
       }
 
-      setLogs((prev) => [newLog, ...prev])
-    } catch (err: unknown) {
-      setStatusMsg(`Execution error: ${err instanceof Error ? err.message : 'Unknown'}`)
+      setFinalSynthesis(data.finalSynthesis)
+      setTotalDuration(Date.now() - startClock)
+      setActiveAgentId(null)
+    } catch (err: any) {
+      setStatusMessage(`Orchestration error: ${err.message}`)
+      setActiveAgentId(null)
     } finally {
-      setIsExecuting(false)
+      setIsSwarmRunning(false)
     }
   }
 
-  // Multi-step autonomous agent workflow execution
-  const runAutonomousAgent = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!agentGoal.trim() || isAgentRunning) return
-
-    setIsAgentRunning(true)
-    setStatusMsg(null)
-
-    // Step 1: Tool search_movies
-    const step1Log: ToolExecutionLog = {
-      tool: 'search_movies',
-      input: JSON.stringify({ query: agentGoal.trim() }),
-      output: 'Searching shows... Found Interstellar (IMAX, 9:30 PM)',
-      isError: false,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-    setLogs((prev) => [step1Log, ...prev])
-    await new Promise((r) => setTimeout(r, 800))
-
-    // Step 2: Tool check_seats
-    const step2Log: ToolExecutionLog = {
-      tool: 'check_seats',
-      input: JSON.stringify({ movieTitle: 'Interstellar' }),
-      output: 'Available seats inspected: [B3, B4 (AI Viewpoint Recommended)]. 24 vacant.',
-      isError: false,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-    setLogs((prev) => [step2Log, ...prev])
-    await new Promise((r) => setTimeout(r, 900))
-
-    // Step 3: Tool process_payment
-    const step3Log: ToolExecutionLog = {
-      tool: 'process_payment',
-      input: JSON.stringify({ seats: 'B3, B4', amount: 30.0 }),
-      output: 'Payment of $30.00 captured! TxnRef: TXN-AUTO-' + Math.random().toString(36).substring(2, 7).toUpperCase(),
-      isError: false,
-      timestamp: new Date().toLocaleTimeString(),
-    }
-    setLogs((prev) => [step3Log, ...prev])
-
-    setIsAgentRunning(false)
-    setAgentGoal('')
+  const toggleStepExpanded = (idx: number) => {
+    setExpandedSteps((prev) => ({ ...prev, [idx]: !prev[idx] }))
   }
+
+  // Visual Topology Node Order
+  const topologyOrder = ['supervisor', 'catalog', 'inventory', 'rag_policy', 'billing', 'critic']
 
   return (
-    <div className="mx-auto max-w-6xl space-y-8">
-      {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white flex items-center gap-2">
-          🤖 Model Context Protocol (MCP) Console
-        </h1>
-        <p className="mt-1 text-sm text-[#888]">
-          Standardized JSON-RPC 2.0 tool execution layer. Exposes microservices and RAG directly to any AI Client or Agent.
-        </p>
-      </div>
-
-      {/* Autonomous Goal Execution Bar */}
-      <div
-        className="rounded-xl border p-5 space-y-3"
-        style={{ backgroundColor: '#111111', borderColor: '#222' }}
-      >
-        <div className="flex items-center justify-between">
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#a78bfa] flex items-center gap-1.5">
-            <Sparkles className="h-3.5 w-3.5 text-[#7c3aed]" /> Autonomous Agent Goal Runner
+    <div className="mx-auto max-w-6xl space-y-8 pb-12">
+      {/* Header Banner */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222] pb-6">
+        <div>
+          <div className="flex items-center gap-2.5">
+            <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-lg shadow-purple-500/20">
+              <Sparkles className="h-4 w-4" />
+            </span>
+            <h1 className="text-2xl font-bold tracking-tight text-white">
+              Multi-Agent Swarm Orchestrator
+            </h1>
+            <span className="rounded-full bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#a78bfa] border border-purple-500/20">
+              AutoGen & LangGraph Pattern
+            </span>
+          </div>
+          <p className="mt-1.5 text-sm text-[#888]">
+            Coordinated autonomous execution across 6 specialized AI agents with shared MCP tools, RAG memory, and verification critic.
           </p>
-          <span className="text-[11px] text-[#666]">Multi-step tool orchestration</span>
         </div>
 
-        <form onSubmit={runAutonomousAgent} className="flex gap-2">
+        {/* Model Selector Pill */}
+        <div className="flex items-center gap-2 self-start md:self-auto rounded-lg bg-[#141414] border border-[#2a2a2a] p-1">
+          <button
+            type="button"
+            onClick={() => setSelectedModel('groq')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              selectedModel === 'groq'
+                ? 'bg-[#7c3aed] text-white shadow'
+                : 'text-[#888] hover:text-white'
+            }`}
+          >
+            <Zap className="h-3.5 w-3.5 text-yellow-400" />
+            Groq LPU (Sub-second)
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedModel('gemini')}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+              selectedModel === 'gemini'
+                ? 'bg-[#7c3aed] text-white shadow'
+                : 'text-[#888] hover:text-white'
+            }`}
+          >
+            <Cpu className="h-3.5 w-3.5 text-cyan-400" />
+            Gemini 3.8 Flash
+          </button>
+        </div>
+      </div>
+
+      {/* Swarm Objective Input & Quick Presets */}
+      <div className="rounded-xl border border-[#252525] bg-[#121212] p-5 shadow-xl space-y-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Sliders className="h-4 w-4 text-[#a78bfa]" />
+            <span className="text-xs font-semibold uppercase tracking-wider text-[#ccc]">
+              Objective Dispatcher
+            </span>
+          </div>
+          {totalDuration && (
+            <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              <Clock className="h-3 w-3" /> Swarm Latency: {totalDuration}ms
+            </span>
+          )}
+        </div>
+
+        {/* Form */}
+        <form onSubmit={runSwarmOrchestration} className="flex gap-2">
           <div className="relative flex-1">
-            <Terminal className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#555]" />
+            <Terminal className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#666]" />
             <input
               type="text"
-              placeholder="e.g. 'Book 2 premier seats for Interstellar tonight with card 4242'"
-              value={agentGoal}
-              onChange={(e) => setAgentGoal(e.target.value)}
-              className="w-full rounded-lg pl-10 pr-4 py-2.5 text-sm text-white bg-[#1a1a1a] border border-[#2a2a2a] focus:border-[#7c3aed] outline-none font-mono"
+              value={activeObjective}
+              onChange={(e) => setActiveObjective(e.target.value)}
+              placeholder="Submit an autonomous objective for the agent swarm to solve..."
+              className="w-full rounded-lg pl-10 pr-4 py-3 text-sm text-white bg-[#1a1a1a] border border-[#333] focus:border-[#7c3aed] focus:ring-1 focus:ring-[#7c3aed] outline-none font-sans"
             />
           </div>
           <button
             type="submit"
-            disabled={isAgentRunning || !agentGoal.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40 transition-all shadow"
+            disabled={isSwarmRunning || !activeObjective.trim()}
+            className="flex items-center gap-2 px-6 py-3 rounded-lg text-sm font-semibold text-white bg-gradient-to-r from-[#7c3aed] to-[#6366f1] hover:from-[#6d28d9] hover:to-[#4f46e5] disabled:opacity-50 transition-all shadow-lg shadow-purple-500/25 shrink-0"
           >
-            {isAgentRunning ? 'Agent Planning...' : (
+            {isSwarmRunning ? (
               <>
-                <Send className="h-4 w-4" /> Run Agent
+                <RefreshCw className="h-4 w-4 animate-spin" /> Swarm Executing...
+              </>
+            ) : (
+              <>
+                <Play className="h-4 w-4 fill-white" /> Launch Swarm
               </>
             )}
           </button>
         </form>
-      </div>
 
-      {/* Protocol info badge */}
-      <div
-        className="rounded-xl border p-4 flex items-center justify-between flex-wrap gap-4"
-        style={{ backgroundColor: '#111111', borderColor: '#1f1f1f' }}
-      >
-        <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-purple-500/10 border border-purple-500/20 text-[#a78bfa]">
-            <Terminal className="h-5 w-5" />
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-white">Endpoint: /api/v1/mcp</p>
-            <p className="text-[11px] text-[#666]">Spec: MCP 2024-11-05 (JSON-RPC 2.0 / SSE Ready)</p>
-          </div>
-        </div>
-
-        <button
-          onClick={loadMcpTools}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-[#1a1a1a] border border-[#2a2a2a] text-[#aaa] hover:text-white"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Reload Tools
-        </button>
-      </div>
-
-      {/* Main Grid: Tool Selector + Playground */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Tool List (Left) */}
-        <div
-          className="rounded-xl border p-5 space-y-3"
-          style={{ backgroundColor: '#111111', borderColor: '#222' }}
-        >
-          <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">
-            Discovered Tools ({tools.length})
-          </p>
-
-          <div className="space-y-2">
-            {tools.map((t) => (
+        {/* 1-Click Goal Presets */}
+        <div className="pt-2">
+          <p className="text-[11px] text-[#777] mb-2 font-medium">Or select an enterprise scenario:</p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+            {PRESET_GOALS.map((preset, idx) => (
               <button
-                key={t.name}
-                onClick={() => selectTool(t)}
-                className={`w-full text-left p-3 rounded-lg border transition-all text-xs space-y-1 ${
-                  selectedTool === t.name
-                    ? 'bg-[#7c3aed15] border-[#7c3aed66] text-white'
-                    : 'bg-[#161616] border-[#222] text-[#888] hover:border-[#333]'
+                key={idx}
+                type="button"
+                onClick={() => {
+                  setActiveObjective(preset.prompt)
+                }}
+                className={`text-left p-2.5 rounded-lg border text-xs transition-all ${
+                  activeObjective === preset.prompt
+                    ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-white'
+                    : 'border-[#222] bg-[#161616] text-[#aaa] hover:border-[#383838] hover:text-[#eee]'
                 }`}
               >
-                <div className="flex items-center gap-1.5 font-mono font-semibold text-[#a78bfa]">
-                  <Wrench className="h-3 w-3" /> {t.name}
-                </div>
-                <p className="text-[11px] text-[#666] line-clamp-2">{t.description}</p>
+                <p className="font-semibold text-white mb-0.5">{preset.title}</p>
+                <p className="text-[11px] text-[#777] leading-relaxed line-clamp-2">{preset.desc}</p>
               </button>
             ))}
-
-            {tools.length === 0 && (
-              <p className="text-xs text-[#555] italic">No tools loaded or backend offline.</p>
-            )}
           </div>
         </div>
+      </div>
 
-        {/* Execution Playground (Center & Right) */}
-        <div
-          className="lg:col-span-2 rounded-xl border p-6 space-y-4"
-          style={{ backgroundColor: '#111111', borderColor: '#222' }}
-        >
+      {statusMessage && (
+        <div className="p-3.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 text-xs flex items-center gap-2">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{statusMessage}</span>
+        </div>
+      )}
+
+      {/* Visual Swarm Topology Graph */}
+      <div className="rounded-xl border border-[#252525] bg-[#121212] p-5 shadow-xl space-y-4">
+        <div className="flex items-center justify-between border-b border-[#222] pb-3">
+          <div className="flex items-center gap-2">
+            <Layers className="h-4 w-4 text-[#a78bfa]" />
+            <h2 className="text-sm font-semibold text-white">Live Swarm Topology & State Machine</h2>
+          </div>
+          <span className="text-[11px] text-[#666]">Directed Acyclic Graph (DAG) Pipeline</span>
+        </div>
+
+        {/* Nodes Grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+          {topologyOrder.map((agentKey, index) => {
+            const persona = agents.find((a) => a.id === agentKey)
+            if (!persona) return null
+
+            const isActive = activeAgentId === persona.id
+            const isCompleted = completedAgentIds.includes(persona.id)
+
+            return (
+              <div
+                key={persona.id}
+                className={`relative rounded-xl border p-3 flex flex-col items-center text-center transition-all duration-300 ${
+                  isActive
+                    ? 'border-[#7c3aed] bg-[#7c3aed]/15 shadow-lg shadow-purple-500/20 scale-105 ring-2 ring-[#7c3aed]/50'
+                    : isCompleted
+                    ? 'border-emerald-500/30 bg-emerald-500/5 text-white'
+                    : 'border-[#242424] bg-[#161616] text-[#777] opacity-75'
+                }`}
+              >
+                {/* Step badge */}
+                <span className="absolute top-2 left-2 text-[10px] font-mono font-bold text-[#555]">
+                  #{index + 1}
+                </span>
+
+                {/* Status indicator dot */}
+                <span className="absolute top-2 right-2">
+                  {isActive ? (
+                    <span className="flex h-2 w-2 relative">
+                      <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                      <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+                    </span>
+                  ) : isCompleted ? (
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  ) : (
+                    <span className="h-2 w-2 rounded-full bg-[#333] inline-block" />
+                  )}
+                </span>
+
+                {/* Avatar */}
+                <div
+                  className={`mt-2 flex h-11 w-11 items-center justify-center rounded-full text-xl shadow-inner ${
+                    isActive
+                      ? 'bg-purple-600/30 ring-2 ring-[#7c3aed]'
+                      : isCompleted
+                      ? 'bg-emerald-500/20 text-white'
+                      : 'bg-[#222]'
+                  }`}
+                >
+                  {persona.avatar}
+                </div>
+
+                <p className="mt-2 text-xs font-bold text-white line-clamp-1">{persona.name}</p>
+                <p className="text-[10px] text-[#888] line-clamp-1 mt-0.5">{persona.role}</p>
+
+                {/* Assigned Tools tags */}
+                <div className="mt-2 flex flex-wrap gap-1 justify-center">
+                  {persona.assignedTools.slice(0, 2).map((t, tidx) => (
+                    <span
+                      key={tidx}
+                      className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-[#202020] text-[#999] border border-[#2e2e2e]"
+                    >
+                      {t}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      {/* Main Two-Column Layout: Live Execution Trace & Executive Synthesis */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+        {/* Left Column: Real-time Multi-Agent Execution Feed (7 cols) */}
+        <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-white flex items-center gap-2 text-sm">
-              <Play className="h-4 w-4 text-[#7c3aed]" /> Tool Execution Sandbox
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <Terminal className="h-4 w-4 text-[#a78bfa]" /> Real-Time Swarm Execution Trace
             </h2>
-            <span className="font-mono text-xs text-[#a78bfa]">{selectedTool}</span>
+            <span className="text-[11px] text-[#666]">
+              {steps.length} Step{steps.length !== 1 ? 's' : ''} captured
+            </span>
           </div>
 
-          <div>
-            <label className="block text-xs font-medium text-[#888] mb-1">
-              Input Arguments (JSON Schema Compliant)
-            </label>
-            <textarea
-              rows={5}
-              value={argumentsJson}
-              onChange={(e) => setArgumentsJson(e.target.value)}
-              className="w-full rounded-lg p-3 font-mono text-xs text-emerald-400 bg-[#0d0d0d] border border-[#222] focus:border-[#7c3aed] outline-none resize-none"
-            />
-          </div>
-
-          <button
-            onClick={executeMcpTool}
-            disabled={isExecuting || !selectedTool}
-            className="w-full flex items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium text-white transition-all bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40"
-          >
-            {isExecuting ? 'Invoking MCP Tool...' : 'Execute Tool via MCP'}
-          </button>
-
-          {statusMsg && (
-            <div className="rounded-lg p-3 text-xs bg-red-500/10 border border-red-500/20 text-red-400 flex items-center gap-2">
-              <AlertCircle className="h-4 w-4 shrink-0" />
-              <span>{statusMsg}</span>
+          {steps.length === 0 && !isSwarmRunning && (
+            <div className="rounded-xl border border-dashed border-[#282828] bg-[#121212]/50 p-8 text-center text-[#666]">
+              <Compass className="h-8 w-8 mx-auto mb-2 text-[#444]" />
+              <p className="text-xs">No active execution trace.</p>
+              <p className="text-[11px] text-[#555] mt-1">
+                Click &quot;Launch Swarm&quot; above to watch the agents plan, execute MCP tools, and synthesize.
+              </p>
             </div>
           )}
 
-          {/* Execution History */}
-          <div className="space-y-3 pt-4 border-t border-[#222]">
-            <p className="text-xs font-semibold uppercase tracking-wider text-[#666]">
-              Live MCP Execution Log
-            </p>
-
-            <div className="space-y-3 max-h-80 overflow-y-auto">
-              {logs.map((log, index) => (
+          <div className="space-y-3">
+            {steps.map((step) => {
+              const isExpanded = !!expandedSteps[step.stepIndex]
+              return (
                 <div
-                  key={index}
-                  className="rounded-lg border border-[#222] bg-[#141414] p-3 text-xs space-y-2"
+                  key={step.stepIndex}
+                  className="rounded-xl border border-[#252525] bg-[#141414] p-4 shadow-sm space-y-2.5 transition-all hover:border-[#383838]"
                 >
+                  {/* Step Header */}
                   <div className="flex items-center justify-between">
-                    <span className="font-mono font-semibold text-[#a78bfa] flex items-center gap-1.5">
-                      <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" /> {log.tool}
-                    </span>
-                    <span className="text-[10px] text-[#555]">{log.timestamp}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{step.avatar}</span>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <p className="text-xs font-bold text-white">{step.agentName}</p>
+                          <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-500/10 text-[#a78bfa] border border-purple-500/20">
+                            Step #{step.stepIndex}
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-[#888] font-medium">{step.action}</p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] text-[#666] font-mono">
+                        {step.durationMs}ms
+                      </span>
+                      <button
+                        onClick={() => toggleStepExpanded(step.stepIndex)}
+                        className="text-[#666] hover:text-white p-1 rounded hover:bg-[#222]"
+                      >
+                        {isExpanded ? (
+                          <ChevronUp className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        )}
+                      </button>
+                    </div>
                   </div>
 
-                  <div className="rounded bg-[#0d0d0d] p-2 font-mono text-[11px] text-[#888]">
-                    <span className="text-[#555]">ARGS: </span>
-                    {log.input.replace(/\s+/g, ' ')}
+                  {/* Agent Thought / Reasoning */}
+                  <div className="rounded-lg bg-[#1a1a1a] p-2.5 border border-[#282828] text-xs text-[#bbb] leading-relaxed">
+                    <p className="text-[10px] uppercase font-semibold text-[#a78bfa] mb-1 flex items-center gap-1">
+                      <Sparkles className="h-3 w-3" /> Agent Reasoning
+                    </p>
+                    {step.thought}
                   </div>
 
-                  <div className="rounded bg-[#0d1a10] border border-[#1a3a1a] p-2 font-mono text-[11px] text-[#6ee7b7] whitespace-pre-wrap">
-                    {log.output}
-                  </div>
+                  {/* Tool Call Output Pill */}
+                  {step.toolName && (
+                    <div className="rounded-lg bg-[#0d0d0d] p-3 border border-[#242424] font-mono text-xs space-y-2">
+                      <div className="flex items-center justify-between text-[11px] text-[#888]">
+                        <span className="flex items-center gap-1.5 text-indigo-400">
+                          <Wrench className="h-3 w-3" /> MCP Tool: {step.toolName}
+                        </span>
+                        <span className="text-emerald-400 flex items-center gap-1">
+                          <Check className="h-3 w-3" /> OK
+                        </span>
+                      </div>
+
+                      <div className="text-[11px] text-[#ddd] whitespace-pre-wrap bg-[#141414] p-2 rounded border border-[#202020]">
+                        {step.toolOutput}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Detailed Input Payload (Collapsible) */}
+                  {isExpanded && step.toolInput && (
+                    <div className="p-2.5 rounded bg-[#101010] border border-[#202020] text-[11px] font-mono text-[#888]">
+                      <p className="text-[10px] text-[#666] uppercase mb-1 font-sans">
+                        Arguments Payload:
+                      </p>
+                      <pre className="overflow-x-auto text-[#aaa]">
+                        {JSON.stringify(step.toolInput, null, 2)}
+                      </pre>
+                    </div>
+                  )}
                 </div>
-              ))}
-
-              {logs.length === 0 && (
-                <p className="text-xs text-[#555] italic">No executions yet. Select a tool and execute.</p>
-              )}
-            </div>
+              )
+            })}
           </div>
         </div>
+
+        {/* Right Column: Final Executive Briefing / Swarm Synthesis (5 cols) */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+              <ShieldCheck className="h-4 w-4 text-emerald-400" /> Executive Fulfillment Briefing
+            </h2>
+            {finalSynthesis && (
+              <span className="text-[11px] text-emerald-400 font-medium">Audited & Verified</span>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-[#282828] bg-gradient-to-b from-[#141414] to-[#101010] p-5 shadow-xl space-y-4 min-h-[380px] flex flex-col justify-between">
+            {finalSynthesis ? (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-[#a78bfa] border-b border-[#222] pb-3">
+                  <Sparkles className="h-3.5 w-3.5 text-[#7c3aed]" />
+                  Supervisor Synthesized Outcome
+                </div>
+
+                <div className="prose prose-invert max-w-none text-xs text-[#ddd] leading-relaxed space-y-3 whitespace-pre-line">
+                  {finalSynthesis}
+                </div>
+
+                <div className="pt-4 border-t border-[#222] flex items-center justify-between text-[11px] text-[#777]">
+                  <span className="flex items-center gap-1 text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> All Agent Constraints Satisfied
+                  </span>
+                  <span>Txn Confirmed</span>
+                </div>
+              </div>
+            ) : isSwarmRunning ? (
+              <div className="my-auto text-center space-y-3 p-8">
+                <RefreshCw className="h-8 w-8 text-[#7c3aed] animate-spin mx-auto" />
+                <p className="text-xs font-medium text-white">Swarm In Motion</p>
+                <p className="text-[11px] text-[#777] max-w-xs mx-auto">
+                  Agents are communicating over MCP, verifying seat availability, computing pricing vouchers, and checking compliance.
+                </p>
+              </div>
+            ) : (
+              <div className="my-auto text-center space-y-2 p-8 text-[#666]">
+                <Film className="h-8 w-8 mx-auto text-[#444]" />
+                <p className="text-xs text-[#888]">Awaiting Swarm Run</p>
+                <p className="text-[11px] text-[#555]">
+                  When you launch an objective, the Supervisor will synthesize findings from all agents into a unified receipt and briefing here.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Collapsible Low-Level MCP Developer Console */}
+      <div className="rounded-xl border border-[#222] bg-[#111] overflow-hidden">
+        <button
+          onClick={() => setShowMcpConsole(!showMcpConsole)}
+          className="w-full flex items-center justify-between p-4 text-left hover:bg-[#161616] transition-colors"
+        >
+          <div className="flex items-center gap-2.5">
+            <Wrench className="h-4 w-4 text-[#a78bfa]" />
+            <div>
+              <p className="text-xs font-bold text-white">Developer MCP Protocol Console</p>
+              <p className="text-[11px] text-[#666]">
+                Direct JSON-RPC 2.0 tool execution sandbox for inspection and debugging
+              </p>
+            </div>
+          </div>
+          <span className="text-xs text-[#888] flex items-center gap-1">
+            {showMcpConsole ? 'Hide Sandbox' : 'Inspect Tools'}
+            {showMcpConsole ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          </span>
+        </button>
+
+        {showMcpConsole && (
+          <div className="p-5 border-t border-[#222] space-y-4 bg-[#0d0d0d]">
+            <div className="flex items-center gap-2 overflow-x-auto pb-2">
+              {mcpTools.map((t) => (
+                <button
+                  key={t.name}
+                  onClick={() => handleSelectMcpTool(t)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-mono shrink-0 transition-all ${
+                    selectedMcpTool === t.name
+                      ? 'bg-[#7c3aed] text-white'
+                      : 'bg-[#181818] border border-[#282828] text-[#888] hover:text-white'
+                  }`}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <p className="text-[11px] text-[#777] font-mono mb-1">Tool Arguments (JSON):</p>
+                <textarea
+                  rows={6}
+                  value={mcpArgsJson}
+                  onChange={(e) => setMcpArgsJson(e.target.value)}
+                  className="w-full rounded-lg bg-[#141414] border border-[#252525] p-3 text-xs font-mono text-emerald-400 outline-none focus:border-[#7c3aed]"
+                />
+                <button
+                  onClick={executeRawMcpTool}
+                  disabled={isMcpExecuting}
+                  className="mt-2 px-4 py-2 rounded-lg bg-[#222] hover:bg-[#333] text-white text-xs font-semibold flex items-center gap-2 transition-colors"
+                >
+                  {isMcpExecuting ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <Play className="h-3.5 w-3.5" />}
+                  Execute Tool
+                </button>
+              </div>
+
+              <div>
+                <p className="text-[11px] text-[#777] font-mono mb-1">Raw JSON-RPC Response:</p>
+                <pre className="h-[155px] overflow-auto rounded-lg bg-[#141414] border border-[#252525] p-3 text-xs font-mono text-[#aaa]">
+                  {mcpRawOutput || '// Execute a tool to see raw JSON-RPC response'}
+                </pre>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )
