@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+set -e
+
+# Resolve repository root regardless of current working directory
+ROOT_DIR="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
+
+echo "🚀 Git pre-push hook triggered: Running CineMind Code-Review & Verification Gates..."
+if [ -f "$ROOT_DIR/.agents/skills/code-review/scripts/verify-all.sh" ]; then
+    bash "$ROOT_DIR/.agents/skills/code-review/scripts/verify-all.sh"
+else
+    echo "⚠️  Verification script not found at $ROOT_DIR/.agents/skills/code-review/scripts/verify-all.sh"
+    exit 1
+fi
