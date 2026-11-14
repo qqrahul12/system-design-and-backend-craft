@@ -6,8 +6,8 @@ services:
   # ---------------------------------------------------------------------------
   ai-assistant-service:
     build:
-      context: .
-      dockerfile: ai-assistant-service/Dockerfile
+      context: ./ai-assistant-service
+      dockerfile: Dockerfile
     container_name: cinemind-backend
     ports:
       - "8080:8080"

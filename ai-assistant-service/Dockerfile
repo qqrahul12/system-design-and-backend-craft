@@ -6,16 +6,13 @@
 FROM maven:3.9.6-eclipse-temurin-21-alpine AS builder
 WORKDIR /workspace
 
-# Copy root pom and parent structure
+# Copy POM and pre-fetch dependencies for layer caching
 COPY pom.xml ./pom.xml
-COPY ai-assistant-service/pom.xml ./ai-assistant-service/pom.xml
+RUN mvn -B dependency:go-offline -DskipTests || true
 
-# Pre-fetch dependencies
-RUN mvn -B -f ai-assistant-service/pom.xml dependency:go-offline -DskipTests || true
-
-# Copy source and package
-COPY ai-assistant-service/src ./ai-assistant-service/src
-RUN mvn -B -f ai-assistant-service/pom.xml clean package -DskipTests
+# Copy source and package standalone jar
+COPY src ./src
+RUN mvn -B clean package -DskipTests
 
 # -----------------------------------------------------------------------------
 # 2. Runtime Stage: Lightweight JRE 21 Container
@@ -27,7 +24,7 @@ WORKDIR /app
 RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 USER appuser
 
-COPY --from=builder /workspace/ai-assistant-service/target/*.jar app.jar
+COPY --from=builder /workspace/target/*.jar app.jar
 
 ENV PORT=8080
 EXPOSE 8080
