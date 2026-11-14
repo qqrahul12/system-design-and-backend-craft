@@ -36,4 +36,8 @@ public class Movie {
     private String criticConsensus;
     private String topCriticQuote;
     private Integer reviewsCount;
+    private String trailerUrl;
+    private String director;
+    private String cast;
+    private String ageRating;
 }

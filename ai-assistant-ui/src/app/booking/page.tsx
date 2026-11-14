@@ -20,6 +20,8 @@ import {
   UtensilsCrossed,
   ArrowRight,
   QrCode,
+  Play,
+  Clock,
 } from 'lucide-react'
 
 const API_BASE =
@@ -47,6 +49,10 @@ interface Movie {
   criticConsensus?: string
   topCriticQuote?: string
   reviewsCount?: number
+  trailerUrl?: string
+  director?: string
+  cast?: string
+  ageRating?: string
 }
 
 const INITIAL_MOVIES: Movie[] = [
@@ -172,6 +178,8 @@ export default function BookingPage() {
   } | null>(null)
 
   const [inspectingReviewMovie, setInspectingReviewMovie] = useState<Movie | null>(null)
+  const [selectedShowtime, setSelectedShowtime] = useState<string>('7:30 PM')
+  const [selectedFormat, setSelectedFormat] = useState<string>('IMAX 70mm')
 
   // AI Agent Natural Language Movie Search with fast client timeout & fallback
   const handleAiAgentSearch = async (e: React.FormEvent) => {
@@ -307,10 +315,22 @@ REASON: <1 sentence why it matches>`
     })
   }, [movies, searchQuery, selectedGenre, filterAiPicksOnly])
 
-  const handleSelectMovie = (movie: Movie) => {
+  const handleSelectMovie = (movie: Movie, customShowtime?: string, customFormat?: string) => {
     setSelectedMovie(movie)
     setSelectedSeats(movie.suggestedSeats)
     setBookingConfirmation(null)
+
+    const times = movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : ['7:30 PM']
+    setSelectedShowtime(customShowtime || times[0] || '7:30 PM')
+
+    const defaultFmt =
+      customFormat ||
+      (movie.auditorium?.includes('IMAX')
+        ? 'IMAX 70mm'
+        : movie.auditorium?.includes('Dolby')
+        ? 'Dolby Cinema'
+        : 'Standard 4K Laser')
+    setSelectedFormat(defaultFmt)
 
     // Smooth scroll to seat selector
     const seatEl = document.getElementById('seat-selector-section')
@@ -330,9 +350,12 @@ REASON: <1 sentence why it matches>`
 
     setIsProcessing(true)
 
-    const totalAmount = selectedMovie.price * selectedSeats.length
-    const showTime = selectedMovie.showtimes?.split(',')?.[0]?.trim() || '7:30 PM'
-    const auditorium = selectedMovie.auditorium || 'IMAX 70mm Auditorium 1'
+    const formatMultiplier =
+      selectedFormat === 'IMAX 70mm' ? 1.15 : selectedFormat === 'Dolby Cinema' ? 1.05 : 1.0
+    const calculatedPrice = Math.round(selectedMovie.price * formatMultiplier * 100) / 100
+    const totalAmount = calculatedPrice * selectedSeats.length
+    const showTime = selectedShowtime
+    const auditorium = `${selectedFormat} (${selectedMovie.auditorium || 'Screen 1'})`
 
     try {
       const res = await fetch(`${API_BASE}/api/v1/tickets/issue`, {
@@ -633,26 +656,66 @@ REASON: <1 sentence why it matches>`
                       </button>
                     </div>
 
-                    <div className="flex items-center justify-between text-xs pt-1">
-                      <span className="text-[11px] text-zinc-400">
-                        {movie.showtimes ? movie.showtimes.split(',')[0] : '7:30 PM'}
-                      </span>
-                      <span className="rounded-full border border-[#333] px-2 py-0.5 text-[10px] text-[#aaa]">
-                        {movie.genre}
-                      </span>
+                    {/* Interactive Showtimes on Card */}
+                    <div className="pt-2 border-t border-zinc-800/60">
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wider text-zinc-400">
+                          Showtimes
+                        </span>
+                        {movie.ageRating && (
+                          <span className="rounded bg-zinc-800 px-1.5 py-0.5 text-[9px] font-bold text-zinc-300 border border-zinc-700">
+                            {movie.ageRating}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        {(movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => {
+                          const isTimeSelected = isSelected && selectedShowtime === time
+                          return (
+                            <button
+                              key={time}
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleSelectMovie(movie, time)
+                              }}
+                              className={`rounded-lg px-2 py-1 text-[11px] font-mono font-medium transition-all ${
+                                isTimeSelected
+                                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/40 ring-1 ring-purple-400'
+                                  : 'bg-zinc-800/80 text-zinc-300 hover:bg-zinc-700 hover:text-white border border-zinc-700/60'
+                              }`}
+                            >
+                              {time}
+                            </button>
+                          )
+                        })}
+                      </div>
                     </div>
 
-                    <button
-                      onClick={() => handleSelectMovie(movie)}
-                      className={`mt-auto flex w-full items-center justify-center gap-2 rounded-lg py-2.5 text-sm font-medium transition-all active:scale-95 ${
-                        isSelected
-                          ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg'
-                          : 'bg-[#7c3aed] hover:bg-[#6d28d9] text-white'
-                      }`}
-                    >
-                      <Ticket className="h-4 w-4" />
-                      {isSelected ? 'Selected (View Seats Below)' : 'Book Now'}
-                    </button>
+                    <div className="flex items-center gap-2 pt-1">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          setInspectingReviewMovie(movie)
+                        }}
+                        className="flex items-center justify-center gap-1.5 rounded-lg py-2 px-3 text-xs font-semibold text-zinc-300 bg-zinc-800 hover:bg-zinc-700 hover:text-white transition-all border border-zinc-700"
+                        title="Watch trailer & read verified critic reviews"
+                      >
+                        <Play className="h-3 w-3 text-purple-400" />
+                        Trailer & Intel
+                      </button>
+
+                      <button
+                        onClick={() => handleSelectMovie(movie)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-semibold transition-all active:scale-95 ${
+                          isSelected
+                            ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-lg shadow-emerald-600/30'
+                            : 'bg-[#7c3aed] hover:bg-[#6d28d9] text-white shadow-lg shadow-purple-600/30'
+                        }`}
+                      >
+                        <Ticket className="h-3.5 w-3.5" />
+                        {isSelected ? 'Seats Active' : 'Book Seats'}
+                      </button>
+                    </div>
                   </div>
                 </div>
               )
@@ -706,6 +769,51 @@ REASON: <1 sentence why it matches>`
 
         {selectedMovie ? (
           <div className="space-y-6">
+            {/* Theatrical Format & Showtime Bar */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                  Auditorium Format & Experience
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {['IMAX 70mm', 'Dolby Cinema', 'Standard 4K Laser'].map((fmt) => (
+                    <button
+                      key={fmt}
+                      onClick={() => setSelectedFormat(fmt)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                        selectedFormat === fmt
+                          ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-purple-400'
+                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
+                      }`}
+                    >
+                      {fmt}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                  Active Showtime
+                </div>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {(selectedMovie.showtimes ? selectedMovie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => (
+                    <button
+                      key={time}
+                      onClick={() => setSelectedShowtime(time)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                        selectedShowtime === time
+                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-1 ring-emerald-400'
+                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
+                      }`}
+                    >
+                      {time}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Screen indicator */}
             <div className="w-full text-center space-y-1">
               <div className="mx-auto h-1.5 w-3/4 rounded-full bg-gradient-to-r from-transparent via-[#7c3aed] to-transparent" />
@@ -834,23 +942,28 @@ REASON: <1 sentence why it matches>`
         )}
       </div>
 
-      {/* Live Critic Reviews Dossier Modal */}
+      {/* Live Critic Reviews & Theatrical Trailer Dossier Modal */}
       {inspectingReviewMovie && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
-          <div className="relative w-full max-w-xl rounded-2xl border border-purple-500/30 bg-[#121214] p-6 shadow-2xl space-y-5">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="relative w-full max-w-2xl rounded-2xl border border-purple-500/30 bg-[#121214] p-6 shadow-2xl space-y-4 my-8">
             {/* Modal Header */}
-            <div className="flex items-start justify-between border-b border-zinc-800 pb-4">
+            <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
               <div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <h3 className="text-xl font-bold text-white tracking-tight">
                     {inspectingReviewMovie.title}
                   </h3>
+                  {inspectingReviewMovie.ageRating && (
+                    <span className="rounded bg-zinc-800 px-2 py-0.5 text-xs font-bold text-zinc-300 border border-zinc-700">
+                      {inspectingReviewMovie.ageRating}
+                    </span>
+                  )}
                   <span className="rounded-full bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 text-xs font-semibold text-purple-300">
                     {inspectingReviewMovie.year} · {inspectingReviewMovie.duration}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 mt-1">
-                  Live Theatrical Critic & Audience Intelligence • Verified Aggregated Dossier
+                  Directed by {inspectingReviewMovie.director || 'Visionary Filmmaker'} • Starring {inspectingReviewMovie.cast || 'Leading Ensemble'}
                 </p>
               </div>
               <button
@@ -861,48 +974,74 @@ REASON: <1 sentence why it matches>`
               </button>
             </div>
 
+            {/* Embedded YouTube Theatrical Trailer */}
+            {inspectingReviewMovie.trailerUrl ? (
+              <div className="relative aspect-video w-full rounded-xl overflow-hidden border border-zinc-800 shadow-xl bg-black">
+                <iframe
+                  src={`${inspectingReviewMovie.trailerUrl}?autoplay=0&rel=0&modestbranding=1`}
+                  title={`${inspectingReviewMovie.title} Trailer`}
+                  className="w-full h-full"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allowFullScreen
+                />
+              </div>
+            ) : (
+              <div className="relative h-44 rounded-xl overflow-hidden border border-zinc-800">
+                <img
+                  src={inspectingReviewMovie.posterUrl}
+                  alt={inspectingReviewMovie.title}
+                  className="w-full h-full object-cover opacity-60"
+                />
+                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/40 to-transparent flex items-end p-4">
+                  <p className="text-xs text-zinc-300 leading-relaxed line-clamp-2">
+                    {inspectingReviewMovie.synopsis}
+                  </p>
+                </div>
+              </div>
+            )}
+
             {/* Tri-Gauge Ratings Card */}
             <div className="grid grid-cols-3 gap-3">
               {/* Rotten Tomatoes */}
-              <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-3.5 text-center">
-                <span className="text-2xl">🍅</span>
-                <div className="text-xl font-extrabold text-white mt-1">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-950/20 p-3 text-center">
+                <span className="text-xl">🍅</span>
+                <div className="text-lg font-extrabold text-white mt-0.5">
                   {inspectingReviewMovie.rottenTomatoes ?? 88}%
                 </div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-300 mt-0.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-rose-300">
                   {(inspectingReviewMovie.rottenTomatoes ?? 88) >= 90 ? 'Certified Fresh' : 'Fresh'}
                 </div>
               </div>
 
               {/* Metacritic */}
-              <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3.5 text-center">
-                <div className="mx-auto flex h-7 w-7 items-center justify-center rounded-md bg-indigo-600 text-xs font-bold text-white font-mono">
+              <div className="rounded-xl border border-indigo-500/30 bg-indigo-950/20 p-3 text-center">
+                <div className="mx-auto flex h-6 w-6 items-center justify-center rounded-md bg-indigo-600 text-[11px] font-bold text-white font-mono">
                   M
                 </div>
-                <div className="text-xl font-extrabold text-white mt-1">
+                <div className="text-lg font-extrabold text-white mt-0.5">
                   {inspectingReviewMovie.metacritic ?? 80}/100
                 </div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-300 mt-0.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-indigo-300">
                   Universal Acclaim
                 </div>
               </div>
 
               {/* IMDb */}
-              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3.5 text-center">
-                <div className="flex items-center justify-center gap-1 text-amber-400 text-lg">
-                  <Star className="h-5 w-5 fill-amber-400" />
+              <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 p-3 text-center">
+                <div className="flex items-center justify-center gap-1 text-amber-400">
+                  <Star className="h-4 w-4 fill-amber-400" />
                 </div>
-                <div className="text-xl font-extrabold text-white mt-1">
+                <div className="text-lg font-extrabold text-white mt-0.5">
                   {inspectingReviewMovie.imdbRating ?? inspectingReviewMovie.rating}/10
                 </div>
-                <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-300 mt-0.5">
+                <div className="text-[10px] font-semibold uppercase tracking-wider text-amber-300">
                   {inspectingReviewMovie.reviewsCount ?? 350}+ Reviews
                 </div>
               </div>
             </div>
 
             {/* Critical Consensus Banner */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-1.5">
+            <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3.5 space-y-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
                 Critical Consensus
               </span>
@@ -912,13 +1051,38 @@ REASON: <1 sentence why it matches>`
             </div>
 
             {/* Featured Publication Critic Quote */}
-            <div className="rounded-xl border border-purple-500/20 bg-gradient-to-r from-purple-950/20 via-zinc-900/60 to-transparent p-4 space-y-1.5">
+            <div className="rounded-xl border border-purple-500/20 bg-gradient-to-r from-purple-950/20 via-zinc-900/60 to-transparent p-3.5 space-y-1">
               <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
                 Featured Critic Spotlight
               </span>
               <blockquote className="text-xs text-purple-200 italic leading-relaxed">
                 {inspectingReviewMovie.topCriticQuote ?? '"An exceptional cinematic feat that demands theater viewing." — Variety'}
               </blockquote>
+            </div>
+
+            {/* Select Showtime Pill Row inside Modal */}
+            <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 block">
+                Choose Showtime & Book
+              </span>
+              <div className="flex items-center gap-2 flex-wrap">
+                {(inspectingReviewMovie.showtimes
+                  ? inspectingReviewMovie.showtimes.split(',').map((s) => s.trim())
+                  : ['1:30 PM', '5:00 PM', '8:45 PM']
+                ).map((time) => (
+                  <button
+                    key={time}
+                    onClick={() => {
+                      handleSelectMovie(inspectingReviewMovie, time)
+                      setInspectingReviewMovie(null)
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-purple-600 text-xs font-mono font-semibold text-zinc-200 hover:text-white transition border border-zinc-700"
+                  >
+                    <Clock className="h-3 w-3" />
+                    {time}
+                  </button>
+                ))}
+              </div>
             </div>
 
             {/* Modal Actions */}
@@ -934,10 +1098,10 @@ REASON: <1 sentence why it matches>`
                   handleSelectMovie(inspectingReviewMovie)
                   setInspectingReviewMovie(null)
                 }}
-                className="flex items-center gap-2 rounded-xl bg-purple-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-600/30 hover:bg-purple-500 transition active:scale-95"
+                className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 px-5 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-600/30 hover:opacity-90 transition active:scale-95"
               >
                 <Ticket className="h-4 w-4" />
-                Select & Choose Seats
+                Select Movie & Choose Seats
               </button>
             </div>
           </div>
