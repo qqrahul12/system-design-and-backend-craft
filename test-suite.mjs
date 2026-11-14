@@ -139,6 +139,28 @@ async function runTestSuite() {
     }
   });
 
+  await test('MCP tools/call execution (get_public_cinema_insights)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 35,
+      method: 'tools/call',
+      params: { name: 'get_public_cinema_insights', arguments: {} },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error('Tool returned error');
+    const text = json.result?.content?.[0]?.text || '';
+    if (!text.includes('Verified Public Cinema Industry Intelligence') && !text.includes('National Avg Ticket Price')) {
+      throw new Error('Tool output missing public cinema insights schema');
+    }
+  });
+
   await test('MCP tools/call execution (ingest_current_year_movies)', async () => {
     const payload = JSON.stringify({
       jsonrpc: '2.0',
@@ -626,8 +648,8 @@ async function runTestSuite() {
     });
     if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
     const data = JSON.parse(res.body);
-    if (!data.kpis?.totalGrossRevenue || !data.dailyRevenue || !data.genreTrends || !data.aiRecommendations) {
-      throw new Error('Analytics payload missing required sections');
+    if (!data.kpis?.totalGrossRevenue || !data.dailyRevenue || !data.genreTrends || !data.aiRecommendations || !data.publicInsights) {
+      throw new Error('Analytics payload missing required sections or publicInsights');
     }
   });
 

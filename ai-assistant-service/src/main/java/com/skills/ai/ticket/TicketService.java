@@ -250,8 +250,81 @@ public class TicketService {
         }
     }
 
+    public DigitalTicket issueHistoricalTicket(
+            String movieTitle,
+            String showTime,
+            String format,
+            String auditorium,
+            List<String> seats,
+            double totalPaid,
+            Instant issuedAt
+    ) {
+        String cleanTitle = movieTitle.replaceAll("[^a-zA-Z]", "").toUpperCase();
+        String prefix = cleanTitle.substring(0, Math.min(5, cleanTitle.length()));
+        String ticketId = "TKT-" + prefix + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+
+        String rawPayload = String.format("%s:%s:%s:%s", ticketId, movieTitle, String.join(",", seats), totalPaid);
+        String signature = computeHmacSha256(rawPayload);
+
+        DigitalTicket ticket = new DigitalTicket(
+                ticketId,
+                movieTitle,
+                showTime,
+                format != null ? format : "IMAX 70mm",
+                auditorium != null ? auditorium : "Auditorium 1",
+                seats,
+                totalPaid,
+                rawPayload + ":" + signature.substring(0, 8),
+                signature,
+                "ISSUED",
+                issuedAt != null ? issuedAt : Instant.now(),
+                null
+        );
+
+        tickets.put(ticketId, ticket);
+        return ticket;
+    }
+
     private void seedSampleTicket() {
-        issueTicket("Inception", "9:30 PM", "IMAX 70mm", "Auditorium 1", List.of("B3", "B4"), 24.00);
+        // Trailing 7-day realistic ticketing DB ledger across auditoriums
+        Instant now = Instant.now();
+        java.time.temporal.ChronoUnit days = java.time.temporal.ChronoUnit.DAYS;
+
+        // Monday (6 days ago)
+        issueHistoricalTicket("Interstellar", "7:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("A1", "A2", "A3", "A4"), 72.00, now.minus(6, days));
+        issueHistoricalTicket("Dune: Part Two", "8:30 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("C3", "C4"), 38.00, now.minus(6, days));
+        issueHistoricalTicket("Oppenheimer", "9:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("B1", "B2"), 36.00, now.minus(6, days));
+
+        // Tuesday (5 days ago)
+        issueHistoricalTicket("Tron: Ares", "6:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B3", "B4"), 39.00, now.minus(5, days));
+        issueHistoricalTicket("Gladiator II", "8:00 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("C1", "C2", "C3"), 57.00, now.minus(5, days));
+        issueHistoricalTicket("Inception", "9:30 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("D4", "D5"), 34.00, now.minus(5, days));
+
+        // Wednesday (4 days ago)
+        issueHistoricalTicket("Dune: Part Two", "7:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B1", "B2", "B3", "B4"), 78.00, now.minus(4, days));
+        issueHistoricalTicket("Interstellar", "8:15 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C3", "C4"), 39.00, now.minus(4, days));
+        issueHistoricalTicket("Blade Runner 2049", "9:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("A5", "A6"), 34.00, now.minus(4, days));
+
+        // Thursday (3 days ago)
+        issueHistoricalTicket("Oppenheimer", "6:00 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("C2", "C3", "C4"), 54.00, now.minus(3, days));
+        issueHistoricalTicket("Tron: Ares", "7:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("D1", "D2", "D3"), 58.50, now.minus(3, days));
+        issueHistoricalTicket("Gladiator II", "9:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("B2", "B3"), 38.00, now.minus(3, days));
+
+        // Friday (2 days ago - High Traffic)
+        issueHistoricalTicket("Dune: Part Two", "6:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B1", "B2", "B3", "B4", "B5"), 97.50, now.minus(2, days));
+        issueHistoricalTicket("Interstellar", "8:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C1", "C2", "C3", "C4"), 78.00, now.minus(2, days));
+        issueHistoricalTicket("Tron: Ares", "9:45 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("A1", "A2", "A3"), 55.50, now.minus(2, days));
+        issueHistoricalTicket("Oppenheimer", "10:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("C5", "C6"), 36.00, now.minus(2, days));
+
+        // Saturday (1 day ago - Peak Weekend)
+        issueHistoricalTicket("Interstellar", "2:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B2", "B3", "B4"), 58.50, now.minus(1, days));
+        issueHistoricalTicket("Dune: Part Two", "5:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C1", "C2", "C3", "C4", "C5"), 97.50, now.minus(1, days));
+        issueHistoricalTicket("Gladiator II", "7:30 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("A3", "A4", "A5"), 57.00, now.minus(1, days));
+        issueHistoricalTicket("Tron: Ares", "8:45 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("D2", "D3"), 39.00, now.minus(1, days));
+
+        // Sunday / Today
+        issueTicket("Inception", "9:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B3", "B4"), 38.00);
+        issueTicket("Dune: Part Two", "7:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C3", "C4"), 39.00);
     }
 
     public record ValidationResult(boolean valid, String code, String message, DigitalTicket ticket) {}

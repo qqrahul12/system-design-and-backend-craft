@@ -160,15 +160,64 @@ public class ConcessionsService {
                 "Nitrogen-infused single-origin Ethiopian cold brew with subtle Madagascar vanilla."
         ));
 
-        // Seed a sample order
+        // Seed historical concessions orders in DB across trailing week
+        seedHistoricalOrders();
+    }
+
+    private void seedHistoricalOrders() {
+        java.time.Instant now = java.time.Instant.now();
+        java.time.temporal.ChronoUnit days = java.time.temporal.ChronoUnit.DAYS;
+
+        // Monday
+        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 1, "price", 11.0)), "IMAX 70mm Auditorium 1, Seat A1", 11.00, now.minus(6, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Wild Blackberry Craft Soda", "qty", 2, "price", 6.0)), "70mm Large Format Screen 2, Seat C3", 12.00, now.minus(6, days));
+
+        // Tuesday
+        placeHistoricalOrder(List.of(Map.of("name", "Chipotle Queso Loaded Nachos", "qty", 1, "price", 10.5)), "70mm Large Format Screen 2, Seat C1", 10.50, now.minus(5, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 2, "price", 7.0)), "IMAX 70mm Auditorium 1, Seat B3", 14.00, now.minus(5, days));
+
+        // Wednesday
+        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 2, "price", 11.0)), "IMAX 70mm Auditorium 1, Seat B2", 22.00, now.minus(4, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Dark Chocolate Sea Salt Pretzel Bites", "qty", 1, "price", 7.5)), "Dolby Cinema Auditorium 3, Seat A5", 7.50, now.minus(4, days));
+
+        // Thursday
+        placeHistoricalOrder(List.of(Map.of("name", "Chipotle Queso Loaded Nachos", "qty", 2, "price", 10.5)), "70mm Large Format Screen 2, Seat C2", 21.00, now.minus(3, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Wild Blackberry Craft Soda", "qty", 1, "price", 6.0)), "IMAX 70mm Auditorium 1, Seat D1", 6.00, now.minus(3, days));
+
+        // Friday (High Traffic)
+        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 3, "price", 11.0)), "IMAX 70mm Auditorium 1, Seat B1", 33.00, now.minus(2, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 2, "price", 7.0)), "IMAX 70mm Auditorium 1, Seat C2", 14.00, now.minus(2, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Chipotle Queso Loaded Nachos", "qty", 2, "price", 10.5)), "70mm Large Format Screen 2, Seat A2", 21.00, now.minus(2, days));
+
+        // Saturday (Peak Weekend)
+        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 2, "price", 11.0), Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 2, "price", 7.0)), "IMAX 70mm Auditorium 1, Seat C2", 36.00, now.minus(1, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Dark Chocolate Sea Salt Pretzel Bites", "qty", 2, "price", 7.5)), "70mm Large Format Screen 2, Seat A4", 15.00, now.minus(1, days));
+        placeHistoricalOrder(List.of(Map.of("name", "Wild Blackberry Craft Soda", "qty", 3, "price", 6.0)), "Dolby Cinema Auditorium 3, Seat D2", 18.00, now.minus(1, days));
+
+        // Today
         placeOrder(
                 List.of(
                         Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 1, "price", 11.00),
                         Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 1, "price", 7.00)
                 ),
-                "Auditorium 1, Seat B3",
+                "IMAX 70mm Auditorium 1, Seat B3",
                 18.00
         );
+    }
+
+    public ConcessionOrder placeHistoricalOrder(List<Map<String, Object>> items, String deliverySeat, double total, java.time.Instant createdAt) {
+        String orderId = "FB-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
+        ConcessionOrder order = ConcessionOrder.builder()
+                .orderId(orderId)
+                .items(items != null ? items : List.of())
+                .totalAmount(total > 0 ? total : 18.50)
+                .deliverySeat(deliverySeat != null && !deliverySeat.isBlank() ? deliverySeat : "Express VIP Pickup Counter")
+                .status("DELIVERED")
+                .estimatedMinutes(0)
+                .createdAt(createdAt != null ? createdAt : java.time.Instant.now())
+                .build();
+        orders.put(orderId, order);
+        return order;
     }
 
     private final Map<String, ConcessionOrder> orders = new java.util.concurrent.ConcurrentHashMap<>();
