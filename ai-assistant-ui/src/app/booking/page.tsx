@@ -227,6 +227,13 @@ export default function BookingPage() {
         }
       })
       .catch(() => {})
+
+    fetch(`${API_BASE}/api/v1/auth/me`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((u) => {
+        if (u) setCurrentUser(u)
+      })
+      .catch(() => {})
   }, [])
 
   const [searchQuery, setSearchQuery] = useState('')
@@ -272,6 +279,10 @@ export default function BookingPage() {
   const [liveBroadcastToast, setLiveBroadcastToast] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
   const [walletBalance, setWalletBalance] = useState<number>(175.0)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false)
+  const [isGuestCheckout, setIsGuestCheckout] = useState<boolean>(false)
+  const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false)
 
   // SplitMoney Integration State
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false)
@@ -840,8 +851,45 @@ REASON: <1 sentence why it matches>`
     }
   }
 
-  const handleCompleteBooking = async () => {
+  const handleLoginAndBook = async (roleName: string) => {
+    setIsAuthLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/switch-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: roleName }),
+      })
+      if (res.ok) {
+        const u = await res.json()
+        setCurrentUser(u)
+        setIsAuthModalOpen(false)
+        setTimeout(() => {
+          handleCompleteBooking(true)
+        }, 150)
+      }
+    } catch {
+      handleCompleteBooking(true)
+    } finally {
+      setIsAuthLoading(false)
+    }
+  }
+
+  const handleContinueAsGuest = () => {
+    setIsGuestCheckout(true)
+    setIsAuthModalOpen(false)
+    setTimeout(() => {
+      handleCompleteBooking(true)
+    }, 150)
+  }
+
+  const handleCompleteBooking = async (bypassAuthCheck = false) => {
     if (!selectedMovie || selectedSeats.length === 0 || isProcessing) return
+
+    // View pages are public; require authentication or guest choice only upon booking
+    if (!bypassAuthCheck && (!currentUser || currentUser.role === 'STANDARD_GUEST') && !isGuestCheckout) {
+      setIsAuthModalOpen(true)
+      return
+    }
 
     setIsProcessing(true)
 
@@ -1767,7 +1815,7 @@ REASON: <1 sentence why it matches>`
               </div>
 
               <button
-                onClick={handleCompleteBooking}
+                onClick={() => handleCompleteBooking(false)}
                 disabled={isProcessing || selectedSeats.length === 0}
                 className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 transition-all shadow-lg shadow-emerald-600/30 active:scale-95 shrink-0"
               >
@@ -2144,6 +2192,106 @@ REASON: <1 sentence why it matches>`
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Sign In Required Upon Booking Modal */}
+      {isAuthModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-in fade-in duration-200">
+          <div className="relative w-full max-w-lg rounded-2xl bg-[#141414] border border-[#282828] p-6 sm:p-7 shadow-2xl space-y-6">
+            <button
+              onClick={() => setIsAuthModalOpen(false)}
+              className="absolute top-4 right-4 text-zinc-400 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 text-[11px] font-bold text-purple-300">
+                <Crown className="h-3 w-3 text-amber-400" />
+                <span>CineMind Patron Access</span>
+              </div>
+              <h3 className="text-xl font-black text-white tracking-tight">
+                Sign In to Confirm Reservation
+              </h3>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Movie discovery, showtimes, and seat maps are open to all guests. Sign in to link your tickets to your passbook, access CineCash payments, and earn 5% cashback.
+              </p>
+            </div>
+
+            {/* Selected Booking Summary Strip */}
+            <div className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 flex items-center justify-between text-xs">
+              <div>
+                <p className="font-bold text-white truncate max-w-[220px]">{selectedMovie?.title}</p>
+                <p className="text-[11px] font-mono text-zinc-400">{selectedSeats.join(', ')} • {selectedShowtime}</p>
+              </div>
+              <span className="text-sm font-mono font-black text-emerald-400">
+                ${priceBreakdown.total.toFixed(2)}
+              </span>
+            </div>
+
+            {/* Quick 1-Click Persona Sign-In */}
+            <div className="space-y-2">
+              <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 font-semibold">
+                Instant 1-Click Sign In
+              </span>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleLoginAndBook('VIP_PATRON')}
+                  disabled={isAuthLoading}
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-zinc-800 hover:border-purple-500/40 text-left transition group"
+                >
+                  <img
+                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop"
+                    alt="Alex"
+                    className="w-8 h-8 rounded-full object-cover border border-purple-500/50"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white group-hover:text-purple-300">Alex Vance</p>
+                    <p className="text-[10px] text-amber-400">👑 VIP Founder (20% Off)</p>
+                  </div>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleLoginAndBook('EXECUTIVE_ADMIN')}
+                  disabled={isAuthLoading}
+                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-zinc-800 hover:border-purple-500/40 text-left transition group"
+                >
+                  <img
+                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop"
+                    alt="Marcus"
+                    className="w-8 h-8 rounded-full object-cover border border-zinc-700"
+                  />
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white group-hover:text-purple-300">Marcus Kane</p>
+                    <p className="text-[10px] text-zinc-400">🛡️ Circuit Director</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+
+            {/* Actions: Sign In page OR Continue as Guest */}
+            <div className="pt-2 border-t border-zinc-800 space-y-2">
+              <Link
+                href="/login?redirect=/booking"
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-600 hover:bg-purple-500 font-semibold text-xs text-white shadow-lg shadow-purple-600/30 transition"
+              >
+                <span>Sign In with Password / Create Account</span>
+                <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+
+              <button
+                type="button"
+                onClick={handleContinueAsGuest}
+                disabled={isAuthLoading}
+                className="w-full py-2 rounded-xl text-xs font-semibold text-zinc-400 hover:text-white hover:bg-zinc-800/60 transition"
+              >
+                Continue as Guest (No Password Required)
               </button>
             </div>
           </div>
