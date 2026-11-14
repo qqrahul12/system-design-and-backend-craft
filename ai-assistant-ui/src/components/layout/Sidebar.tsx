@@ -22,6 +22,8 @@ import {
   CheckCircle2,
   X,
   Plus,
+  Users,
+  User,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -72,6 +74,31 @@ const navSections: NavSection[] = [
         label: 'AI Cinema Concierge',
         icon: MessageSquare,
         description: 'Dual Gemini 3.8 + Groq LPU',
+      },
+    ],
+  },
+  {
+    title: 'Fintech & Social Hub',
+    items: [
+      {
+        href: '/wallet',
+        label: 'CineCash Digital Wallet',
+        icon: Wallet,
+        description: 'Instant top-up & cashback',
+        badge: 'VIP',
+      },
+      {
+        href: '/split',
+        label: 'SplitMoney Squads',
+        icon: Users,
+        description: 'Group bill splitting & settle',
+        badge: 'NEW',
+      },
+      {
+        href: '/profile',
+        label: 'Profile & RBAC Security',
+        icon: User,
+        description: 'Persona switch & permissions',
       },
     ],
   },

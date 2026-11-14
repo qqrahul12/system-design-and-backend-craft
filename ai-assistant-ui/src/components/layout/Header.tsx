@@ -9,20 +9,60 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string; icon: strin
     subtitle: 'High-Concurrency Reservation & AI Seat Optimization',
     icon: '🎬',
   },
-  '/documents': {
-    title: 'Document Intelligence & RAG',
-    subtitle: '768-Dim Gemini Embeddings & Semantic Search',
-    icon: '📄',
+  '/concessions': {
+    title: 'Gourmet F&B Studio',
+    subtitle: 'AI Flavor Pairings, Real-Time Prep Queue & In-Seat Delivery',
+    icon: '🍿',
+  },
+  '/tickets': {
+    title: 'Pass Wallet & Gate Scan',
+    subtitle: 'HMAC-SHA256 Encrypted Offline QR Turnstile Verification',
+    icon: '🎟️',
+  },
+  '/wallet': {
+    title: 'CineCash Digital Wallet',
+    subtitle: 'Prepaid VIP Balance, Instant Top-Ups & Circuit Breaker',
+    icon: '💳',
+  },
+  '/split': {
+    title: 'SplitMoney Squad Bills',
+    subtitle: 'Group Concessions & Ticket Expense Splitting with Fair Share',
+    icon: '👥',
+  },
+  '/profile': {
+    title: 'Member Profile & RBAC Security',
+    subtitle: 'Session Credentials, Loyalty Tier & Role-Based Access Control',
+    icon: '👤',
+  },
+  '/auth': {
+    title: 'Single Sign-On & Identity Portal',
+    subtitle: 'Multi-Persona Authentication & Token Verification Gateway',
+    icon: '🔐',
+  },
+  '/admin': {
+    title: 'Executive Studio & Intel',
+    subtitle: 'Real-Time Box Office, Dynamic Yield Surge & Auditorium Load',
+    icon: '💼',
   },
   '/agent': {
-    title: 'Model Context Protocol (MCP) Console',
+    title: 'Autonomous Agent Swarm (MCP)',
     subtitle: 'Standardized JSON-RPC 2.0 Autonomous Tool Orchestrator',
     icon: '🤖',
+  },
+  '/tracing': {
+    title: 'APM Waterfall Distributed Traces',
+    subtitle: 'OpenTelemetry Trace Spans, DB Queries & MCP Latency Budgets',
+    icon: '⚡',
   },
   '/analytics': {
     title: 'LLMOps & Telemetry Dashboard',
     subtitle: 'SHA-256 Memoized Response Cache & Prompt Injection Guard',
     icon: '📊',
+  },
+  '/documents': {
+    title: 'Document Intelligence & RAG',
+    subtitle: '768-Dim Gemini Embeddings & Semantic Search',
+    icon: '📄',
   },
   '/chat': {
     title: 'Multi-Model AI Chat',
