@@ -289,6 +289,57 @@ async function runTestSuite() {
     if (!val.valid && val.code !== 'ALREADY_CHECKED_IN') throw new Error(`Gate validation failed: ${val.message}`);
   });
 
+  await test('Issue Ticket From Booking Flow (/api/v1/tickets/issue)', async () => {
+    const payload = JSON.stringify({
+      movieTitle: 'Interstellar',
+      showTime: '7:30 PM',
+      format: 'IMAX 70mm',
+      auditorium: 'IMAX 70mm Auditorium 1',
+      seats: ['B3', 'B4'],
+      totalPaid: 36.00,
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/tickets/issue',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const ticket = JSON.parse(res.body);
+    if (!ticket.ticketId || ticket.status !== 'ISSUED') throw new Error('Ticket issue failed');
+  });
+
+  await test('Place Concessions Order to Seat (/api/v1/concessions/order)', async () => {
+    const payload = JSON.stringify({
+      items: [{ name: 'Artisan Warm Butter Popcorn', qty: 2, price: 8.5 }],
+      deliverySeat: 'Auditorium 1, Seat B3',
+      total: 17.00,
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/concessions/order',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 201) throw new Error(`Expected 201, got ${res.statusCode}`);
+    const order = JSON.parse(res.body);
+    if (!order.orderId || order.status !== 'PREPARING') throw new Error('Order creation failed');
+  });
+
+  await test('Retrieve Concessions Orders (/api/v1/concessions/orders)', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/concessions/orders',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const orders = JSON.parse(res.body);
+    if (!Array.isArray(orders) || orders.length === 0) throw new Error('Expected at least 1 order');
+  });
+
   await test('APM Waterfall Traces (/api/v1/telemetry/traces)', async () => {
     const res = await request({
       hostname: '127.0.0.1',

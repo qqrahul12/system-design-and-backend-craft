@@ -98,6 +98,15 @@ public class TicketService {
         return new ValidationResult(true, "ACCESS_GRANTED", "Welcome to " + checkedIn.auditorium() + "! Enjoy " + checkedIn.movieTitle() + ".", checkedIn);
     }
 
+    public boolean deleteTicket(String ticketId) {
+        DigitalTicket removed = tickets.remove(ticketId);
+        if (removed != null) {
+            log.info("Cancelled/refunded ticket: id={}", ticketId);
+            return true;
+        }
+        return false;
+    }
+
     private String computeHmacSha256(String data) {
         try {
             Mac mac = Mac.getInstance("HmacSHA256");

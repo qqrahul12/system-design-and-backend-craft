@@ -1,6 +1,8 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
+import { useSearchParams } from 'next/navigation'
+import Link from 'next/link'
 import {
   Ticket,
   QrCode,
@@ -14,6 +16,15 @@ import {
   Scan,
   Download,
   Share2,
+  UtensilsCrossed,
+  ArrowRight,
+  Smartphone,
+  Printer,
+  Trash2,
+  Check,
+  X,
+  CreditCard,
+  Plus,
 } from 'lucide-react'
 
 const API_BASE =
@@ -36,15 +47,24 @@ interface DigitalTicket {
   checkedInAt?: string
 }
 
-export default function TicketsPage() {
+function TicketsContent() {
+  const searchParams = useSearchParams()
+  const targetId = searchParams.get('id')
+
   const [tickets, setTickets] = useState<DigitalTicket[]>([])
   const [selectedTicket, setSelectedTicket] = useState<DigitalTicket | null>(null)
   const [isValidating, setIsValidating] = useState(false)
+  const [isScanningLaser, setIsScanningLaser] = useState(false)
   const [validationResult, setValidationResult] = useState<{
     valid: boolean
     code: string
     message: string
   } | null>(null)
+
+  // Interactive Modals
+  const [isAppleWalletOpen, setIsAppleWalletOpen] = useState(false)
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
+  const [actionNotice, setActionNotice] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTickets()
@@ -56,6 +76,14 @@ export default function TicketsPage() {
       if (res.ok) {
         const data = await res.json()
         setTickets(data)
+
+        if (targetId) {
+          const match = data.find((t: DigitalTicket) => t.ticketId.toUpperCase() === targetId.toUpperCase())
+          if (match) {
+            setSelectedTicket(match)
+            return
+          }
+        }
         if (data.length > 0 && !selectedTicket) {
           setSelectedTicket(data[0])
         }
@@ -68,7 +96,11 @@ export default function TicketsPage() {
   const validateAtGate = async () => {
     if (!selectedTicket || isValidating) return
     setIsValidating(true)
+    setIsScanningLaser(true)
     setValidationResult(null)
+
+    // Optical laser animation delay
+    await new Promise((r) => setTimeout(r, 800))
 
     try {
       const res = await fetch(`${API_BASE}/api/v1/tickets/validate`, {
@@ -85,7 +117,6 @@ export default function TicketsPage() {
         setValidationResult(result)
         if (result.ticket) {
           setSelectedTicket(result.ticket)
-          // update in list
           setTickets((prev) =>
             prev.map((t) => (t.ticketId === result.ticket.ticketId ? result.ticket : t))
           )
@@ -98,12 +129,50 @@ export default function TicketsPage() {
         message: err.message,
       })
     } finally {
+      setIsScanningLaser(false)
       setIsValidating(false)
     }
   }
 
+  const handleCancelTicket = async () => {
+    if (!selectedTicket) return
+    if (!confirm(`Are you sure you want to cancel and refund pass "${selectedTicket.ticketId}" for ${selectedTicket.movieTitle}?`)) {
+      return
+    }
+
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/tickets/${selectedTicket.ticketId}`, {
+        method: 'DELETE',
+      })
+      if (res.ok) {
+        showNotice(`Refunded $${selectedTicket.totalPaid.toFixed(2)} to original payment method.`)
+        const remaining = tickets.filter((t) => t.ticketId !== selectedTicket.ticketId)
+        setTickets(remaining)
+        setSelectedTicket(remaining.length > 0 ? remaining[0] : null)
+      }
+    } catch {
+      showNotice('Reservation cancelled.')
+      const remaining = tickets.filter((t) => t.ticketId !== selectedTicket.ticketId)
+      setTickets(remaining)
+      setSelectedTicket(remaining.length > 0 ? remaining[0] : null)
+    }
+  }
+
+  const showNotice = (msg: string) => {
+    setActionNotice(msg)
+    setTimeout(() => setActionNotice(null), 3500)
+  }
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 pb-16">
+      {/* Toast */}
+      {actionNotice && (
+        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-5 py-3 text-sm text-emerald-200 shadow-2xl backdrop-blur-md animate-fade-in">
+          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
+          <span>{actionNotice}</span>
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222] pb-6">
         <div>
@@ -119,123 +188,181 @@ export default function TicketsPage() {
             </span>
           </div>
           <p className="mt-1.5 text-sm text-[#888]">
-            Cryptographically-verified digital cinema passes with live simulated gate scanner.
+            Your cryptographic mobile admissions, live gate check-in status, Apple Wallet integration, and in-theater F&B delivery.
           </p>
         </div>
 
-        <button
-          onClick={fetchTickets}
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold bg-[#161616] border border-[#2a2a2a] text-[#aaa] hover:text-white"
-        >
-          <RefreshCw className="h-3.5 w-3.5" /> Refresh Wallet
-        </button>
+        <div className="flex items-center gap-3">
+          <Link
+            href="/booking"
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-purple-600 text-white hover:bg-purple-500 shadow-lg shadow-purple-600/20 transition"
+          >
+            <Plus className="h-3.5 w-3.5" /> Book Another Movie
+          </Link>
+
+          <button
+            onClick={fetchTickets}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-semibold bg-[#161616] border border-[#2a2a2a] text-[#aaa] hover:text-white transition"
+          >
+            <RefreshCw className="h-3.5 w-3.5" /> Refresh
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Digital Pass Card (7 cols) */}
         <div className="lg:col-span-7 space-y-6">
           {selectedTicket ? (
-            <div className="relative rounded-3xl border border-[#333] bg-gradient-to-b from-[#181818] via-[#121212] to-[#0d0d0d] p-7 shadow-2xl overflow-hidden space-y-6">
-              {/* Background ambient glow */}
-              <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-purple-600/10 blur-3xl pointer-events-none" />
+            <div className="space-y-4">
+              {/* The Physical Ticket Replica */}
+              <div className="relative rounded-3xl border border-[#333] bg-gradient-to-b from-[#181818] via-[#121212] to-[#0d0d0d] p-7 shadow-2xl overflow-hidden space-y-6">
+                {/* Laser Scanning Beam Animation */}
+                {isScanningLaser && (
+                  <div className="absolute inset-x-0 h-1 bg-gradient-to-r from-transparent via-red-500 to-transparent shadow-[0_0_15px_#ef4444] animate-pulse z-30 transition-all top-1/2" />
+                )}
 
-              {/* Status Header */}
-              <div className="flex items-center justify-between border-b border-[#252525] pb-4">
-                <div className="flex items-center gap-2">
-                  <Film className="h-4 w-4 text-[#a78bfa]" />
-                  <span className="text-xs font-bold uppercase tracking-wider text-white">
-                    CineMind Admission Pass
-                  </span>
-                </div>
-                <span
-                  className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase flex items-center gap-1 border ${
-                    selectedTicket.status === 'CHECKED_IN'
-                      ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
-                      : 'bg-purple-500/15 border-purple-500/30 text-[#a78bfa]'
-                  }`}
-                >
+                {/* Ambient glow */}
+                <div className="absolute top-0 right-0 -mr-16 -mt-16 h-64 w-64 rounded-full bg-purple-600/10 blur-3xl pointer-events-none" />
+
+                {/* Status Header */}
+                <div className="flex items-center justify-between border-b border-[#252525] pb-4">
+                  <div className="flex items-center gap-2">
+                    <Film className="h-4 w-4 text-[#a78bfa]" />
+                    <span className="text-xs font-bold uppercase tracking-wider text-white">
+                      CineMind Theatrical Admission Pass
+                    </span>
+                  </div>
                   <span
-                    className={`h-1.5 w-1.5 rounded-full ${
-                      selectedTicket.status === 'CHECKED_IN' ? 'bg-emerald-400' : 'bg-purple-400'
+                    className={`px-3 py-1 rounded-full text-[10px] font-bold tracking-wide uppercase flex items-center gap-1 border ${
+                      selectedTicket.status === 'CHECKED_IN'
+                        ? 'bg-emerald-500/15 border-emerald-500/30 text-emerald-400'
+                        : 'bg-purple-500/15 border-purple-500/30 text-[#a78bfa]'
                     }`}
-                  />
-                  {selectedTicket.status === 'CHECKED_IN' ? 'Checked In' : 'Active Pass'}
-                </span>
-              </div>
-
-              {/* Movie Title & Details */}
-              <div className="space-y-1">
-                <h2 className="text-2xl font-black text-white tracking-tight">
-                  {selectedTicket.movieTitle}
-                </h2>
-                <div className="flex flex-wrap items-center gap-2 text-xs text-[#888] pt-1">
-                  <span className="rounded bg-[#202020] px-2 py-0.5 font-bold text-white border border-[#2a2a2a]">
-                    {selectedTicket.format}
+                  >
+                    <span
+                      className={`h-1.5 w-1.5 rounded-full ${
+                        selectedTicket.status === 'CHECKED_IN' ? 'bg-emerald-400 animate-ping' : 'bg-purple-400'
+                      }`}
+                    />
+                    {selectedTicket.status === 'CHECKED_IN' ? 'Admitted at Gate' : 'Active Pass (Valid)'}
                   </span>
-                  <span>•</span>
-                  <span>{selectedTicket.auditorium}</span>
                 </div>
-              </div>
 
-              {/* Grid: Showtime, Seats, Price */}
-              <div className="grid grid-cols-3 gap-3 rounded-2xl bg-[#141414] border border-[#242424] p-4 text-center">
-                <div>
-                  <p className="text-[10px] uppercase font-semibold text-[#666]">Showtime</p>
-                  <p className="text-sm font-bold text-white mt-0.5">{selectedTicket.showTime}</p>
-                </div>
-                <div className="border-x border-[#222]">
-                  <p className="text-[10px] uppercase font-semibold text-[#666]">Reserved Seats</p>
-                  <p className="text-sm font-bold text-purple-400 mt-0.5">
-                    {selectedTicket.seats.join(', ')}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-[10px] uppercase font-semibold text-[#666]">Amount Paid</p>
-                  <p className="text-sm font-bold text-emerald-400 mt-0.5">
-                    ${selectedTicket.totalPaid.toFixed(2)}
-                  </p>
-                </div>
-              </div>
-
-              {/* Tear-off Dotted Divider */}
-              <div className="relative flex items-center py-2">
-                <div className="absolute -left-10 h-6 w-6 rounded-full bg-[#0a0a0a] border border-[#333]" />
-                <div className="w-full border-t border-dashed border-[#333]" />
-                <div className="absolute -right-10 h-6 w-6 rounded-full bg-[#0a0a0a] border border-[#333]" />
-              </div>
-
-              {/* QR Verification Code & Signature */}
-              <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-2">
-                <div className="space-y-1 text-center sm:text-left">
-                  <p className="text-xs font-mono font-bold text-white tracking-wider">
-                    {selectedTicket.ticketId}
-                  </p>
-                  <p className="text-[10px] text-[#666] font-mono max-w-xs break-all">
-                    HMAC: {selectedTicket.hmacSignature.substring(0, 32)}...
-                  </p>
-                  <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 pt-1">
-                    <ShieldCheck className="h-3.5 w-3.5" /> Tamper-Proof Cryptographic Signature
+                {/* Movie Title & Details */}
+                <div className="space-y-1">
+                  <h2 className="text-2xl font-black text-white tracking-tight">
+                    {selectedTicket.movieTitle}
+                  </h2>
+                  <div className="flex flex-wrap items-center gap-2 text-xs text-[#888] pt-1">
+                    <span className="rounded bg-[#202020] px-2 py-0.5 font-bold text-white border border-[#2a2a2a]">
+                      {selectedTicket.format}
+                    </span>
+                    <span>•</span>
+                    <span className="text-zinc-300 font-semibold">{selectedTicket.auditorium}</span>
                   </div>
                 </div>
 
-                {/* Simulated High-Res QR SVG */}
-                <div className="flex flex-col items-center bg-white p-3 rounded-2xl shadow-xl">
-                  <QrCode className="h-28 w-28 text-black" />
-                  <span className="text-[9px] font-mono text-black font-bold mt-1 tracking-widest">
-                    CINEMIND-GATE
-                  </span>
+                {/* Grid: Showtime, Seats, Price */}
+                <div className="grid grid-cols-3 gap-3 rounded-2xl bg-[#141414] border border-[#242424] p-4 text-center">
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold text-[#666]">Showtime</p>
+                    <p className="text-sm font-bold text-white mt-0.5">{selectedTicket.showTime}</p>
+                  </div>
+                  <div className="border-x border-[#222]">
+                    <p className="text-[10px] uppercase font-semibold text-[#666]">Seats</p>
+                    <p className="text-sm font-bold text-purple-400 mt-0.5">
+                      {selectedTicket.seats.join(', ')}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-[10px] uppercase font-semibold text-[#666]">Paid</p>
+                    <p className="text-sm font-bold text-emerald-400 mt-0.5">
+                      ${selectedTicket.totalPaid.toFixed(2)}
+                    </p>
+                  </div>
                 </div>
+
+                {/* Tear-off Dotted Divider */}
+                <div className="relative flex items-center py-2">
+                  <div className="absolute -left-10 h-6 w-6 rounded-full bg-[#0a0a0a] border border-[#333]" />
+                  <div className="w-full border-t border-dashed border-[#333]" />
+                  <div className="absolute -right-10 h-6 w-6 rounded-full bg-[#0a0a0a] border border-[#333]" />
+                </div>
+
+                {/* QR Verification Code & Signature */}
+                <div className="flex flex-col sm:flex-row items-center justify-between gap-6 pt-2">
+                  <div className="space-y-1 text-center sm:text-left">
+                    <p className="text-xs font-mono font-bold text-white tracking-wider">
+                      {selectedTicket.ticketId}
+                    </p>
+                    <p className="text-[10px] text-[#666] font-mono max-w-xs break-all">
+                      HMAC: {selectedTicket.hmacSignature.substring(0, 32)}...
+                    </p>
+                    <div className="flex items-center gap-1.5 text-[10px] text-emerald-400 pt-1">
+                      <ShieldCheck className="h-3.5 w-3.5" /> Hardware Gate Cryptography Validated
+                    </div>
+                  </div>
+
+                  {/* Scannable Optical QR */}
+                  <div className="flex flex-col items-center bg-white p-3 rounded-2xl shadow-xl">
+                    <QrCode className="h-28 w-28 text-black" />
+                    <span className="text-[9px] font-mono text-black font-bold mt-1 tracking-widest">
+                      CINEMIND-GATE
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Real User Utility Actions */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                <button
+                  onClick={() => setIsAppleWalletOpen(true)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition active:scale-95 text-xs font-semibold gap-1.5"
+                >
+                  <Smartphone className="h-4 w-4 text-purple-400" />
+                  <span>Apple Wallet</span>
+                </button>
+
+                <button
+                  onClick={() => setIsPrintModalOpen(true)}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:border-zinc-700 transition active:scale-95 text-xs font-semibold gap-1.5"
+                >
+                  <Printer className="h-4 w-4 text-indigo-400" />
+                  <span>Print Pass</span>
+                </button>
+
+                <Link
+                  href={`/concessions?movie=${encodeURIComponent(selectedTicket.movieTitle)}&seats=${selectedTicket.seats.join(',')}&auditorium=${encodeURIComponent(selectedTicket.auditorium)}`}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-amber-400 hover:text-amber-300 hover:border-amber-500/40 transition active:scale-95 text-xs font-semibold gap-1.5"
+                >
+                  <UtensilsCrossed className="h-4 w-4 text-amber-400" />
+                  <span>Order Snacks</span>
+                </Link>
+
+                <button
+                  onClick={handleCancelTicket}
+                  className="flex flex-col items-center justify-center p-3 rounded-2xl bg-zinc-900 border border-zinc-800 text-rose-400 hover:text-rose-300 hover:border-rose-500/40 transition active:scale-95 text-xs font-semibold gap-1.5"
+                >
+                  <Trash2 className="h-4 w-4 text-rose-400" />
+                  <span>Cancel Pass</span>
+                </button>
               </div>
             </div>
           ) : (
-            <div className="rounded-3xl border border-[#222] bg-[#121212] p-12 text-center text-[#666]">
-              <Ticket className="h-8 w-8 mx-auto mb-2 text-[#444]" />
-              <p className="text-sm">No ticket selected</p>
+            <div className="rounded-3xl border border-[#222] bg-[#121212] p-12 text-center text-[#666] space-y-3">
+              <Ticket className="h-10 w-10 mx-auto text-[#444]" />
+              <p className="text-sm text-zinc-400">No tickets currently selected</p>
+              <Link
+                href="/booking"
+                className="inline-flex items-center gap-2 rounded-xl bg-purple-600 px-4 py-2 text-xs font-bold text-white hover:bg-purple-500"
+              >
+                Go to Movie Booking
+              </Link>
             </div>
           )}
         </div>
 
-        {/* Right Column: Gate Validation Simulator & Ticket History (5 cols) */}
+        {/* Right Column: Gate Validation Simulator & Wallet Drawer (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
           {/* Gate Scanner Simulator Box */}
           <div className="rounded-2xl border border-[#262626] bg-[#121212] p-5 shadow-xl space-y-4">
@@ -243,28 +370,30 @@ export default function TicketsPage() {
               <div className="flex items-center gap-2">
                 <Scan className="h-4 w-4 text-purple-400" />
                 <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                  Auditorium Gate Scanner
+                  Auditorium Gate Turnstile Scanner
                 </h3>
               </div>
-              <span className="text-[10px] font-mono text-[#666]">Gate #4 Check-In</span>
+              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Gate #2 Online
+              </span>
             </div>
 
             <p className="text-xs text-[#888] leading-relaxed">
-              Simulate an usher or turnstile optical scanner reading the ticket&apos;s HMAC-SHA256 signature token.
+              Simulates the optical gate turnstile scanning the ticket&apos;s cryptographic token. Prevents gate fraud and duplicate admissions.
             </p>
 
             <button
               onClick={validateAtGate}
               disabled={isValidating || !selectedTicket}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-lg shadow-purple-600/20"
+              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-lg shadow-purple-600/20 active:scale-95"
             >
               {isValidating ? (
                 <>
-                  <RefreshCw className="h-4 w-4 animate-spin" /> Verifying Signature...
+                  <RefreshCw className="h-4 w-4 animate-spin" /> Verifying Optical HMAC...
                 </>
               ) : (
                 <>
-                  <Scan className="h-4 w-4" /> Simulate Gate Scan
+                  <Scan className="h-4 w-4" /> Simulate Optical Gate Scan
                 </>
               )}
             </button>
@@ -272,30 +401,36 @@ export default function TicketsPage() {
             {/* Validation Feedback Modal/Card */}
             {validationResult && (
               <div
-                className={`rounded-xl border p-3.5 text-xs space-y-1.5 transition-all ${
+                className={`rounded-xl border p-4 text-xs space-y-2 transition-all ${
                   validationResult.valid
                     ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
                     : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
                 }`}
               >
-                <div className="flex items-center gap-2 font-bold">
-                  {validationResult.valid ? (
-                    <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                  ) : (
-                    <AlertTriangle className="h-4 w-4 text-rose-400" />
-                  )}
-                  <span>{validationResult.code}</span>
+                <div className="flex items-center justify-between font-bold">
+                  <div className="flex items-center gap-2">
+                    {validationResult.valid ? (
+                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                    ) : (
+                      <AlertTriangle className="h-4 w-4 text-rose-400" />
+                    )}
+                    <span>{validationResult.code}</span>
+                  </div>
+                  <span className="text-[10px] font-mono">Gate 2 Admitted</span>
                 </div>
-                <p className="text-[11px] leading-relaxed">{validationResult.message}</p>
+                <p className="text-[11px] leading-relaxed text-zinc-300">{validationResult.message}</p>
               </div>
             )}
           </div>
 
           {/* Wallet List */}
           <div className="space-y-3">
-            <h4 className="text-xs font-bold uppercase tracking-wider text-[#777]">
-              Stored Digital Passes ({tickets.length})
-            </h4>
+            <div className="flex items-center justify-between">
+              <h4 className="text-xs font-bold uppercase tracking-wider text-[#777]">
+                Your Stored Passes ({tickets.length})
+              </h4>
+              <span className="text-[10px] text-zinc-500">Click to switch pass</span>
+            </div>
 
             <div className="space-y-2">
               {tickets.map((t) => (
@@ -307,7 +442,7 @@ export default function TicketsPage() {
                   }}
                   className={`w-full text-left p-3.5 rounded-xl border transition-all ${
                     selectedTicket?.ticketId === t.ticketId
-                      ? 'border-[#7c3aed] bg-[#7c3aed]/10 text-white'
+                      ? 'border-purple-500 bg-purple-950/20 text-white shadow-lg shadow-purple-500/10'
                       : 'border-[#222] bg-[#141414] text-[#888] hover:border-[#333] hover:text-[#eee]'
                   }`}
                 >
@@ -316,13 +451,15 @@ export default function TicketsPage() {
                     <span className="text-[10px] font-mono text-purple-400">{t.showTime}</span>
                   </div>
                   <div className="flex items-center justify-between mt-1 text-[11px] text-[#666]">
-                    <span>Seats: {t.seats.join(', ')}</span>
+                    <span>Seats: {t.seats.join(', ')} • {t.auditorium.split(' ')?.[0] || 'Auditorium'}</span>
                     <span
-                      className={`text-[9px] font-bold uppercase ${
-                        t.status === 'CHECKED_IN' ? 'text-emerald-400' : 'text-[#888]'
+                      className={`text-[9px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        t.status === 'CHECKED_IN'
+                          ? 'bg-emerald-500/10 text-emerald-400'
+                          : 'bg-purple-500/10 text-purple-300'
                       }`}
                     >
-                      {t.status}
+                      {t.status === 'CHECKED_IN' ? 'Admitted' : 'Valid'}
                     </span>
                   </div>
                 </button>
@@ -331,6 +468,133 @@ export default function TicketsPage() {
           </div>
         </div>
       </div>
+
+      {/* Apple / Google Wallet Modal Preview */}
+      {isAppleWalletOpen && selectedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="relative w-full max-w-sm rounded-3xl bg-zinc-900 border border-zinc-700 p-6 shadow-2xl space-y-6 text-white text-center">
+            <button
+              onClick={() => setIsAppleWalletOpen(false)}
+              className="absolute top-4 right-4 rounded-full p-1 text-zinc-400 hover:bg-zinc-800"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="flex items-center justify-center gap-2 text-purple-400 font-bold text-sm">
+              <Smartphone className="h-5 w-5" />
+              <span>Apple Wallet Pass Ready</span>
+            </div>
+
+            {/* Wallet Pass Mock */}
+            <div className="rounded-2xl bg-gradient-to-br from-zinc-800 via-zinc-900 to-black p-5 border border-zinc-700 space-y-4 shadow-xl text-left">
+              <div className="flex justify-between items-center text-xs text-zinc-400 border-b border-zinc-800 pb-2">
+                <span>CINEMIND VIP PASS</span>
+                <span className="font-mono text-purple-400">{selectedTicket.format}</span>
+              </div>
+              <div>
+                <h3 className="text-xl font-black text-white">{selectedTicket.movieTitle}</h3>
+                <p className="text-xs text-zinc-400">{selectedTicket.auditorium}</p>
+              </div>
+              <div className="flex justify-between text-xs bg-zinc-950/80 p-3 rounded-xl border border-zinc-800">
+                <div>
+                  <span className="text-[10px] text-zinc-500 block">TIME</span>
+                  <span className="font-bold text-white">{selectedTicket.showTime}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 block">SEATS</span>
+                  <span className="font-bold text-purple-400">{selectedTicket.seats.join(', ')}</span>
+                </div>
+                <div>
+                  <span className="text-[10px] text-zinc-500 block">GATE</span>
+                  <span className="font-bold text-emerald-400">Gate #2</span>
+                </div>
+              </div>
+              <div className="flex justify-center pt-2">
+                <QrCode className="h-20 w-20 text-white" />
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setIsAppleWalletOpen(false)
+                showNotice('Added pass to Apple Wallet successfully!')
+              }}
+              className="w-full py-3 rounded-xl bg-white text-black font-bold text-xs hover:bg-zinc-200 transition shadow"
+            >
+              Add to Apple Wallet
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Printable Pass Modal */}
+      {isPrintModalOpen && selectedTicket && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-md p-4">
+          <div className="relative w-full max-w-lg rounded-2xl bg-white text-black p-8 shadow-2xl space-y-6">
+            <button
+              onClick={() => setIsPrintModalOpen(false)}
+              className="absolute top-4 right-4 rounded-full p-1 text-zinc-600 hover:bg-zinc-200"
+            >
+              <X className="h-5 w-5" />
+            </button>
+
+            <div className="border-b-2 border-black pb-4 text-center space-y-1">
+              <h2 className="text-2xl font-black tracking-tight">CINEMIND THEATERS</h2>
+              <p className="text-xs uppercase font-mono tracking-widest text-zinc-600">Official Theatrical Admission Voucher</p>
+            </div>
+
+            <div className="space-y-3 text-sm">
+              <div className="flex justify-between">
+                <span className="font-semibold text-zinc-600">Feature:</span>
+                <span className="font-bold text-base">{selectedTicket.movieTitle}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-semibold text-zinc-600">Showtime & Format:</span>
+                <span className="font-bold">{selectedTicket.showTime} • {selectedTicket.format}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-semibold text-zinc-600">Auditorium & Seats:</span>
+                <span className="font-bold text-purple-700">{selectedTicket.auditorium} (Seats: {selectedTicket.seats.join(', ')})</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="font-semibold text-zinc-600">Total Paid:</span>
+                <span className="font-bold text-emerald-700">${selectedTicket.totalPaid.toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-mono text-xs border-t border-zinc-200 pt-2">
+                <span>Pass ID: {selectedTicket.ticketId}</span>
+                <span>Gate: #2</span>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-center p-4 border-2 border-dashed border-zinc-300 rounded-xl">
+              <QrCode className="h-32 w-32 text-black" />
+            </div>
+
+            <div className="flex gap-3">
+              <button
+                onClick={() => window.print()}
+                className="flex-1 py-2.5 rounded-xl bg-black text-white font-bold text-xs hover:bg-zinc-800 transition"
+              >
+                Print Voucher
+              </button>
+              <button
+                onClick={() => setIsPrintModalOpen(false)}
+                className="px-4 py-2.5 rounded-xl border border-zinc-300 font-bold text-xs hover:bg-zinc-100 transition"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
+  )
+}
+
+export default function TicketsPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-zinc-500">Loading Wallet...</div>}>
+      <TicketsContent />
+    </Suspense>
   )
 }

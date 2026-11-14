@@ -157,5 +157,37 @@ public class ConcessionsService {
                 List.of("Sci-Fi", "Drama"),
                 "Nitrogen-infused single-origin Ethiopian cold brew with subtle Madagascar vanilla."
         ));
+
+        // Seed a sample order
+        placeOrder(
+                List.of(
+                        Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 1, "price", 11.00),
+                        Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 1, "price", 7.00)
+                ),
+                "Auditorium 1, Seat B3",
+                18.00
+        );
+    }
+
+    private final Map<String, ConcessionOrder> orders = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public ConcessionOrder placeOrder(List<Map<String, Object>> items, String deliverySeat, double total) {
+        String orderId = "FB-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
+        ConcessionOrder order = ConcessionOrder.builder()
+                .orderId(orderId)
+                .items(items != null ? items : List.of())
+                .totalAmount(total > 0 ? total : 18.50)
+                .deliverySeat(deliverySeat != null && !deliverySeat.isBlank() ? deliverySeat : "Express VIP Pickup Counter")
+                .status("PREPARING")
+                .estimatedMinutes(8)
+                .createdAt(java.time.Instant.now())
+                .build();
+        orders.put(orderId, order);
+        log.info("🍿 Placed concessions order: id={}, total={}, deliverySeat={}", orderId, total, deliverySeat);
+        return order;
+    }
+
+    public List<ConcessionOrder> listOrders() {
+        return new ArrayList<>(orders.values());
     }
 }

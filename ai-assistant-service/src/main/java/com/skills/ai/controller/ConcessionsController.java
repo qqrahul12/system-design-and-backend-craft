@@ -2,22 +2,24 @@ package com.skills.ai.controller;
 
 import com.skills.ai.concessions.ConcessionCombo;
 import com.skills.ai.concessions.ConcessionItem;
+import com.skills.ai.concessions.ConcessionOrder;
 import com.skills.ai.concessions.ConcessionsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
 
 /**
- * REST Controller exposing CineMind Gourmet F&B Menu and AI pairings.
+ * REST Controller exposing CineMind Gourmet F&B Menu, AI pairings, and live ordering.
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/concessions")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class ConcessionsController {
 
     private final ConcessionsService concessionsService;
@@ -32,5 +34,20 @@ public class ConcessionsController {
         String genre = body != null && body.containsKey("genre") ? (String) body.get("genre") : "Sci-Fi";
         int partySize = body != null && body.containsKey("partySize") ? ((Number) body.get("partySize")).intValue() : 2;
         return concessionsService.recommendCombos(genre, partySize);
+    }
+
+    @PostMapping("/order")
+    public ResponseEntity<ConcessionOrder> placeOrder(@RequestBody Map<String, Object> req) {
+        List<Map<String, Object>> items = (List<Map<String, Object>>) req.getOrDefault("items", List.of());
+        String deliverySeat = (String) req.getOrDefault("deliverySeat", "Express VIP Counter");
+        double total = req.containsKey("total") ? ((Number) req.get("total")).doubleValue() : 18.50;
+
+        ConcessionOrder order = concessionsService.placeOrder(items, deliverySeat, total);
+        return ResponseEntity.status(HttpStatus.CREATED).body(order);
+    }
+
+    @GetMapping("/orders")
+    public List<ConcessionOrder> listOrders() {
+        return concessionsService.listOrders();
     }
 }

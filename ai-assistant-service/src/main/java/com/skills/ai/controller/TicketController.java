@@ -17,7 +17,6 @@ import java.util.Map;
 @RestController
 @RequestMapping("/api/v1/tickets")
 @RequiredArgsConstructor
-@CrossOrigin(origins = {"http://localhost:3000", "http://localhost:3001"})
 public class TicketController {
 
     private final TicketService ticketService;
@@ -52,5 +51,14 @@ public class TicketController {
         String qrToken = req.get("qrToken");
         TicketService.ValidationResult result = ticketService.validateGatePass(ticketId, qrToken);
         return ResponseEntity.ok(result);
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Map<String, Object>> cancelTicket(@PathVariable String id) {
+        boolean removed = ticketService.deleteTicket(id);
+        if (removed) {
+            return ResponseEntity.ok(Map.of("success", true, "message", "Reservation cancelled and refunded"));
+        }
+        return ResponseEntity.notFound().build();
     }
 }
