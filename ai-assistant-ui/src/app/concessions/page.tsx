@@ -92,11 +92,53 @@ function ConcessionsContent() {
     status: 'PREPARING' | 'READY' | 'DELIVERED'
     estimatedMinutes: number
   } | null>(null)
+  const [allOrders, setAllOrders] = useState<any[]>([])
 
   useEffect(() => {
     fetchMenu()
     fetchCombos(selectedGenre, partySize)
+    fetchOrders()
+    detectTicketSeat()
   }, [])
+
+  const detectTicketSeat = async () => {
+    if (seatsParam) return
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/tickets`)
+      if (res.ok) {
+        const tickets = await res.json()
+        if (Array.isArray(tickets) && tickets.length > 0) {
+          const latest = tickets[tickets.length - 1]
+          if (latest.seats && latest.seats.length > 0) {
+            setDeliverySeat(`${latest.auditorium || 'Auditorium 1'}, Seat ${latest.seats[0]}`)
+          }
+        }
+      }
+    } catch {}
+  }
+
+  const fetchOrders = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/concessions/orders`)
+      if (res.ok) {
+        const data = await res.json()
+        setAllOrders(data)
+        if (Array.isArray(data) && data.length > 0) {
+          const latest = data[0]
+          setActiveOrder({
+            orderId: latest.orderId,
+            total: latest.totalAmount,
+            seat: latest.deliverySeat,
+            itemsCount: latest.items?.length || 1,
+            status: latest.status === 'PREPARING' ? 'PREPARING' : 'READY',
+            estimatedMinutes: latest.estimatedMinutes || 6,
+          })
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to fetch orders:', e)
+    }
+  }
 
   const fetchMenu = async () => {
     try {

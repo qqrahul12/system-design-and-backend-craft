@@ -27,6 +27,8 @@ import {
   Lock,
   Timer,
   AlertCircle,
+  Calendar,
+  RefreshCw,
 } from 'lucide-react'
 
 const API_BASE =
@@ -136,6 +138,13 @@ const INITIAL_MOVIES: Movie[] = [
 ]
 
 const GENRES = ['All', 'Sci-Fi', 'Epic', 'Drama', 'Action', 'Romance']
+const SCREENING_DATES = [
+  { id: 'today', label: 'Today', date: 'Nov 14', dayName: 'Thursday' },
+  { id: 'tomorrow', label: 'Tomorrow', date: 'Nov 15', dayName: 'Friday' },
+  { id: 'sat', label: 'Sat', date: 'Nov 16', dayName: 'Saturday' },
+  { id: 'sun', label: 'Sun', date: 'Nov 17', dayName: 'Sunday' },
+  { id: 'mon', label: 'Mon', date: 'Nov 18', dayName: 'Monday' },
+]
 const ROWS = ['A', 'B', 'C', 'D', 'E']
 const COLS_LEFT = [1, 2, 3]
 const COLS_RIGHT = [4, 5, 6]
@@ -255,6 +264,68 @@ export default function BookingPage() {
   const [inspectingReviewMovie, setInspectingReviewMovie] = useState<Movie | null>(null)
   const [selectedShowtime, setSelectedShowtime] = useState<string>('7:30 PM')
   const [selectedFormat, setSelectedFormat] = useState<string>('IMAX 70mm')
+  const [selectedDate, setSelectedDate] = useState<string>('today')
+
+  const playSound = (kind: 'click' | 'lock' | 'success') => {
+    if (typeof window === 'undefined') return
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      if (kind === 'click') {
+        osc.frequency.setValueAtTime(400, ctx.currentTime)
+        gain.gain.setValueAtTime(0.04, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.04)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.04)
+      } else if (kind === 'lock') {
+        osc.frequency.setValueAtTime(520, ctx.currentTime)
+        osc.frequency.exponentialRampToValueAtTime(780, ctx.currentTime + 0.08)
+        gain.gain.setValueAtTime(0.05, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.12)
+      } else if (kind === 'success') {
+        osc.frequency.setValueAtTime(440, ctx.currentTime)
+        osc.frequency.setValueAtTime(554.37, ctx.currentTime + 0.08)
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.16)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.35)
+      }
+    } catch {}
+  }
+
+  const handleExtendLock = async () => {
+    if (!selectedMovie || selectedSeats.length === 0 || isLocking) return
+    setIsLocking(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/tickets/lock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          movieTitle: selectedMovie.title,
+          showTime: selectedShowtime,
+          seats: selectedSeats,
+        }),
+      })
+      if (res.ok) {
+        const lockData = await res.json()
+        setActiveLockToken(lockData.lockToken)
+        const expTime = new Date(lockData.expiresAt).getTime()
+        setLockExpiresAt(expTime)
+        setSecondsRemaining(Math.max(0, Math.floor((expTime - Date.now()) / 1000)))
+        playSound('lock')
+      }
+    } finally {
+      setIsLocking(false)
+    }
+  }
 
   // AI Agent Natural Language Movie Search with fast client timeout & fallback
   const handleAiAgentSearch = async (e: React.FormEvent) => {
@@ -575,6 +646,7 @@ REASON: <1 sentence why it matches>`
 
     setSelectedSeats(newSeats)
     setLockWarning(null)
+    playSound('click')
 
     if (!selectedMovie) return
 
@@ -596,6 +668,7 @@ REASON: <1 sentence why it matches>`
           const expTime = new Date(lockData.expiresAt).getTime()
           setLockExpiresAt(expTime)
           setSecondsRemaining(Math.max(0, Math.floor((expTime - Date.now()) / 1000)))
+          playSound('lock')
         }
       } catch {
         // Fallback local lock
@@ -645,6 +718,7 @@ REASON: <1 sentence why it matches>`
 
       if (res.ok) {
         const ticket = await res.json()
+        playSound('success')
         setBookingConfirmation({
           ticketId: ticket.ticketId,
           txnId: 'TXN-' + Math.random().toString(36).substring(2, 9).toUpperCase(),
@@ -1077,54 +1151,89 @@ REASON: <1 sentence why it matches>`
 
         {selectedMovie ? (
           <div className="space-y-6">
-            {/* Theatrical Format & Showtime Bar */}
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
+            {/* Theatrical Date, Format & Showtime Bar */}
+            <div className="space-y-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
+              {/* Screening Date Selector */}
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
-                  <Sparkles className="h-3 w-3" />
-                  Auditorium Experience & Projection Format
+                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                  <Calendar className="h-3 w-3" />
+                  Screening Date
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {[
-                    { label: 'IMAX 70mm', mult: '+15% Dynamic Rate' },
-                    { label: 'Dolby Cinema', mult: '+5% Dual Laser' },
-                    { label: 'Standard 4K Laser', mult: 'Standard' },
-                  ].map((fmt) => (
+                <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                  {SCREENING_DATES.map((d) => (
                     <button
-                      key={fmt.label}
-                      onClick={() => setSelectedFormat(fmt.label)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
-                        selectedFormat === fmt.label
-                          ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-purple-400'
-                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
+                      key={d.id}
+                      onClick={() => {
+                        setSelectedDate(d.id)
+                        playSound('click')
+                      }}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
+                        selectedDate === d.id
+                          ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 ring-1 ring-amber-400 font-bold'
+                          : 'bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80'
                       }`}
                     >
-                      <span>{fmt.label}</span>
-                      <span className="text-[10px] opacity-75 font-mono">({fmt.mult})</span>
+                      <span className="text-[10px] uppercase opacity-75">{d.dayName}</span>
+                      <span className="font-mono">{d.date}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
-              <div className="space-y-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
-                  <Clock className="h-3 w-3" />
-                  Auditorium Showtime
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-zinc-800/80">
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                    <Sparkles className="h-3 w-3" />
+                    Auditorium Experience & Projection Format
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {[
+                      { label: 'IMAX 70mm', mult: '+15% Dynamic Rate' },
+                      { label: 'Dolby Cinema', mult: '+5% Dual Laser' },
+                      { label: 'Standard 4K Laser', mult: 'Standard' },
+                    ].map((fmt) => (
+                      <button
+                        key={fmt.label}
+                        onClick={() => {
+                          setSelectedFormat(fmt.label)
+                          playSound('click')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                          selectedFormat === fmt.label
+                            ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-purple-400'
+                            : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
+                        }`}
+                      >
+                        <span>{fmt.label}</span>
+                        <span className="text-[10px] opacity-75 font-mono">({fmt.mult})</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                  {(selectedMovie.showtimes ? selectedMovie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => (
-                    <button
-                      key={time}
-                      onClick={() => setSelectedShowtime(time)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
-                        selectedShowtime === time
-                          ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-1 ring-emerald-400'
-                          : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
-                      }`}
-                    >
-                      {time}
-                    </button>
-                  ))}
+
+                <div className="space-y-1.5">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                    <Clock className="h-3 w-3" />
+                    Auditorium Showtime
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    {(selectedMovie.showtimes ? selectedMovie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => (
+                      <button
+                        key={time}
+                        onClick={() => {
+                          setSelectedShowtime(time)
+                          playSound('click')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all ${
+                          selectedShowtime === time
+                            ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 ring-1 ring-emerald-400'
+                            : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
+                        }`}
+                      >
+                        {time}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1151,15 +1260,26 @@ REASON: <1 sentence why it matches>`
                   </div>
                 </div>
 
-                <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-lg border border-purple-500/30 shrink-0">
-                  <Timer className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs text-zinc-400 font-medium">Expires In:</span>
-                  <span className="font-mono text-sm font-bold text-emerald-400">
-                    {Math.floor(secondsRemaining / 60)
-                      .toString()
-                      .padStart(2, '0')}
-                    :{(secondsRemaining % 60).toString().padStart(2, '0')}
-                  </span>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-lg border border-purple-500/30">
+                    <Timer className="h-4 w-4 text-emerald-400" />
+                    <span className="text-xs text-zinc-400 font-medium">Expires In:</span>
+                    <span className="font-mono text-sm font-bold text-emerald-400">
+                      {Math.floor(secondsRemaining / 60)
+                        .toString()
+                        .padStart(2, '0')}
+                      :{(secondsRemaining % 60).toString().padStart(2, '0')}
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleExtendLock}
+                    disabled={isLocking}
+                    className="flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-white bg-purple-950/60 hover:bg-purple-900 border border-purple-500/40 px-2.5 py-1.5 rounded-lg transition"
+                    title="Extend your distributed reservation lock"
+                  >
+                    <RefreshCw className={`h-3 w-3 ${isLocking ? 'animate-spin' : ''}`} />
+                    +5 Min
+                  </button>
                 </div>
               </div>
             )}

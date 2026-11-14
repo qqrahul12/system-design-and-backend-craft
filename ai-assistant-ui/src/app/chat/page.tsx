@@ -1,7 +1,8 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import { Send, Bot, User, Sparkles, RotateCcw } from 'lucide-react'
+import Link from 'next/link'
+import { Send, Bot, User, Sparkles, RotateCcw, Ticket, ArrowRight, Film } from 'lucide-react'
 
 interface Message {
   id: string
@@ -109,11 +110,24 @@ function MessageBubble({ message }: { message: Message }) {
 
         {/* Model label for AI messages */}
         {!isUser && (
-          <div className="flex items-center gap-1 px-1">
-            <Sparkles className="h-2.5 w-2.5 text-[#7c3aed]" />
-            <span className="text-[10px] font-medium text-[#777]">
-              {message.model || 'gemini-2.0-flash'}
-            </span>
+          <div className="flex items-center justify-between gap-3 w-full px-1">
+            <div className="flex items-center gap-1">
+              <Sparkles className="h-2.5 w-2.5 text-[#7c3aed]" />
+              <span className="text-[10px] font-medium text-[#777]">
+                {message.model || 'gemini-2.0-flash'}
+              </span>
+            </div>
+
+            {!message.streaming && message.content.length > 25 && (
+              <Link
+                href="/booking"
+                className="flex items-center gap-1 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition"
+              >
+                <Ticket className="h-3 w-3" />
+                <span>Reserve Seats</span>
+                <ArrowRight className="h-2.5 w-2.5" />
+              </Link>
+            )}
           </div>
         )}
       </div>
@@ -360,9 +374,31 @@ export default function ChatPage() {
 
       {/* Input bar */}
       <div
-        className="rounded-b-2xl px-4 py-4"
+        className="rounded-b-2xl px-4 py-4 space-y-2.5"
         style={{ backgroundColor: '#111111', border: '1px solid #1f1f1f', borderTop: 'none' }}
       >
+        {/* Quick Suggestion Chips */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+          {[
+            "🎟️ What's showing in IMAX tonight?",
+            "🍿 Recommend snacks for Dune 2",
+            "⭐ What are critics saying about Oppenheimer?",
+            "🏷️ Valid voucher promo codes",
+          ].map((promptText) => (
+            <button
+              key={promptText}
+              disabled={isLoading}
+              onClick={() => {
+                setInput(promptText)
+                if (inputRef.current) inputRef.current.focus()
+              }}
+              className="text-[11px] font-medium text-zinc-400 bg-zinc-900 border border-zinc-800 hover:border-purple-500/40 hover:text-white rounded-lg px-2.5 py-1 shrink-0 transition active:scale-95"
+            >
+              {promptText}
+            </button>
+          ))}
+        </div>
+
         <div
           className="flex items-center gap-3 rounded-xl px-4 py-2"
           style={{ backgroundColor: '#1a1a1a', border: '1px solid #2a2a2a' }}

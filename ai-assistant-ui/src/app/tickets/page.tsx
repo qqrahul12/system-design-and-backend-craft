@@ -25,6 +25,8 @@ import {
   X,
   CreditCard,
   Plus,
+  Compass,
+  Navigation,
 } from 'lucide-react'
 
 const API_BASE =
@@ -93,6 +95,34 @@ function TicketsContent() {
     }
   }
 
+  const playScannerBeep = (success: boolean) => {
+    if (typeof window === 'undefined') return
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      if (success) {
+        osc.type = 'sine'
+        osc.frequency.setValueAtTime(1100, ctx.currentTime)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.12)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.12)
+      } else {
+        osc.type = 'sawtooth'
+        osc.frequency.setValueAtTime(220, ctx.currentTime)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.25)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.25)
+      }
+    } catch {}
+  }
+
   const validateAtGate = async () => {
     if (!selectedTicket || isValidating) return
     setIsValidating(true)
@@ -100,7 +130,7 @@ function TicketsContent() {
     setValidationResult(null)
 
     // Optical laser animation delay
-    await new Promise((r) => setTimeout(r, 800))
+    await new Promise((r) => setTimeout(r, 700))
 
     try {
       const res = await fetch(`${API_BASE}/api/v1/tickets/validate`, {
@@ -115,6 +145,7 @@ function TicketsContent() {
       if (res.ok) {
         const result = await res.json()
         setValidationResult(result)
+        playScannerBeep(result.valid || result.code === 'ALREADY_CHECKED_IN')
         if (result.ticket) {
           setSelectedTicket(result.ticket)
           setTickets((prev) =>
@@ -123,6 +154,7 @@ function TicketsContent() {
         }
       }
     } catch (err: any) {
+      playScannerBeep(false)
       setValidationResult({
         valid: false,
         code: 'NETWORK_ERROR',
@@ -346,6 +378,36 @@ function TicketsContent() {
                   <Trash2 className="h-4 w-4 text-rose-400" />
                   <span>Cancel Pass</span>
                 </button>
+              </div>
+
+              {/* In-Theater Wayfinding Guide */}
+              <div className="rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-4 space-y-3">
+                <div className="flex items-center justify-between border-b border-zinc-800/80 pb-2">
+                  <div className="flex items-center gap-2 text-xs font-bold text-white uppercase tracking-wider">
+                    <Navigation className="h-3.5 w-3.5 text-indigo-400" />
+                    <span>In-Theater Turnstile & Seat Wayfinder</span>
+                  </div>
+                  <span className="text-[10px] text-zinc-500 font-mono">Turnstile Gate 2B</span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                    <span className="text-[10px] text-zinc-500 block uppercase font-semibold">1. Concourse</span>
+                    <span className="font-bold text-zinc-200">Level 2 North</span>
+                  </div>
+                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                    <span className="text-[10px] text-zinc-500 block uppercase font-semibold">2. Auditorium</span>
+                    <span className="font-bold text-purple-400">{selectedTicket.auditorium.split(' ')[0]} Entry</span>
+                  </div>
+                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                    <span className="text-[10px] text-zinc-500 block uppercase font-semibold">3. Aisle</span>
+                    <span className="font-bold text-zinc-200">Center Walkway</span>
+                  </div>
+                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                    <span className="text-[10px] text-zinc-500 block uppercase font-semibold">4. Your Seats</span>
+                    <span className="font-bold text-emerald-400 font-mono">{selectedTicket.seats.join(', ')}</span>
+                  </div>
+                </div>
               </div>
             </div>
           ) : (
