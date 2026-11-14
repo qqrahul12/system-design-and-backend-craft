@@ -4,8 +4,9 @@ description: >-
   Systematic pre-push code review and verification skill for CineMind. Enforces strict
   SOLID principles (Single Responsibility, Liskov Substitution, Interface Segregation,
   Dependency Inversion), feature-wise design pattern application, zero-secret git hygiene,
-  synchronized master/main branch pushes, backend Java compilation, frontend TypeScript
-  type-safety, and automated 56-test regression suite. Always run this skill before pushing code.
+  full-stack RBAC route and operation security, synchronized master/main branch pushes,
+  backend Java compilation, frontend TypeScript type-safety, and automated 57-test regression suite.
+  Always run this skill before pushing code.
 ---
 
 # CineMind Quality & Architecture Code Review Skill
@@ -74,14 +75,31 @@ Use the appropriate design pattern according to feature requirements:
 
 ---
 
-### Gate 4: Real-World State & Auth Behavior (RBAC)
+### Gate 4: Real-World State & Auth Behavior (Full-Stack RBAC)
 
-- When a session terminates (`/logout`), the session must reset to `Guest Visitor` (`isAuthenticated: false`, role: `ANONYMOUS`).
-- Unauthenticated guests must have `$0.00` wallet balance and cannot perform top-ups or debits (return `401 Unauthorized`).
-- Sidebar and Header navigation tabs must strictly enforce persona visibility:
-  - Anonymous visitors only see `/booking`, `/concessions`, `/chat`.
-  - Patrons see booking, concessions, chat, wallet, split, profile.
-  - Enterprise Operations (`/admin`, `/agent`, `/tracing`, `/analytics`, `/documents`) are strictly reserved for `EXECUTIVE_ADMIN`.
+CineMind enforces two-tier Role-Based Access Control (RBAC) at both the **frontend UI route/tab level** and the **backend REST controller operation level**:
+
+#### 1. Frontend Route & Navigation Tab Gating
+- When a session terminates (`/logout`), the session must reset to `Guest Visitor` (`isAuthenticated: false`, role: `ANONYMOUS`, wallet `$0.00`).
+- Sidebar and Header navigation tabs must strictly enforce persona visibility via `allowedRoles`:
+  - **Anonymous Visitors** (`isAuthenticated: false`): Only allowed `/booking`, `/concessions`, `/chat`. All patron and enterprise tabs are hidden.
+  - **Patrons** (`VIP_PATRON`, `STANDARD_GUEST`): Access consumer tabs (`/booking`, `/concessions`, `/chat`, `/wallet`, `/split`, `/profile`).
+  - **Executive Operations** (`/admin`, `/agent`, `/tracing`, `/analytics`, `/documents`): Strictly reserved for `EXECUTIVE_ADMIN`.
+- Protected pages (e.g. `admin/page.tsx`) must actively check `currentUser.role === 'EXECUTIVE_ADMIN'` and render an access-denied shield banner if a non-admin attempts direct URL access.
+
+#### 2. Backend Controller Operation-Level Enforcement
+Controllers must **never** rely solely on frontend tab hiding. Every protected endpoint must actively enforce authorization via `AuthService`:
+- **`AdminController`** (`/api/v1/admin/**`): Must call `authService.requireRole(EXECUTIVE_ADMIN)` on all endpoints (analytics, briefings, circuit breaker simulation). Returns `403 Forbidden` for non-admins, `401 Unauthorized` for anonymous.
+- **`RagController`** (`/api/v1/rag/ingest`): Must call `authService.requirePermission("RAG_INGESTION")` to prevent unauthorized vector store poisoning.
+- **`TelemetryController`** (`/api/v1/telemetry/**`): Must call `authService.requirePermission("APM_TRACES")` to prevent leaking APM spans and trace latency metrics.
+- **`LlmOpsController`** (`/api/v1/llmops/**`): Must call `authService.requirePermission("LLMOPS_TELEMETRY")` for metrics and cache clearing.
+- **`AgentController`** (`/api/v1/agents/orchestrate`): Must call `authService.requirePermission("AGENT_ORCHESTRATE")` to prevent unauthenticated multi-agent swarm resource consumption.
+- **`TicketController`** (`/api/v1/tickets/validate`): Must call `authService.requirePermission("SCAN_GATE_PASS")` (`AUDITORIUM_USHER` or `EXECUTIVE_ADMIN`).
+- **`WalletController`** (`/api/v1/wallet/topup`, `/pay`): Must call `authService.requireAuthenticated()`, rejecting unauthenticated guests with `401 Unauthorized`.
+
+#### 3. Client Header & Session Propagation
+- `apiClient.ts` must propagate authenticated identity headers (`X-Role` or `Authorization: Bearer <token>`) synchronized from `authService`.
+- Backend `AuthService.getCurrentUser()` must inspect request headers via `RequestContextHolder` to support both stateless API clients and stateful UI sessions.
 
 ---
 
@@ -110,7 +128,7 @@ Or run the three steps individually:
    ```bash
    ./node_bin/node test-suite.mjs
    ```
-   *Requirement*: 100% pass rate (**56/56 tests passing**).
+   *Requirement*: 100% pass rate (**57/57 tests passing**, including automated RBAC Security Gate checks).
 
 ---
 

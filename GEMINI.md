@@ -36,18 +36,28 @@ Before executing any git commit or push to remote repositories, you MUST run the
 - Never stage or commit passwords, tokens, API keys, or connection URIs.
 - All secrets reside strictly in `.env` (ignored by `.gitignore`).
 
-### 3. Dual Branch Synchronization
+### 4. Dual Branch Synchronization
 - Both `master` and `main` branches must remain in exact synchronization.
 - Always push to both branches together:
   `git push origin master && git push origin master:main`
 
-### 4. Real-World Auth & State (RBAC)
-- Signing out (`/logout`) must clear session to `Guest Visitor` (`isAuthenticated: false`), set wallet balance to `$0.00`, and hide enterprise/patron tabs.
-- Anonymous guests can only access `/booking`, `/concessions`, `/chat`.
-- Executive operations (`/admin`, `/agent`, `/tracing`, `/analytics`, `/documents`) are strictly reserved for `EXECUTIVE_ADMIN`.
+### 5. Real-World Auth & Full-Stack RBAC
+- **Frontend Navigation & Page Gating**:
+  - Signing out (`/logout`) must clear session to `Guest Visitor` (`isAuthenticated: false`), set wallet balance to `$0.00`, and hide enterprise/patron tabs.
+  - Anonymous visitors can only access `/booking`, `/concessions`, `/chat`.
+  - Executive operations (`/admin`, `/agent`, `/tracing`, `/analytics`, `/documents`) are strictly reserved for `EXECUTIVE_ADMIN`. `admin/page.tsx` renders access-denied shield for unauthorized roles.
+- **Backend Controller Operation Enforcement**:
+  - Controllers must actively enforce authorization via `AuthService` (`requireRole`, `requirePermission`, `requireAuthenticated`).
+  - `AdminController` (`/api/v1/admin/**`): Strictly guarded with `requireRole(EXECUTIVE_ADMIN)`.
+  - `RagController` (`/api/v1/rag/ingest`): Guarded with `requirePermission("RAG_INGESTION")`.
+  - `TelemetryController` (`/api/v1/telemetry/**`): Guarded with `requirePermission("APM_TRACES")`.
+  - `LlmOpsController` (`/api/v1/llmops/**`): Guarded with `requirePermission("LLMOPS_TELEMETRY")`.
+  - `AgentController` (`/api/v1/agents/orchestrate`): Guarded with `requirePermission("AGENT_ORCHESTRATE")`.
+  - `TicketController` (`/api/v1/tickets/validate`): Guarded with `requirePermission("SCAN_GATE_PASS")`.
+  - `WalletController` (`/topup`, `/pay`): Guarded with `requireAuthenticated()`.
 
-### 5. Automated Quality Gates
+### 6. Automated Quality Gates
 All code changes must pass:
 1. `cd ai-assistant-service && mvn test-compile` (0 errors)
 2. `cd ai-assistant-ui && ./node_modules/.bin/tsc --noEmit` (0 errors)
-3. `./node_bin/node test-suite.mjs` (56/56 tests passing, 100%)
+3. `./node_bin/node test-suite.mjs` (57/57 tests passing, 100%)
