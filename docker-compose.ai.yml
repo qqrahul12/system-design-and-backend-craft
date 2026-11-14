@@ -2,13 +2,13 @@ version: '3.8'
 
 services:
   # ---------------------------------------------------------------------------
-  # AI Assistant Microservice (Spring Boot 3.3 / Java 21)
+  # 1. AI Assistant Backend Microservice (Spring Boot 3.3 / Java 21)
   # ---------------------------------------------------------------------------
   ai-assistant-service:
     build:
       context: .
       dockerfile: ai-assistant-service/Dockerfile
-    container_name: cinemind-ai-backend
+    container_name: cinemind-backend
     ports:
       - "8080:8080"
     environment:
@@ -20,3 +20,29 @@ services:
       interval: 15s
       timeout: 5s
       retries: 3
+    networks:
+      - cinemind-net
+
+  # ---------------------------------------------------------------------------
+  # 2. CineMind Frontend UI (Next.js 14 / TypeScript)
+  # ---------------------------------------------------------------------------
+  ai-assistant-ui:
+    build:
+      context: ./ai-assistant-ui
+      dockerfile: Dockerfile
+      args:
+        - NEXT_PUBLIC_API_URL=http://localhost:8080
+        - NEXT_PUBLIC_WS_URL=ws://localhost:8080
+    container_name: cinemind-frontend
+    ports:
+      - "3000:3000"
+    depends_on:
+      ai-assistant-service:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - cinemind-net
+
+networks:
+  cinemind-net:
+    driver: bridge
