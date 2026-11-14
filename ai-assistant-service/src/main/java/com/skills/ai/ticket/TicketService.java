@@ -1,6 +1,8 @@
 package com.skills.ai.ticket;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -12,12 +14,13 @@ import java.nio.charset.StandardCharsets;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Service generating, persisting, and validating cryptographically-signed digital tickets in H2 DB.
+ * Service generating, persisting, and validating cryptographically-signed digital tickets in PostgreSQL and Redis.
  */
 @Slf4j
 @Service
@@ -25,6 +28,7 @@ public class TicketService {
 
     private static final String HMAC_SECRET = "cinemind-enterprise-gate-secret-key-2026";
     private final JdbcTemplate jdbcTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final Map<String, SeatLock> activeLocks = new ConcurrentHashMap<>();
 
     private final Sinks.Many<Map<String, Object>> seatEventSink =
@@ -36,8 +40,9 @@ public class TicketService {
 
     public record SeatLock(String lockToken, String movieTitle, String showTime, List<String> seats, Instant expiresAt) {}
 
-    public TicketService(JdbcTemplate jdbcTemplate) {
+    public TicketService(JdbcTemplate jdbcTemplate, @Autowired(required = false) StringRedisTemplate redisTemplate) {
         this.jdbcTemplate = jdbcTemplate;
+        this.redisTemplate = redisTemplate;
     }
 
     public SeatLock acquireSeatLock(String movieTitle, String showTime, List<String> seats) {
@@ -50,7 +55,24 @@ public class TicketService {
 
         SeatLock lock = new SeatLock(lockToken, movieTitle, showTime != null ? showTime : "7:30 PM", seats, expiresAt);
         activeLocks.put(lockToken, lock);
-        log.info("🔒 Acquired 10-minute distributed seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
+
+        if (redisTemplate != null) {
+            try {
+                String safeMovie = movieTitle != null ? movieTitle.replaceAll("\\s+", "_") : "ANY";
+                String safeShow = showTime != null ? showTime.replaceAll("\\s+", "_") : "ANY";
+                for (String seat : seats) {
+                    String seatKey = "cinemind:seatlock:" + safeMovie + ":" + safeShow + ":" + seat;
+                    redisTemplate.opsForValue().set(seatKey, lockToken, Duration.ofSeconds(600));
+                }
+                String tokenKey = "cinemind:lock:" + lockToken;
+                redisTemplate.opsForValue().set(tokenKey, safeMovie + "|" + safeShow + "|" + String.join(",", seats), Duration.ofSeconds(600));
+                log.info("🔐 Acquired 10-minute distributed Redis seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to write seat lock to Redis (falling back to memory): {}", e.getMessage());
+            }
+        } else {
+            log.info("🔒 Acquired 10-minute in-memory seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
+        }
 
         seatEventSink.tryEmitNext(Map.of(
                 "event", "LOCK_ACQUIRED",
@@ -65,6 +87,26 @@ public class TicketService {
 
     public boolean releaseSeatLock(String lockToken) {
         SeatLock removed = activeLocks.remove(lockToken);
+        if (redisTemplate != null) {
+            try {
+                String tokenKey = "cinemind:lock:" + lockToken;
+                String val = redisTemplate.opsForValue().get(tokenKey);
+                if (val != null) {
+                    String[] parts = val.split("\\|");
+                    if (parts.length >= 3) {
+                        String m = parts[0];
+                        String s = parts[1];
+                        String[] seatList = parts[2].split(",");
+                        for (String seat : seatList) {
+                            redisTemplate.delete("cinemind:seatlock:" + m + ":" + s + ":" + seat);
+                        }
+                    }
+                    redisTemplate.delete(tokenKey);
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to release seat lock in Redis: {}", e.getMessage());
+            }
+        }
         if (removed != null) {
             log.info("🔓 Released seat lock: token={}, seats={}", lockToken, removed.seats());
             seatEventSink.tryEmitNext(Map.of(
@@ -99,6 +141,22 @@ public class TicketService {
         for (SeatLock lock : activeLocks.values()) {
             if (movieTitle == null || lock.movieTitle().equalsIgnoreCase(movieTitle)) {
                 lockedSeats.addAll(lock.seats());
+            }
+        }
+
+        if (redisTemplate != null) {
+            try {
+                String safeMovie = movieTitle != null ? movieTitle.replaceAll("\\s+", "_") : "*";
+                String safeShow = showTime != null ? showTime.replaceAll("\\s+", "_") : "*";
+                Set<String> keys = redisTemplate.keys("cinemind:seatlock:" + safeMovie + ":" + safeShow + ":*");
+                if (keys != null) {
+                    for (String k : keys) {
+                        String seat = k.substring(k.lastIndexOf(':') + 1);
+                        lockedSeats.add(seat);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis scan for locked seats skipped: {}", e.getMessage());
             }
         }
 

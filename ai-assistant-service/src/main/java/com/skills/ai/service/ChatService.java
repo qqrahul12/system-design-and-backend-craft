@@ -6,10 +6,13 @@ import com.skills.ai.model.ChatRequest;
 import com.skills.ai.model.ChatResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.UUID;
 
@@ -25,6 +28,9 @@ public class ChatService {
     private final PromptGuardService promptGuardService;
     private final com.skills.ai.movie.MovieCatalogService movieCatalogService;
     private final LlmOpsCacheManager cacheManager = LlmOpsCacheManager.getInstance();
+
+    @Autowired(required = false)
+    private StringRedisTemplate redisTemplate;
 
     private static final String GEMINI_MODEL = "gemini-3.8-flash";
     private static final String GROQ_MODEL = "qwen/qwen3.8-27b (Groq LPU)";
@@ -110,6 +116,26 @@ public class ChatService {
             );
         }
 
+        // Check L2 Redis cache if available
+        if (redisTemplate != null) {
+            try {
+                String redisVal = redisTemplate.opsForValue().get("cinemind:llmcache:" + cacheKey);
+                if (redisVal != null) {
+                    log.info("⚡ [REDIS CACHE HIT] Returning distributed cached response for key: {}", cacheKey);
+                    return new ChatResponse(
+                            redisVal,
+                            modelName + " (Redis Cached)",
+                            request.conversationId() != null ? request.conversationId() : UUID.randomUUID().toString(),
+                            System.currentTimeMillis() - start,
+                            true,
+                            Instant.now()
+                    );
+                }
+            } catch (Exception e) {
+                log.debug("Redis cache check skipped: {}", e.getMessage());
+            }
+        }
+
         // 3. Cache Miss — Call LLM Provider with automatic resilience failover
         log.info("Processing blocking chat via provider={} (model={}): conversationId={}",
                 provider, modelName, request.conversationId());
@@ -143,8 +169,15 @@ public class ChatService {
         long elapsed = System.currentTimeMillis() - start;
         log.info("Chat completed via {} in {}ms", modelName, elapsed);
 
-        // 4. Save to Cache (TTL 1 hour)
+        // 4. Save to L1 Cache and L2 Redis Cache (TTL 1 hour)
         cacheManager.put(cacheKey, content, modelName, elapsed, 3600);
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set("cinemind:llmcache:" + cacheKey, content, Duration.ofHours(1));
+            } catch (Exception e) {
+                log.debug("Redis cache put skipped: {}", e.getMessage());
+            }
+        }
 
         String conversationId = request.conversationId() != null
                 ? request.conversationId()

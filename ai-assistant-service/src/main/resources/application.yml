@@ -6,18 +6,24 @@ spring:
     name: ai-assistant-service
 
   datasource:
-    url: jdbc:h2:mem:cinemind;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
-    driver-class-name: org.h2.Driver
-    username: sa
-    password: ""
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://cinemind-low-grain.bulrush.cloud.layerbase.dev:5432/cinemind?sslmode=require}
+    driver-class-name: ${SPRING_DATASOURCE_DRIVER:org.postgresql.Driver}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
   sql:
     init:
       mode: always
       schema-locations: classpath:schema.sql
-  h2:
-    console:
-      enabled: true
-      path: /h2-console
+
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:cinecache-numb-cross.bulrush.cloud.layerbase.dev}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      username: ${SPRING_DATA_REDIS_USERNAME:default}
+      password: ${SPRING_DATA_REDIS_PASSWORD:}
+      database: 0
+      ssl:
+        enabled: true
 
   # Disable unused auto-configurations
   autoconfigure:
