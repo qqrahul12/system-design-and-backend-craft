@@ -91,6 +91,11 @@ const PRESET_GOALS = [
     desc: 'Check MPAA R-rating restrictions and quota limit enforcement for 4 tickets',
     prompt: 'Reserve 4 tickets for Oppenheimer tonight, check R-rated age guidelines, and verify ticket quota limits',
   },
+  {
+    title: '🍅 Critic Intelligence & Swarm Booking',
+    desc: 'Query live Rotten Tomatoes & Metacritic scores for Dune 2 and reserve 2 IMAX seats',
+    prompt: 'Fetch live Rotten Tomatoes critic scores and critical consensus for Dune: Part Two, verify seat availability, and lock 2 premier IMAX seats',
+  },
 ]
 
 export default function MultiAgentOrchestratorPage() {

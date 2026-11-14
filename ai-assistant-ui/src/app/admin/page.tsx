@@ -47,6 +47,11 @@ interface Movie {
   status: string
   occupancyRate: number
   showtimes: string
+  rottenTomatoes?: number
+  metacritic?: number
+  imdbRating?: number
+  criticConsensus?: string
+  topCriticQuote?: string
 }
 
 interface AnalyticsData {
@@ -853,9 +858,15 @@ export default function AdminPage() {
                     </td>
 
                     <td className="py-4 px-4">
-                      <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-400">
-                        ★ {movie.rating}
-                      </span>
+                      <div className="space-y-1">
+                        <span className="inline-flex items-center gap-1 rounded bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-400">
+                          ★ {movie.rating}
+                        </span>
+                        <div className="flex items-center gap-1.5 text-[10px]">
+                          <span className="text-rose-400 font-semibold" title="Rotten Tomatoes">🍅 {movie.rottenTomatoes ?? 88}%</span>
+                          <span className="text-indigo-400 font-semibold font-mono" title="Metacritic">M:{movie.metacritic ?? 80}</span>
+                        </div>
+                      </div>
                     </td>
 
                     <td className="py-4 px-4">

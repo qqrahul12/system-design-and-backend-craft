@@ -108,6 +108,27 @@ async function runTestSuite() {
     }
   });
 
+  await test('MCP tools/call execution (get_movie_reviews)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 3,
+      method: 'tools/call',
+      params: { name: 'get_movie_reviews', arguments: { movieTitle: 'Dune: Part Two' } },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error('Tool returned error');
+    if (!json.result?.content?.[0]?.text?.includes('Rotten Tomatoes') || !json.result?.content?.[0]?.text?.includes('Dune')) {
+      throw new Error('Tool output did not contain critic review dossier');
+    }
+  });
+
   // 4. RAG Pipeline Tests
   console.log('\n--- 4. RAG Ingestion & Vector Retrieval Pipeline ---');
   await test('RAG Document Ingestion & Chunking', async () => {
@@ -377,6 +398,20 @@ async function runTestSuite() {
     if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
     const movies = JSON.parse(res.body);
     if (!Array.isArray(movies) || movies.length < 10) throw new Error(`Expected at least 10 movies, got ${movies.length}`);
+  });
+
+  await test('Fetch Real-Time Movie Reviews & Critic Scores (/api/v1/movies/2/reviews)', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/movies/2/reviews',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const reviews = JSON.parse(res.body);
+    if (!reviews.rottenTomatoes || !reviews.metacritic || !reviews.criticConsensus) {
+      throw new Error('Reviews response missing required critic fields');
+    }
   });
 
   await test('AI Draft Theatrical Movie Assistant (/api/v1/movies/ai-draft)', async () => {

@@ -69,7 +69,16 @@ public class MultiAgentOrchestratorService {
                         "🎥",
                         "Movie Discovery & Scheduling",
                         "Scans CineMind active inventory, formats (IMAX, Dolby, 3D), showtimes, and critical metadata.",
-                        List.of("search_movies"),
+                        List.of("search_movies", "get_movie_reviews"),
+                        "Groq LPU (Sub-second)"
+                ),
+                new AgentPersona(
+                        "critic_review",
+                        "Critic & Sentiment Intelligence",
+                        "🍅",
+                        "Live Critic Scores & Consensus",
+                        "Aggregates real-time Rotten Tomatoes, Metacritic, and IMDb reviews with critical consensus summaries.",
+                        List.of("get_movie_reviews"),
                         "Groq LPU (Sub-second)"
                 ),
                 new AgentPersona(
@@ -172,6 +181,26 @@ public class MultiAgentOrchestratorService {
                 catalogText,
                 catalogResult.isError(),
                 System.currentTimeMillis() - cStart,
+                Instant.now()
+        ));
+
+        // Step 2b: Critic & Sentiment Agent - Real-time Reviews
+        long revStart = System.currentTimeMillis();
+        Map<String, Object> reviewInput = Map.of("movieTitle", searchTarget);
+        McpToolDefinition.CallResult reviewResult = toolRegistry.executeTool("get_movie_reviews", reviewInput);
+        String reviewText = reviewResult.getContent().isEmpty() ? "No critic consensus found" : reviewResult.getContent().get(0).getText();
+        steps.add(new AgentExecutionStep(
+                stepCounter++,
+                "critic_review",
+                "Critic & Sentiment Intelligence",
+                "🍅",
+                "Executing MCP Tool: get_movie_reviews",
+                "Retrieving live Rotten Tomatoes, Metacritic, and critical consensus scores for '" + searchTarget + "'...",
+                "get_movie_reviews",
+                reviewInput,
+                reviewText,
+                reviewResult.isError(),
+                System.currentTimeMillis() - revStart,
                 Instant.now()
         ));
 
