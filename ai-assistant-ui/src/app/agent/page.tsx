@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import Link from 'next/link'
 import {
   Terminal,
   Wrench,
@@ -27,7 +28,9 @@ import {
   Info,
   Radio,
   PauseCircle,
-  Network
+  Network,
+  Ticket,
+  UtensilsCrossed,
 } from 'lucide-react'
 
 const API_BASE =
@@ -110,6 +113,16 @@ export default function MultiAgentOrchestratorPage() {
   const [completedAgentIds, setCompletedAgentIds] = useState<string[]>([])
   const [steps, setSteps] = useState<AgentExecutionStep[]>([])
   const [finalSynthesis, setFinalSynthesis] = useState<string | null>(null)
+  const [swarmFulfillment, setSwarmFulfillment] = useState<{
+    ticketId?: string
+    txnId?: string
+    movieTitle?: string
+    showTime?: string
+    auditorium?: string
+    seats?: string[]
+    totalPaid?: number
+    orderId?: string
+  } | null>(null)
   const [totalDuration, setTotalDuration] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [hitlNotice, setHitlNotice] = useState<string | null>(null)
@@ -166,6 +179,16 @@ export default function MultiAgentOrchestratorPage() {
           } else if (data.type === 'FINAL_SYNTHESIS') {
             setFinalSynthesis(data.synthesis)
             if (data.totalDurationMs) setTotalDuration(data.totalDurationMs)
+            if (data.ticketId) {
+              setSwarmFulfillment({
+                ticketId: data.ticketId,
+                txnId: data.txnId,
+                movieTitle: data.movieTitle,
+                seats: data.seats,
+                totalPaid: data.totalPaid,
+                orderId: data.orderId,
+              })
+            }
             setIsSwarmRunning(false)
             setActiveAgentId(null)
           } else if (data.type === 'INTERRUPTED') {
@@ -349,6 +372,7 @@ export default function MultiAgentOrchestratorPage() {
     setIsSwarmRunning(true)
     setSteps([])
     setFinalSynthesis(null)
+    setSwarmFulfillment(null)
     setTotalDuration(null)
     setCompletedAgentIds([])
     setStatusMessage(null)
@@ -436,6 +460,18 @@ export default function MultiAgentOrchestratorPage() {
       }
 
       setFinalSynthesis(data.finalSynthesis)
+      if (data.ticketId) {
+        setSwarmFulfillment({
+          ticketId: data.ticketId,
+          txnId: data.txnId,
+          movieTitle: data.movieTitle,
+          showTime: data.showTime,
+          auditorium: data.auditorium,
+          seats: data.seats,
+          totalPaid: data.totalPaid,
+          orderId: data.orderId,
+        })
+      }
       setTotalDuration(Date.now() - startClock)
       setActiveAgentId(null)
     } catch (err: any) {
@@ -853,6 +889,57 @@ export default function MultiAgentOrchestratorPage() {
                 <div className="prose prose-invert max-w-none text-xs text-[#ddd] leading-relaxed space-y-3 whitespace-pre-line">
                   {finalSynthesis}
                 </div>
+
+                {/* Live Autonomous Concierge Fulfillment Pass Card */}
+                {swarmFulfillment?.ticketId && (
+                  <div className="rounded-xl border border-emerald-500/40 bg-gradient-to-r from-emerald-950/40 via-zinc-900 to-zinc-950 p-4 space-y-3 animate-fade-in shadow-xl">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Ticket className="h-4 w-4 text-emerald-400" />
+                        <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">
+                          Cryptographic Gate Pass Active
+                        </span>
+                      </div>
+                      <span className="font-mono text-[11px] font-bold text-emerald-300 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/30">
+                        {swarmFulfillment.ticketId}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-zinc-950/60 p-2.5 rounded-lg border border-zinc-800">
+                      <div>
+                        <span className="text-[10px] uppercase text-zinc-500 font-semibold block">Film & Venue</span>
+                        <span className="font-bold text-white text-xs">{swarmFulfillment.movieTitle || 'Inception'}</span>
+                      </div>
+                      <div>
+                        <span className="text-[10px] uppercase text-zinc-500 font-semibold block">Seats & Settled</span>
+                        <span className="font-mono text-purple-300 font-bold text-xs">
+                          {swarmFulfillment.seats?.join(', ') || 'B3, B4'} • ${swarmFulfillment.totalPaid?.toFixed(2) || '24.00'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-2 pt-1">
+                      <Link
+                        href={`/tickets?id=${swarmFulfillment.ticketId}`}
+                        className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-2 text-xs font-bold transition shadow-md shadow-emerald-600/30"
+                      >
+                        <Ticket className="h-3.5 w-3.5" />
+                        Open Pass in Wallet
+                        <ArrowRight className="h-3.5 w-3.5" />
+                      </Link>
+
+                      {swarmFulfillment.orderId && (
+                        <Link
+                          href="/concessions"
+                          className="flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/40 bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 px-3 py-2 text-xs font-bold transition"
+                        >
+                          <UtensilsCrossed className="h-3.5 w-3.5 text-amber-400" />
+                          Order {swarmFulfillment.orderId}
+                        </Link>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 <div className="pt-4 border-t border-[#222] flex items-center justify-between text-[11px] text-[#777]">
                   <span className="flex items-center gap-1 text-emerald-400">

@@ -1,5 +1,6 @@
 package com.skills.ai.agent;
 
+import com.skills.ai.concessions.ConcessionsService;
 import com.skills.ai.mcp.McpToolDefinition;
 import com.skills.ai.mcp.McpToolRegistry;
 import com.skills.ai.session.SessionStoreService;
@@ -7,6 +8,8 @@ import com.skills.ai.session.SessionSummary;
 import com.skills.ai.telemetry.TraceCollectorService;
 import com.skills.ai.telemetry.TraceRecord;
 import com.skills.ai.telemetry.TraceSpan;
+import com.skills.ai.ticket.DigitalTicket;
+import com.skills.ai.ticket.TicketService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -38,18 +41,24 @@ public class MultiAgentOrchestratorService {
     private final ChatClient groqChatClient;
     private final TraceCollectorService traceCollector;
     private final SessionStoreService sessionStore;
+    private final ConcessionsService concessionsService;
+    private final TicketService ticketService;
 
     public MultiAgentOrchestratorService(
             McpToolRegistry toolRegistry,
             @Qualifier("geminiChatClient") ChatClient geminiChatClient,
             @Qualifier("groqChatClient") ChatClient groqChatClient,
             TraceCollectorService traceCollector,
-            SessionStoreService sessionStore) {
+            SessionStoreService sessionStore,
+            ConcessionsService concessionsService,
+            TicketService ticketService) {
         this.toolRegistry = toolRegistry;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
         this.traceCollector = traceCollector;
         this.sessionStore = sessionStore;
+        this.concessionsService = concessionsService;
+        this.ticketService = ticketService;
     }
 
     public List<AgentPersona> getAgentRoster() {
@@ -281,9 +290,41 @@ public class MultiAgentOrchestratorService {
         String promoText = promoResult.getContent().isEmpty() ? "" : promoResult.getContent().get(0).getText();
 
         double finalAmount = promoCode.equals("VIP50") ? 15.0 : (promoCode.equals("STUDENT10") ? 27.0 : 24.0);
-        Map<String, Object> payInput = Map.of("seats", "B3, B4", "amount", finalAmount, "paymentMethod", "card_4242");
+        List<String> assignedSeats = List.of("B3", "B4");
+        Map<String, Object> payInput = Map.of(
+                "movieTitle", searchTarget,
+                "showTime", "7:30 PM",
+                "seats", String.join(", ", assignedSeats),
+                "amount", finalAmount,
+                "paymentMethod", "card_4242"
+        );
         McpToolDefinition.CallResult payResult = toolRegistry.executeTool("process_payment", payInput);
         String payText = payResult.getContent().isEmpty() ? "" : payResult.getContent().get(0).getText();
+
+        // Extract or record real digital ticket
+        String issuedTicketId = null;
+        var matcher = java.util.regex.Pattern.compile("ID=([A-Z0-9-]+)").matcher(payText);
+        if (matcher.find()) {
+            issuedTicketId = matcher.group(1);
+        } else {
+            DigitalTicket dt = ticketService.issueTicket(
+                    searchTarget, "7:30 PM", "IMAX 70mm", "Auditorium 1 (Dolby Atmos)", assignedSeats, finalAmount);
+            issuedTicketId = dt.ticketId();
+        }
+
+        // Place real concession order if requested
+        String createdOrderId = null;
+        if (objective.toLowerCase().contains("popcorn") || objective.toLowerCase().contains("snack") ||
+                objective.toLowerCase().contains("food") || objective.toLowerCase().contains("concession")) {
+            try {
+                var order = concessionsService.placeOrder(
+                        List.of(Map.of("name", "Artisan Truffle Butter Popcorn", "qty", 1, "price", 9.50)),
+                        "Auditorium 1 (Dolby), Seat B3",
+                        9.50
+                );
+                createdOrderId = order.orderId();
+            } catch (Exception ignored) {}
+        }
 
         steps.add(new AgentExecutionStep(
                 stepCounter++,
@@ -404,7 +445,15 @@ public class MultiAgentOrchestratorService {
                 nodes,
                 edges,
                 totalDurationMs,
-                true
+                true,
+                issuedTicketId,
+                "TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
+                searchTarget,
+                "7:30 PM",
+                "Auditorium 1 (Dolby Atmos)",
+                assignedSeats,
+                finalAmount,
+                createdOrderId
         );
     }
 

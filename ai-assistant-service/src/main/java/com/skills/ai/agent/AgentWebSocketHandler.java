@@ -92,11 +92,17 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
                         }
 
                         if (session.isOpen()) {
-                            sendMessage(session, Map.of(
-                                    "type", "FINAL_SYNTHESIS",
-                                    "synthesis", response.finalSynthesis(),
-                                    "totalDurationMs", response.totalDurationMs()
-                            ));
+                            Map<String, Object> finalPayload = new HashMap<>();
+                            finalPayload.put("type", "FINAL_SYNTHESIS");
+                            finalPayload.put("synthesis", response.finalSynthesis());
+                            finalPayload.put("totalDurationMs", response.totalDurationMs());
+                            if (response.ticketId() != null) finalPayload.put("ticketId", response.ticketId());
+                            if (response.txnId() != null) finalPayload.put("txnId", response.txnId());
+                            if (response.movieTitle() != null) finalPayload.put("movieTitle", response.movieTitle());
+                            if (response.seats() != null) finalPayload.put("seats", response.seats());
+                            if (response.totalPaid() != null) finalPayload.put("totalPaid", response.totalPaid());
+                            if (response.orderId() != null) finalPayload.put("orderId", response.orderId());
+                            sendMessage(session, finalPayload);
                         }
                     } catch (Exception e) {
                         log.error("Error during WebSocket swarm execution", e);

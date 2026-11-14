@@ -7,6 +7,8 @@ import com.skills.ai.movie.Movie;
 import com.skills.ai.movie.MovieCatalogService;
 import com.skills.ai.rag.InMemoryVectorStore;
 import com.skills.ai.rag.RagService;
+import com.skills.ai.ticket.DigitalTicket;
+import com.skills.ai.ticket.TicketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -29,6 +31,7 @@ public class McpToolRegistry {
     private final InMemoryVectorStore vectorStore;
     private final ConcessionsService concessionsService;
     private final MovieCatalogService movieCatalogService;
+    private final TicketService ticketService;
 
     private final Map<String, McpToolDefinition> toolDefinitions = new HashMap<>();
     private final Map<String, Function<Map<String, Object>, McpToolDefinition.CallResult>> toolExecutors = new HashMap<>();
@@ -90,10 +93,12 @@ public class McpToolRegistry {
         registerTool(
                 McpToolDefinition.builder()
                         .name("process_payment")
-                        .description("Processes idempotent payment capture for reserved seats via payment-service.")
+                        .description("Processes idempotent payment capture and issues an authenticated cryptographic digital ticket pass.")
                         .inputSchema(Map.of(
                                 "type", "object",
                                 "properties", Map.of(
+                                        "movieTitle", Map.of("type", "string", "description", "Title of movie"),
+                                        "showTime", Map.of("type", "string", "description", "Showtime"),
                                         "seats", Map.of("type", "string", "description", "Comma-separated seats e.g. 'B3,B4'"),
                                         "amount", Map.of("type", "number", "description", "Total amount in USD"),
                                         "paymentMethod", Map.of("type", "string", "description", "Card identifier or token")
@@ -102,12 +107,33 @@ public class McpToolRegistry {
                         ))
                         .build(),
                 args -> {
-                    String seats = (String) args.get("seats");
-                    Number amount = (Number) args.get("amount");
+                    String movie = (String) args.getOrDefault("movieTitle", "Inception");
+                    String showTime = (String) args.getOrDefault("showTime", "7:30 PM");
+                    String seatsStr = (String) args.getOrDefault("seats", "B3, B4");
+                    Number amount = (Number) args.getOrDefault("amount", 24.0);
+                    double total = amount != null ? amount.doubleValue() : 24.0;
+                    List<String> seats = Arrays.stream(seatsStr.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .toList();
+                    if (seats.isEmpty()) seats = List.of("B3", "B4");
+
+                    DigitalTicket ticket = ticketService.issueTicket(
+                            movie,
+                            showTime,
+                            "IMAX 70mm",
+                            "Auditorium 1 (Dolby Atmos)",
+                            seats,
+                            total
+                    );
+
                     String txnId = "TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+                    String sig = ticket.hmacSignature() != null && ticket.hmacSignature().length() >= 10
+                            ? ticket.hmacSignature().substring(0, 10)
+                            : "AUTH-HMAC";
                     return McpToolDefinition.CallResult.text(String.format(
-                            "Payment of $%.2f successful! TxnRef: %s. Seats [%s] confirmed and ticket issued.",
-                            amount != null ? amount.doubleValue() : 30.0, txnId, seats));
+                            "Payment of $%.2f captured successfully! TxnRef: %s. Ticket issued: ID=%s, Seats=[%s], HMAC Signature=%s. Digital pass active in wallet.",
+                            total, txnId, ticket.ticketId(), String.join(", ", seats), sig));
                 }
         );
 
@@ -188,10 +214,15 @@ public class McpToolRegistry {
                 args -> {
                     String movie = (String) args.getOrDefault("movieTitle", "Movie");
                     String seats = (String) args.getOrDefault("seats", "B3");
-                    String lockToken = "LOCK-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+                    List<String> seatList = Arrays.stream(seats.split(","))
+                            .map(String::trim)
+                            .filter(s -> !s.isEmpty())
+                            .toList();
+                    if (seatList.isEmpty()) seatList = List.of("B3");
+                    TicketService.SeatLock lock = ticketService.acquireSeatLock(movie, "7:30 PM", seatList);
                     return McpToolDefinition.CallResult.text(String.format(
-                            "Lock acquired! Seats [%s] for '%s' reserved under Lock Token: %s. Valid for 10 minutes (TTL: 600s).",
-                            seats, movie, lockToken));
+                            "Lock acquired! Seats [%s] for '%s' reserved under Distributed Lock Token: %s. TTL: 600s.",
+                            String.join(", ", seatList), movie, lock.lockToken()));
                 }
         );
 
