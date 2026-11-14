@@ -101,6 +101,130 @@ const PRESET_GOALS = [
   },
 ]
 
+function parseInlineMarkdown(text: string) {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**')) {
+      return (
+        <strong key={i} className="font-bold text-white">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    return part
+  })
+}
+
+function SwarmReportRenderer({ content }: { content: string }) {
+  if (!content) return null
+
+  const lines = content.split('\n').map((l) => l.trim()).filter(Boolean)
+
+  let title = '🎟️ CineMind Multi-Agent Swarm Report'
+  let objective = ''
+  const sections: { title: string; bullets: string[] }[] = []
+  let currentSection: { title: string; bullets: string[] } | null = null
+
+  for (const line of lines) {
+    if (line.startsWith('###') || line.startsWith('##')) {
+      title = line.replace(/^#+\s*/, '')
+    } else if (line.toLowerCase().startsWith('**user objective:**')) {
+      objective = line.replace(/^\*\*user objective:\*\*\s*/i, '')
+    } else if (line.startsWith('**') && (line.includes('1.') || line.includes('2.') || line.includes('3.') || line.includes('4.') || line.includes('5.') || line.endsWith('**') || line.endsWith(':**') || line.endsWith(':'))) {
+      if (currentSection) {
+        sections.push(currentSection)
+      }
+      currentSection = {
+        title: line.replace(/^\*\*/, '').replace(/\*\*$/, '').replace(/:$/, ''),
+        bullets: [],
+      }
+    } else if (line.startsWith('-')) {
+      const bulletText = line.replace(/^-\s*/, '')
+      if (currentSection) {
+        currentSection.bullets.push(bulletText)
+      } else {
+        currentSection = { title: 'Findings', bullets: [bulletText] }
+      }
+    } else {
+      if (currentSection) {
+        currentSection.bullets.push(line)
+      } else if (!objective && line.length > 5 && !line.startsWith('#')) {
+        objective = line
+      }
+    }
+  }
+
+  if (currentSection) {
+    sections.push(currentSection)
+  }
+
+  // Fallback if no structured sections were parsed
+  if (sections.length === 0) {
+    return (
+      <div className="text-xs text-[#ddd] leading-relaxed space-y-2 whitespace-pre-line">
+        {parseInlineMarkdown(content)}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-3.5 animate-in fade-in duration-200">
+      {/* Title & Badge */}
+      <div className="flex items-center justify-between pb-2.5 border-b border-[#242424]">
+        <div className="flex items-center gap-2">
+          <span className="text-sm font-extrabold text-white tracking-tight">
+            {parseInlineMarkdown(title)}
+          </span>
+        </div>
+        <span className="rounded-full bg-emerald-500/15 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-mono font-bold text-emerald-400">
+          AUDITED & SYNTHESIZED
+        </span>
+      </div>
+
+      {/* User Objective Banner */}
+      {objective && (
+        <div className="rounded-xl bg-purple-950/20 border border-purple-500/30 p-3 space-y-1">
+          <span className="text-[10px] font-mono uppercase tracking-wider text-purple-400 font-bold block">
+            Target Objective
+          </span>
+          <p className="text-xs text-purple-200 font-medium leading-relaxed">
+            {parseInlineMarkdown(objective)}
+          </p>
+        </div>
+      )}
+
+      {/* Structured Sections Cards */}
+      <div className="grid grid-cols-1 gap-2.5">
+        {sections.map((sec, idx) => (
+          <div
+            key={idx}
+            className="rounded-xl bg-[#171717] hover:bg-[#1a1a1a] border border-[#262626] p-3 transition space-y-1.5 shadow-sm"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-bold text-white tracking-tight">
+                {parseInlineMarkdown(sec.title)}
+              </span>
+            </div>
+
+            {sec.bullets.length > 0 && (
+              <div className="space-y-1 pl-1">
+                {sec.bullets.map((b, bIdx) => (
+                  <div key={bIdx} className="flex items-start gap-2 text-xs text-zinc-300">
+                    <span className="h-1.5 w-1.5 rounded-full bg-purple-400 mt-1.5 shrink-0" />
+                    <div className="leading-relaxed">
+                      {parseInlineMarkdown(b)}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function MultiAgentOrchestratorPage() {
   // Swarm State
   const [agents, setAgents] = useState<AgentPersona[]>([])
@@ -886,9 +1010,7 @@ export default function MultiAgentOrchestratorPage() {
                   Supervisor Synthesized Outcome
                 </div>
 
-                <div className="prose prose-invert max-w-none text-xs text-[#ddd] leading-relaxed space-y-3 whitespace-pre-line">
-                  {finalSynthesis}
-                </div>
+                <SwarmReportRenderer content={finalSynthesis} />
 
                 {/* Live Autonomous Concierge Fulfillment Pass Card */}
                 {swarmFulfillment?.ticketId && (
