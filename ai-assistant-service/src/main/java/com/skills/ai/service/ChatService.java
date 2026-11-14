@@ -23,24 +23,51 @@ public class ChatService {
     private final ChatClient geminiChatClient;
     private final ChatClient groqChatClient;
     private final PromptGuardService promptGuardService;
+    private final com.skills.ai.movie.MovieCatalogService movieCatalogService;
     private final LlmOpsCacheManager cacheManager = LlmOpsCacheManager.getInstance();
 
     private static final String GEMINI_MODEL = "gemini-3.8-flash";
     private static final String GROQ_MODEL = "qwen/qwen3.8-27b (Groq LPU)";
 
-    private static final String SYSTEM_PROMPT = """
-            You are CineMind AI, a helpful assistant for an AI-powered movie booking platform.
-            You help users discover movies, answer questions about shows, assist with bookings,
-            and provide personalized recommendations. Be concise, friendly, and accurate.
-            When you don't know something, say so rather than making things up.
-            """;
-
     public ChatService(@Qualifier("geminiChatClient") ChatClient geminiChatClient,
                        @Qualifier("groqChatClient") ChatClient groqChatClient,
-                       PromptGuardService promptGuardService) {
+                       PromptGuardService promptGuardService,
+                       com.skills.ai.movie.MovieCatalogService movieCatalogService) {
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
         this.promptGuardService = promptGuardService;
+        this.movieCatalogService = movieCatalogService;
+    }
+
+    private String buildSystemPrompt() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("You are CineMind AI, the official intelligent cinema concierge for CineMind Cinemas.\n");
+        sb.append("You have direct real-time access to our cinema's current theatrical schedule, auditoriums, screen formats, and concessions.\n\n");
+        sb.append("CURRENT LIVE THEATRICAL SCHEDULE & SHOWTIMES:\n");
+        if (movieCatalogService != null) {
+            for (com.skills.ai.movie.Movie m : movieCatalogService.getAllMovies(null, null, null)) {
+                sb.append(String.format("- **%s** (%s | %s | %s) | ★ %.1f | Auditorium: %s | Showtimes: %s | Admission: $%.2f\n  Synopsis: %s\n",
+                        m.getTitle(), m.getGenre(), m.getDuration(), m.getAgeRating() != null ? m.getAgeRating() : "PG-13",
+                        m.getRating() != null ? m.getRating() : 4.8,
+                        m.getAuditorium() != null ? m.getAuditorium() : "Screen 1",
+                        m.getShowtimes() != null ? m.getShowtimes() : "7:30 PM",
+                        m.getPrice() != null ? m.getPrice() : 16.0,
+                        m.getSynopsis() != null ? m.getSynopsis() : ""));
+            }
+        }
+        sb.append("\nPREMIUM AUDITORIUM FORMATS:\n");
+        sb.append("- Screen 1: IMAX 70mm Auditorium (15-perf 70mm film projection & 12-channel acoustic immersion)\n");
+        sb.append("- Screen 2: 70mm Large Format Dual-Laser Auditorium\n");
+        sb.append("- Screen 3: Dolby Cinema with Atmos Spatial Audio & Dolby Vision Dual 4K HDR\n");
+        sb.append("- Screen 4: RealD 3D & 4K Laser\n\n");
+        sb.append("GOURMET CONCESSIONS HIGHLIGHTS:\n");
+        sb.append("- Black Truffle & Rosemary Popcorn ($11.00), Chipotle Queso Loaded Nachos ($10.50), Dark Chocolate Sea Salt Pretzel Bites ($7.50), Nitro Vanilla Sky Cold Brew ($7.00), Wild Blackberry Craft Soda ($6.00)\n\n");
+        sb.append("INSTRUCTIONS:\n");
+        sb.append("1. Answer questions about what's showing in IMAX, showtimes, seats, ticket prices, and film recommendations accurately and enthusiastically based on the schedule above!\n");
+        sb.append("2. When asked about IMAX tonight, explicitly mention our IMAX 70mm Auditorium 1 features (such as Interstellar or Oppenheimer) and their exact showtimes.\n");
+        sb.append("3. Format responses cleanly with bold film titles, formatted lists (1., 2. or -), and short readable paragraphs.\n");
+        sb.append("4. Guide patrons to '[Reserve Seats](/booking)' to pick their VIP Recliner or Prime seats in real time.");
+        return sb.toString();
     }
 
     /**
@@ -87,10 +114,11 @@ public class ChatService {
         log.info("Processing blocking chat via provider={} (model={}): conversationId={}",
                 provider, modelName, request.conversationId());
 
+        String systemPrompt = buildSystemPrompt();
         String content;
         try {
             content = activeClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPrompt)
                     .user(request.message())
                     .call()
                     .content();
@@ -100,7 +128,7 @@ public class ChatService {
             ChatClient backupClient = useGroq ? geminiChatClient : groqChatClient;
             try {
                 content = backupClient.prompt()
-                        .system(SYSTEM_PROMPT)
+                        .system(systemPrompt)
                         .user(request.message())
                         .call()
                         .content();
@@ -152,9 +180,10 @@ public class ChatService {
         String backupModel = useGroq ? GEMINI_MODEL : GROQ_MODEL;
 
         log.info("Starting streaming chat via primary provider={} ({})", provider, primaryModel);
+        String systemPrompt = buildSystemPrompt();
         try {
             return primaryClient.prompt()
-                    .system(SYSTEM_PROMPT)
+                    .system(systemPrompt)
                     .user(message)
                     .stream()
                     .content()
@@ -163,7 +192,7 @@ public class ChatService {
                                 primaryModel, ex.getMessage(), backupModel);
                         try {
                             return backupClient.prompt()
-                                    .system(SYSTEM_PROMPT)
+                                    .system(systemPrompt)
                                     .user(message)
                                     .stream()
                                     .content()
@@ -188,7 +217,7 @@ public class ChatService {
             log.warn("⚠️ Primary LLM client threw synchronous exception: {}. Falling back to backup.", primarySyncEx.getMessage());
             try {
                 return backupClient.prompt()
-                        .system(SYSTEM_PROMPT)
+                        .system(systemPrompt)
                         .user(message)
                         .stream()
                         .content()

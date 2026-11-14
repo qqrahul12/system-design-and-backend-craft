@@ -53,6 +53,158 @@ function TypingIndicator() {
   )
 }
 
+// ── Inline & Block Markdown Formatting ───────────────────────────────────────
+function parseInlineMarkdown(text: string) {
+  const regex = /(\*\*[^*]+\*\*|\*[^*]+\*|`[^`]+`|\[[^\]]+\]\([^)]+\))/g
+  const parts = text.split(regex)
+
+  return parts.map((part, i) => {
+    if (part.startsWith('**') && part.endsWith('**') && part.length >= 4) {
+      return (
+        <strong key={i} className="font-bold text-white tracking-wide">
+          {part.slice(2, -2)}
+        </strong>
+      )
+    }
+    if (part.startsWith('*') && part.endsWith('*') && part.length >= 2) {
+      return (
+        <em key={i} className="italic text-purple-200">
+          {part.slice(1, -1)}
+        </em>
+      )
+    }
+    if (part.startsWith('`') && part.endsWith('`') && part.length >= 2) {
+      return (
+        <code
+          key={i}
+          className="rounded bg-black/60 border border-purple-500/30 px-1.5 py-0.5 font-mono text-xs text-amber-300"
+        >
+          {part.slice(1, -1)}
+        </code>
+      )
+    }
+    const linkMatch = part.match(/^\[([^\]]+)\]\(([^)]+)\)$/)
+    if (linkMatch) {
+      const href = linkMatch[2]
+      const isInternal = href.startsWith('/')
+      if (isInternal) {
+        return (
+          <Link
+            key={i}
+            href={href}
+            className="inline-flex items-center gap-1 font-bold text-purple-400 hover:text-purple-300 underline underline-offset-2 transition"
+          >
+            <span>{linkMatch[1]}</span>
+            <ArrowRight className="h-2.5 w-2.5" />
+          </Link>
+        )
+      }
+      return (
+        <a
+          key={i}
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex items-center gap-1 font-bold text-purple-400 hover:text-purple-300 underline underline-offset-2 transition"
+        >
+          <span>{linkMatch[1]}</span>
+        </a>
+      )
+    }
+    return part
+  })
+}
+
+function FormattedChatContent({
+  content,
+  streaming,
+}: {
+  content: string
+  streaming?: boolean
+}) {
+  if (!content) return null
+
+  const rawLines = content.split('\n')
+
+  return (
+    <div className="space-y-1.5 leading-relaxed text-sm">
+      {rawLines.map((line, idx) => {
+        const trimmed = line.trim()
+        if (!trimmed) {
+          return <div key={idx} className="h-1.5" />
+        }
+
+        // Heading: ### or ## or #
+        if (line.startsWith('### ') || line.startsWith('## ') || line.startsWith('# ')) {
+          const headingText = line.replace(/^#+\s*/, '')
+          return (
+            <h4
+              key={idx}
+              className="text-sm font-bold text-white mt-2 mb-1 flex items-center gap-1.5"
+            >
+              <Sparkles className="h-3 w-3 text-purple-400" />
+              <span>{parseInlineMarkdown(headingText)}</span>
+            </h4>
+          )
+        }
+
+        // Numbered list: 1. 2. etc.
+        const numMatch = line.match(/^(\d+)\.\s+(.*)$/)
+        if (numMatch) {
+          return (
+            <div key={idx} className="flex items-start gap-2.5 my-1 pl-0.5">
+              <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-purple-500/20 text-[10px] font-bold text-purple-300 border border-purple-500/40 mt-0.5">
+                {numMatch[1]}
+              </span>
+              <div className="flex-1 text-sm text-zinc-200">
+                {parseInlineMarkdown(numMatch[2])}
+              </div>
+            </div>
+          )
+        }
+
+        // Bullet point: - or * or •
+        const bulletMatch = line.match(/^[-*•]\s+(.*)$/)
+        if (bulletMatch) {
+          return (
+            <div key={idx} className="flex items-start gap-2.5 my-0.5 pl-1">
+              <span className="mt-2 h-1.5 w-1.5 rounded-full bg-purple-400 shrink-0 shadow-[0_0_8px_#c084fc]" />
+              <div className="flex-1 text-sm text-zinc-200">
+                {parseInlineMarkdown(bulletMatch[1])}
+              </div>
+            </div>
+          )
+        }
+
+        // Blockquote: >
+        if (line.startsWith('> ')) {
+          return (
+            <blockquote
+              key={idx}
+              className="my-1.5 border-l-2 border-purple-500/60 pl-3 py-1 text-xs text-purple-200/90 italic bg-purple-950/20 rounded-r-md"
+            >
+              {parseInlineMarkdown(line.slice(2))}
+            </blockquote>
+          )
+        }
+
+        // Standard paragraph line
+        return (
+          <p key={idx} className="text-zinc-200">
+            {parseInlineMarkdown(line)}
+          </p>
+        )
+      })}
+      {streaming && (
+        <span
+          className="ml-0.5 inline-block h-4 w-1 align-middle rounded-full animate-pulse"
+          style={{ backgroundColor: '#a78bfa' }}
+        />
+      )}
+    </div>
+  )
+}
+
 // ── Single message bubble ─────────────────────────────────────────────────────
 function MessageBubble({ message }: { message: Message }) {
   const isUser = message.role === 'user'
@@ -74,7 +226,7 @@ function MessageBubble({ message }: { message: Message }) {
       </div>
 
       {/* Bubble */}
-      <div className={`flex max-w-[70%] flex-col gap-1 ${isUser ? 'items-end' : 'items-start'}`}>
+      <div className={`flex max-w-[76%] flex-col gap-1.5 ${isUser ? 'items-end' : 'items-start'}`}>
         <div
           className="rounded-2xl px-4 py-3 text-sm leading-relaxed"
           style={
@@ -86,44 +238,42 @@ function MessageBubble({ message }: { message: Message }) {
                 }
               : {
                   backgroundColor: message.streaming
-                    ? '#1a1030'
-                    : '#1a1a1a',
+                    ? '#160d2b'
+                    : '#181818',
                   border: message.streaming
-                    ? '1px solid #7c3aed44'
-                    : '1px solid #2a2a2a',
+                    ? '1px solid #7c3aed55'
+                    : '1px solid #282828',
                   color: '#e5e5e5',
                   borderBottomLeftRadius: '4px',
                   boxShadow: message.streaming
-                    ? '0 0 20px #7c3aed18'
+                    ? '0 0 20px #7c3aed20'
                     : undefined,
                 }
           }
         >
-          <span className="whitespace-pre-wrap">{message.content}</span>
-          {message.streaming && (
-            <span
-              className="ml-0.5 inline-block h-4 w-0.5 align-middle animate-blink"
-              style={{ backgroundColor: '#a78bfa' }}
-            />
+          {isUser ? (
+            <p className="whitespace-pre-wrap">{message.content}</p>
+          ) : (
+            <FormattedChatContent content={message.content} streaming={message.streaming} />
           )}
         </div>
 
-        {/* Model label for AI messages */}
+        {/* Model label & CTA for AI messages */}
         {!isUser && (
           <div className="flex items-center justify-between gap-3 w-full px-1">
-            <div className="flex items-center gap-1">
-              <Sparkles className="h-2.5 w-2.5 text-[#7c3aed]" />
-              <span className="text-[10px] font-medium text-[#777]">
+            <div className="flex items-center gap-1.5">
+              <Sparkles className="h-3 w-3 text-purple-400" />
+              <span className="text-[10px] font-mono text-zinc-400">
                 {message.model || 'gemini-2.0-flash'}
               </span>
             </div>
 
-            {!message.streaming && message.content.length > 25 && (
+            {!message.streaming && message.content.length > 20 && (
               <Link
                 href="/booking"
-                className="flex items-center gap-1 text-[11px] font-semibold text-purple-400 hover:text-purple-300 transition"
+                className="inline-flex items-center gap-1 text-[11px] font-semibold text-purple-300 hover:text-white bg-purple-950/60 hover:bg-purple-900/60 border border-purple-700/50 rounded-lg px-2.5 py-1 transition"
               >
-                <Ticket className="h-3 w-3" />
+                <Ticket className="h-3 w-3 text-amber-400" />
                 <span>Reserve Seats</span>
                 <ArrowRight className="h-2.5 w-2.5" />
               </Link>
@@ -211,8 +361,8 @@ export default function ChatPage() {
 
         for (const line of lines) {
           if (!line.startsWith('data:')) continue
-          const raw = line.slice(5).trim()
-          if (raw === '[DONE]') {
+          const trimmed = line.trim()
+          if (trimmed === 'data: [DONE]' || trimmed === 'data:[DONE]' || line.slice(5).trim() === '[DONE]') {
             // Mark streaming finished
             setMessages((prev) =>
               prev.map((m) =>
@@ -221,15 +371,21 @@ export default function ChatPage() {
             )
             return
           }
-          if (!raw) continue
 
-          let token = raw
-          // Try to parse as JSON {"text": "..."} or plain text
-          try {
-            const parsed = JSON.parse(raw) as { text?: string; content?: string }
-            token = parsed.text ?? parsed.content ?? raw
-          } catch {
-            // raw is plain text — use as-is
+          // Do NOT call .trim() because leading space is the space between words!
+          let token = line.slice(5)
+          if (token === '' && line.startsWith('data:')) {
+            token = '\n'
+          }
+
+          // Try to parse as JSON if token is a structured object
+          if (token.startsWith('{') && token.endsWith('}')) {
+            try {
+              const parsed = JSON.parse(token) as { text?: string; content?: string }
+              token = parsed.text ?? parsed.content ?? token
+            } catch {
+              // keep as raw token
+            }
           }
 
           setMessages((prev) =>
