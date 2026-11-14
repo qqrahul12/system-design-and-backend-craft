@@ -109,6 +109,7 @@ function ConcessionsContent() {
     estimatedMinutes: number
   } | null>(null)
   const [allOrders, setAllOrders] = useState<any[]>([])
+  const [isOrderHistoryOpen, setIsOrderHistoryOpen] = useState(false)
   const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
   const [isAdvancingStatus, setIsAdvancingStatus] = useState<boolean>(false)
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
@@ -696,6 +697,14 @@ function ConcessionsContent() {
                   <Truck className="h-3 w-3" /> Mark Delivered
                 </button>
               )}
+
+              <button
+                type="button"
+                onClick={() => setIsOrderHistoryOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-zinc-800 border border-zinc-700 px-3 py-1 text-xs font-semibold text-zinc-300 hover:text-white transition"
+              >
+                <Clock className="h-3.5 w-3.5 text-amber-400" /> Order History ({allOrders.length})
+              </button>
 
               <Link
                 href="/tickets"
@@ -1405,6 +1414,121 @@ function ConcessionsContent() {
                 className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition"
               >
                 Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* F&B Order History Modal */}
+      {isOrderHistoryOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in">
+          <div className="relative w-full max-w-2xl rounded-3xl border border-amber-500/30 bg-[#121214] p-7 shadow-2xl space-y-6 max-h-[85vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-amber-600/20 text-amber-400 border border-amber-500/30">
+                  <UtensilsCrossed className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Gourmet F&B Order History</h3>
+                  <p className="text-[11px] text-zinc-400">
+                    All culinary orders placed to your auditorium seat or VIP express pickup
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsOrderHistoryOpen(false)}
+                className="text-zinc-400 hover:text-white p-1 rounded-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="space-y-3">
+              {allOrders.length === 0 ? (
+                <div className="text-center p-8 text-xs text-zinc-500">
+                  No previous F&B orders recorded yet.
+                </div>
+              ) : (
+                allOrders.map((ord: any) => {
+                  const statusColors =
+                    ord.status === 'DELIVERED'
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                      : ord.status === 'PLATED' || ord.status === 'READY'
+                      ? 'bg-sky-500/10 text-sky-400 border-sky-500/30'
+                      : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+
+                  return (
+                    <div
+                      key={ord.orderId}
+                      className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 space-y-3 hover:border-zinc-700 transition"
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="font-bold font-mono text-white text-xs">{ord.orderId}</span>
+                          <span className="text-zinc-600">•</span>
+                          <span className="text-xs text-zinc-300 font-semibold">{ord.deliverySeat}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className={`rounded-full px-2 py-0.5 text-[9px] font-bold uppercase tracking-wider border ${statusColors}`}>
+                            {ord.status}
+                          </span>
+                          <span className="font-mono font-bold text-white text-xs">
+                            ${(ord.totalAmount || 0).toFixed(2)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Items */}
+                      <div className="text-xs text-zinc-400">
+                        {ord.items && ord.items.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {ord.items.map((it: any, idx: number) => (
+                              <span
+                                key={idx}
+                                className="rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-1 text-[11px] text-zinc-300"
+                              >
+                                {it.name || 'Gourmet Selection'} x{it.quantity || 1}
+                              </span>
+                            ))}
+                          </div>
+                        ) : (
+                          <span>Gourmet Cinema Selection</span>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-zinc-500 pt-1 border-t border-zinc-800/60">
+                        <span>{ord.createdAt ? new Date(ord.createdAt).toLocaleString() : 'Recent'}</span>
+                        <button
+                          onClick={() => {
+                            setActiveOrder({
+                              orderId: ord.orderId,
+                              total: ord.totalAmount,
+                              seat: ord.deliverySeat,
+                              itemsCount: ord.items?.length || 1,
+                              status: ord.status === 'PREPARING' ? 'PREPARING' : 'READY',
+                              estimatedMinutes: ord.estimatedMinutes || 5,
+                            })
+                            setIsOrderHistoryOpen(false)
+                            showNotice(`Tracking order ${ord.orderId} in live monitor`)
+                          }}
+                          className="text-amber-400 hover:text-amber-300 font-semibold"
+                        >
+                          Track in Live Monitor →
+                        </button>
+                      </div>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+
+            <div className="flex justify-end pt-3 border-t border-zinc-800">
+              <button
+                onClick={() => setIsOrderHistoryOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition"
+              >
+                Close
               </button>
             </div>
           </div>

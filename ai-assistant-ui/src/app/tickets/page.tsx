@@ -75,6 +75,8 @@ function TicketsContent() {
   const [activeWayfinderStep, setActiveWayfinderStep] = useState<number>(1)
   const [newPassBanner, setNewPassBanner] = useState<string | null>(null)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [ticketSearch, setTicketSearch] = useState<string>('')
+  const [passFilter, setPassFilter] = useState<'ALL' | 'ACTIVE' | 'ADMITTED'>('ALL')
 
   useEffect(() => {
     fetchTickets()
@@ -664,13 +666,54 @@ function TicketsContent() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <h4 className="text-xs font-bold uppercase tracking-wider text-[#777]">
-                Your Stored Passes ({tickets.length})
+                Pass Wallet History ({tickets.length})
               </h4>
-              <span className="text-[10px] text-zinc-500">Click to switch pass</span>
+              <span className="text-[10px] text-zinc-500">Click pass to inspect</span>
+            </div>
+
+            {/* Filter Pills and Search */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-1.5 bg-[#141414] p-1 rounded-xl border border-[#222]">
+                {(['ALL', 'ACTIVE', 'ADMITTED'] as const).map((filter) => (
+                  <button
+                    key={filter}
+                    onClick={() => setPassFilter(filter)}
+                    className={`flex-1 py-1 rounded-lg text-[10px] font-bold uppercase transition ${
+                      passFilter === filter
+                        ? 'bg-purple-600 text-white shadow-sm'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    {filter}
+                  </button>
+                ))}
+              </div>
+
+              <input
+                type="text"
+                value={ticketSearch}
+                onChange={(e) => setTicketSearch(e.target.value)}
+                placeholder="Search passes by title or ID..."
+                className="w-full rounded-xl border border-[#222] bg-[#141414] px-3 py-1.5 text-xs text-white placeholder-zinc-500 focus:border-purple-500 focus:outline-none"
+              />
             </div>
 
             <div className="space-y-2">
-              {tickets.map((t) => (
+              {tickets
+                .filter((t) => {
+                  if (passFilter === 'ACTIVE' && t.status === 'CHECKED_IN') return false
+                  if (passFilter === 'ADMITTED' && t.status !== 'CHECKED_IN') return false
+                  if (ticketSearch.trim()) {
+                    const q = ticketSearch.toLowerCase()
+                    return (
+                      t.movieTitle.toLowerCase().includes(q) ||
+                      t.ticketId.toLowerCase().includes(q) ||
+                      t.seats.join(' ').toLowerCase().includes(q)
+                    )
+                  }
+                  return true
+                })
+                .map((t) => (
                 <button
                   key={t.ticketId}
                   onClick={() => {
