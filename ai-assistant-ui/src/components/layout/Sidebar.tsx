@@ -15,6 +15,13 @@ import {
   Ticket,
   Activity,
   Sliders,
+  Wallet,
+  CreditCard,
+  UserCheck,
+  ChevronDown,
+  CheckCircle2,
+  X,
+  Plus,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -111,8 +118,42 @@ export default function Sidebar() {
   const pathname = usePathname()
   const [ticketCount, setTicketCount] = useState<number>(0)
   const [hasActiveOrder, setHasActiveOrder] = useState<boolean>(false)
+  const [currentUser, setCurrentUser] = useState<any>({
+    fullName: 'Alex Vance',
+    role: 'VIP_PATRON',
+    roleDisplayName: 'Gold Lounge VIP Member',
+    membershipTier: 'CineMind Founder Gold',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
+  })
+  const [walletBalance, setWalletBalance] = useState<number>(175.00)
+  const [personas, setPersonas] = useState<any[]>([])
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
+  const [isTopUpLoading, setIsTopUpLoading] = useState<boolean>(false)
+  const [notice, setNotice] = useState<string | null>(null)
+
+  const fetchAuthAndWallet = async () => {
+    try {
+      const authRes = await fetch(`${API_BASE}/api/v1/auth/me`)
+      if (authRes.ok) {
+        const u = await authRes.json()
+        setCurrentUser(u)
+      }
+      const personasRes = await fetch(`${API_BASE}/api/v1/auth/personas`)
+      if (personasRes.ok) {
+        const p = await personasRes.json()
+        setPersonas(p)
+      }
+      const walletRes = await fetch(`${API_BASE}/api/v1/wallet`)
+      if (walletRes.ok) {
+        const w = await walletRes.json()
+        setWalletBalance(w.balance)
+      }
+    } catch {}
+  }
 
   useEffect(() => {
+    fetchAuthAndWallet()
+
     // 1. Initial fetch
     fetch(`${API_BASE}/api/v1/tickets`)
       .then((r) => (r.ok ? r.json() : []))
@@ -142,6 +183,10 @@ export default function Sidebar() {
           const payload = JSON.parse(e.data)
           if (payload?.event === 'TICKET_ISSUED') {
             setTicketCount((prev) => prev + 1)
+            fetch(`${API_BASE}/api/v1/wallet`)
+              .then((r) => (r.ok ? r.json() : null))
+              .then((w) => { if (w) setWalletBalance(w.balance) })
+              .catch(() => {})
           }
         } catch {}
       })
@@ -164,6 +209,41 @@ export default function Sidebar() {
       if (orderSource) orderSource.close()
     }
   }, [])
+
+  const handleRoleSwitch = async (roleName: string) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/auth/switch-role`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ role: roleName }),
+      })
+      if (res.ok) {
+        const u = await res.json()
+        setCurrentUser(u)
+        setNotice(`Switched persona to ${u.fullName} (${u.roleDisplayName})`)
+        setTimeout(() => setNotice(null), 3000)
+      }
+    } catch {}
+  }
+
+  const handleWalletTopUp = async (amount: number) => {
+    setIsTopUpLoading(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/wallet/topup`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount, paymentMethod: 'Stripe Instant ACH / Card' }),
+      })
+      if (res.ok) {
+        const txn = await res.json()
+        setWalletBalance(txn.balanceAfter)
+        setNotice(`Added $${amount.toFixed(2)} to CineMind Wallet!`)
+        setTimeout(() => setNotice(null), 3000)
+      }
+    } catch {} finally {
+      setIsTopUpLoading(false)
+    }
+  }
 
   return (
     <aside
@@ -198,6 +278,43 @@ export default function Sidebar() {
           </div>
           <p className="text-[10px] text-[#555] font-mono mt-0.5">Enterprise Platform</p>
         </div>
+      </div>
+
+      {/* User Persona & Fintech Wallet Pod */}
+      <div className="px-3 py-2.5 border-b border-[#1f1f1f]">
+        <button
+          onClick={() => setIsModalOpen(true)}
+          className="w-full flex items-center justify-between p-2 rounded-xl bg-[#161616] hover:bg-[#202020] border border-[#242424] transition text-left group shadow-sm"
+          title="Click to switch active role or top up wallet"
+        >
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="relative">
+              <img
+                src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
+                alt="Avatar"
+                className="w-8 h-8 rounded-full object-cover border border-purple-500/40"
+              />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-black" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-xs font-bold text-white truncate">
+                {currentUser?.fullName}
+              </p>
+              <p className="text-[10px] text-purple-400 font-mono truncate">
+                {currentUser?.role === 'VIP_PATRON' ? '👑 VIP Member'
+                  : currentUser?.role === 'EXECUTIVE_ADMIN' ? '🛡️ Director'
+                  : currentUser?.role === 'AUDITORIUM_USHER' ? '🎟️ Floor Usher'
+                  : '👤 Guest'}
+              </p>
+            </div>
+          </div>
+          <div className="text-right shrink-0">
+            <span className="text-[11px] font-mono font-bold text-emerald-400 block">
+              ${walletBalance.toFixed(2)}
+            </span>
+            <span className="text-[9px] text-[#666] font-mono">Wallet</span>
+          </div>
+        </button>
       </div>
 
       {/* Navigation */}
@@ -294,6 +411,135 @@ export default function Sidebar() {
           </div>
         </div>
       </div>
+      {/* Toast Notification */}
+      {notice && (
+        <div className="fixed bottom-6 left-6 z-50 flex items-center gap-2 rounded-xl border border-purple-500/40 bg-purple-950/95 px-4 py-2.5 text-xs text-purple-200 shadow-2xl backdrop-blur-md animate-slide-up">
+          <CheckCircle2 className="h-4 w-4 text-purple-400" />
+          <span>{notice}</span>
+        </div>
+      )}
+
+      {/* Role Switcher & Fintech Wallet Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-zinc-800 bg-[#141414] p-6 space-y-6 shadow-2xl">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between border-b border-zinc-800 pb-4">
+              <div className="flex items-center gap-2.5">
+                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
+                  <UserCheck className="h-5 w-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Auth Role & Fintech Wallet Hub</h3>
+                  <p className="text-xs text-zinc-400">Switch personas or reload stored-value CineCash</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Fintech Digital Wallet Card */}
+            <div className="rounded-xl border border-emerald-500/30 bg-gradient-to-r from-emerald-950/30 via-zinc-900 to-zinc-900 p-4 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Wallet className="h-4 w-4 text-emerald-400" />
+                  <span className="text-xs font-bold text-white">CineMind Fintech Digital Wallet</span>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Active Stored Value
+                </span>
+              </div>
+
+              <div className="flex items-baseline justify-between pt-1">
+                <div>
+                  <span className="text-2xl font-mono font-extrabold text-white">
+                    ${walletBalance.toFixed(2)}
+                  </span>
+                  <span className="text-xs text-zinc-400 ml-1.5 font-mono">USD</span>
+                </div>
+                <span className="text-xs text-zinc-400 font-mono">1-Click Booking Ready</span>
+              </div>
+
+              {/* Instant Top-Up Options */}
+              <div className="flex items-center gap-2 pt-1 border-t border-zinc-800/80">
+                <span className="text-[11px] text-zinc-400 font-semibold">Quick Reload:</span>
+                {[25, 50, 100].map((amt) => (
+                  <button
+                    key={amt}
+                    onClick={() => handleWalletTopUp(amt)}
+                    disabled={isTopUpLoading}
+                    className="flex-1 py-1 px-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-bold transition disabled:opacity-50"
+                  >
+                    +${amt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Role Persona Switcher */}
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-zinc-400">
+                  Select Active Authenticated Persona
+                </h4>
+                <span className="text-[10px] text-purple-400 font-mono">Instant RBAC Switch</span>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {[
+                  {
+                    role: 'VIP_PATRON',
+                    title: 'Alex Vance',
+                    badge: '👑 VIP Patron',
+                    desc: '20% F&B discount, heated recliners, stored wallet',
+                  },
+                  {
+                    role: 'EXECUTIVE_ADMIN',
+                    title: 'Marcus Kane',
+                    badge: '🛡️ Circuit Director',
+                    desc: 'Executive Studio, Dynamic Yield surge, APM traces',
+                  },
+                  {
+                    role: 'AUDITORIUM_USHER',
+                    title: 'Sarah Jenkins',
+                    badge: '🎟️ Floor Usher',
+                    desc: 'Optical Turnstile Gate scan, Wayfinder, expediter',
+                  },
+                  {
+                    role: 'STANDARD_GUEST',
+                    title: 'Jordan Lee',
+                    badge: '👤 Guest Patron',
+                    desc: 'Standard catalog, mobile ticketing, concessions',
+                  },
+                ].map((p) => {
+                  const isCurrent = currentUser?.role === p.role
+                  return (
+                    <button
+                      key={p.role}
+                      onClick={() => handleRoleSwitch(p.role)}
+                      className={`p-3 rounded-xl border text-left transition ${
+                        isCurrent
+                          ? 'bg-purple-950/40 border-purple-500 shadow-md shadow-purple-500/10'
+                          : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-white">{p.title}</span>
+                        <span className="text-[10px] font-mono text-purple-300 font-semibold">{p.badge}</span>
+                      </div>
+                      <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">{p.desc}</p>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </aside>
   )
 }

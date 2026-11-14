@@ -1,5 +1,6 @@
 package com.skills.ai.mcp;
 
+import com.skills.ai.auth.AuthService;
 import com.skills.ai.concessions.ConcessionCombo;
 import com.skills.ai.concessions.ConcessionItem;
 import com.skills.ai.concessions.ConcessionsService;
@@ -9,6 +10,7 @@ import com.skills.ai.rag.InMemoryVectorStore;
 import com.skills.ai.rag.RagService;
 import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
+import com.skills.ai.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -32,6 +34,8 @@ public class McpToolRegistry {
     private final ConcessionsService concessionsService;
     private final MovieCatalogService movieCatalogService;
     private final TicketService ticketService;
+    private final WalletService walletService;
+    private final AuthService authService;
 
     private final Map<String, McpToolDefinition> toolDefinitions = new HashMap<>();
     private final Map<String, Function<Map<String, Object>, McpToolDefinition.CallResult>> toolExecutors = new HashMap<>();
@@ -367,6 +371,51 @@ public class McpToolRegistry {
                                 i + 1, m.getTitle(), m.getYear(), m.getGenre(), m.getRating(), m.getRottenTomatoes(), m.getAuditorium(), m.getShowtimes(), m.getDirector()));
                     }
                     return McpToolDefinition.CallResult.text(sb.toString().trim());
+                }
+        );
+
+        // 12. Check Fintech Wallet Balance Tool
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("check_wallet_balance")
+                        .description("Checks the user's CineMind Fintech Digital Wallet balance, currency, and recent ledger transactions.")
+                        .inputSchema(Map.of("type", "object"))
+                        .build(),
+                args -> {
+                    WalletService.WalletSummary summary = walletService.getWalletSummary();
+                    AuthService.UserProfile user = authService.getCurrentUser();
+                    return McpToolDefinition.CallResult.text(String.format(
+                            "Fintech Wallet [%s] for %s (%s):\n• Available Balance: $%.2f %s\n• Lifetime Transactions: %d\n• Status: Active & Authenticated",
+                            summary.walletId(), user.fullName(), user.roleDisplayName(), summary.balance(), summary.currency(), summary.transactionCount()));
+                }
+        );
+
+        // 13. Pay with Fintech Wallet Tool
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("pay_with_wallet")
+                        .description("Debits stored-value balance from the user's CineMind Fintech Wallet for seamless 1-click checkout.")
+                        .inputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "amount", Map.of("type", "number", "description", "Amount in USD to debit"),
+                                        "description", Map.of("type", "string", "description", "Payment purpose e.g. '2 Tickets for Interstellar'")
+                                ),
+                                "required", List.of("amount")
+                        ))
+                        .build(),
+                args -> {
+                    Number amtNum = (Number) args.getOrDefault("amount", 20.0);
+                    double amount = amtNum.doubleValue();
+                    String desc = (String) args.getOrDefault("description", "CineMind Wallet 1-Click Payment");
+                    try {
+                        WalletService.WalletTransaction txn = walletService.debit(amount, "TICKET_PAYMENT", desc);
+                        return McpToolDefinition.CallResult.text(String.format(
+                                "✅ Wallet payment of $%.2f captured! TxnRef: %s. Remaining Wallet Balance: $%.2f. Description: %s",
+                                txn.amount(), txn.txnId(), txn.balanceAfter(), txn.description()));
+                    } catch (Exception e) {
+                        return McpToolDefinition.CallResult.error("Wallet Payment Failed: " + e.getMessage());
+                    }
                 }
         );
     }

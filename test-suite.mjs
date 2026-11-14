@@ -150,6 +150,48 @@ async function runTestSuite() {
     }
   });
 
+  await test('MCP tools/call execution (check_wallet_balance)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 5,
+      method: 'tools/call',
+      params: { name: 'check_wallet_balance', arguments: {} },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error('Tool returned error');
+    if (!json.result?.content?.[0]?.text?.includes('Fintech Wallet') || !json.result?.content?.[0]?.text?.includes('Available Balance')) {
+      throw new Error('Tool output did not contain wallet balance summary');
+    }
+  });
+
+  await test('MCP tools/call execution (pay_with_wallet)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 6,
+      method: 'tools/call',
+      params: { name: 'pay_with_wallet', arguments: { amount: 15.0, description: 'Test Concessions Combo' } },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error('Tool returned error');
+    if (!json.result?.content?.[0]?.text?.includes('Wallet payment of $15.00 captured')) {
+      throw new Error('Tool output did not confirm wallet debit capture');
+    }
+  });
+
   // 4. RAG Pipeline Tests
   console.log('\n--- 4. RAG Ingestion & Vector Retrieval Pipeline ---');
   await test('RAG Document Ingestion & Chunking', async () => {
@@ -589,6 +631,81 @@ async function runTestSuite() {
     if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
     const data = JSON.parse(res.body);
     if (!data.briefing || data.briefing.length < 50) throw new Error('Executive briefing too short or missing');
+  });
+
+  // 11. Fintech Wallet & Auth RBAC Services
+  console.log('\n--- 11. Fintech Digital Wallet & Auth RBAC Personas ---');
+  await test('Fintech Digital Wallet Lifecycle (/api/v1/wallet, topup, pay)', async () => {
+    // 1. Get summary
+    const sumRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/wallet',
+      method: 'GET',
+    });
+    if (sumRes.statusCode !== 200) throw new Error(`Expected 200, got ${sumRes.statusCode}`);
+    const summary = JSON.parse(sumRes.body);
+    if (summary.balance === undefined || !summary.walletId) throw new Error('Missing wallet summary fields');
+
+    // 2. Top up
+    const topupPayload = JSON.stringify({ amount: 25.0 });
+    const topupRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/wallet/topup',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(topupPayload) },
+    }, topupPayload);
+    if (topupRes.statusCode !== 200) throw new Error(`Top-up failed: ${topupRes.statusCode}`);
+
+    // 3. 1-Click Pay
+    const payPayload = JSON.stringify({ amount: 10.0, description: 'Automated Test Debit' });
+    const payRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/wallet/pay',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payPayload) },
+    }, payPayload);
+    if (payRes.statusCode !== 200) throw new Error(`Wallet pay failed: ${payRes.statusCode}`);
+    const payTxn = JSON.parse(payRes.body);
+    if (!payTxn.txnId || payTxn.amount !== 10.0) throw new Error('Pay txn fields invalid');
+  });
+
+  await test('Auth Service & Multi-Role Switching (/api/v1/auth/me, /api/v1/auth/switch-role)', async () => {
+    // 1. Me
+    const meRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/me',
+      method: 'GET',
+    });
+    if (meRes.statusCode !== 200) throw new Error(`Auth me failed: ${meRes.statusCode}`);
+    const me = JSON.parse(meRes.body);
+    if (!me.userId || !me.role) throw new Error('Missing user profile fields');
+
+    // 2. Switch role to EXECUTIVE_ADMIN
+    const switchPayload = JSON.stringify({ role: 'EXECUTIVE_ADMIN' });
+    const switchRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/switch-role',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(switchPayload) },
+    }, switchPayload);
+    if (switchRes.statusCode !== 200) throw new Error(`Switch role failed: ${switchRes.statusCode}`);
+    const switched = JSON.parse(switchRes.body);
+    if (switched.role !== 'EXECUTIVE_ADMIN') throw new Error(`Expected EXECUTIVE_ADMIN, got ${switched.role}`);
+
+    // 3. Switch back to VIP_PATRON
+    const revertPayload = JSON.stringify({ role: 'VIP_PATRON' });
+    await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/switch-role',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(revertPayload) },
+    }, revertPayload);
   });
 
   console.log('\n====================================================');

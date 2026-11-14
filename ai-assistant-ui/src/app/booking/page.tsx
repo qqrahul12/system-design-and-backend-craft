@@ -267,6 +267,17 @@ export default function BookingPage() {
   const [selectedDate, setSelectedDate] = useState<string>('today')
   const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
   const [liveBroadcastToast, setLiveBroadcastToast] = useState<string | null>(null)
+  const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
+  const [walletBalance, setWalletBalance] = useState<number>(175.0)
+
+  useEffect(() => {
+    fetch(`${API_BASE}/api/v1/wallet`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((w) => {
+        if (w) setWalletBalance(w.balance)
+      })
+      .catch(() => {})
+  }, [])
 
   const playSound = (kind: 'click' | 'lock' | 'success') => {
     if (typeof window === 'undefined') return
@@ -749,6 +760,24 @@ REASON: <1 sentence why it matches>`
     const auditorium = `${selectedFormat} (${selectedMovie.auditorium || 'Screen 1'})`
 
     try {
+      if (paymentMethod === 'WALLET') {
+        try {
+          const wRes = await fetch(`${API_BASE}/api/v1/wallet/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: totalAmount,
+              type: 'TICKET_PAYMENT',
+              description: `${selectedMovie.title} (${selectedSeats.join(', ')})`,
+            }),
+          })
+          if (wRes.ok) {
+            const wTxn = await wRes.json()
+            setWalletBalance(wTxn.balanceAfter)
+          }
+        } catch {}
+      }
+
       const res = await fetch(`${API_BASE}/api/v1/tickets/issue`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -1556,22 +1585,52 @@ REASON: <1 sentence why it matches>`
                 </div>
               </div>
 
-              {/* Itemized price breakdown */}
-              {priceBreakdown.items.length > 0 && (
-                <div className="text-right space-y-0.5">
-                  <div className="text-[11px] text-zinc-400">
-                    {priceBreakdown.items
-                      .map((it) => `${it.count}x ${it.tier === 'VIP_RECLINER' ? 'VIP' : it.tier === 'PRIME_RESERVED' ? 'Prime' : it.tier === 'ACCESSIBLE' ? 'Bay' : 'Std'} ($${it.unitPrice.toFixed(2)})`)
-                      .join(' + ')}
-                  </div>
-                  <div className="flex items-baseline justify-end gap-2">
-                    <span className="text-xs text-zinc-400">Total:</span>
-                    <span className="text-xl font-mono font-black text-emerald-400">
-                      ${priceBreakdown.total.toFixed(2)}
-                    </span>
-                  </div>
+              {/* Itemized price breakdown & Payment Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+                {/* Fintech Wallet or Card Toggle */}
+                <div className="flex rounded-xl bg-zinc-900 p-1 border border-zinc-800 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('WALLET')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
+                      paymentMethod === 'WALLET'
+                        ? 'bg-emerald-600 text-white shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <Wallet className="h-3.5 w-3.5" />
+                    <span>CineCash (${walletBalance.toFixed(2)})</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPaymentMethod('CARD')}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg font-semibold transition ${
+                      paymentMethod === 'CARD'
+                        ? 'bg-purple-600 text-white shadow'
+                        : 'text-zinc-400 hover:text-white'
+                    }`}
+                  >
+                    <CreditCard className="h-3.5 w-3.5" />
+                    <span>Card</span>
+                  </button>
                 </div>
-              )}
+
+                {priceBreakdown.items.length > 0 && (
+                  <div className="text-right space-y-0.5">
+                    <div className="text-[11px] text-zinc-400">
+                      {priceBreakdown.items
+                        .map((it) => `${it.count}x ${it.tier === 'VIP_RECLINER' ? 'VIP' : it.tier === 'PRIME_RESERVED' ? 'Prime' : it.tier === 'ACCESSIBLE' ? 'Bay' : 'Std'} ($${it.unitPrice.toFixed(2)})`)
+                        .join(' + ')}
+                    </div>
+                    <div className="flex items-baseline justify-end gap-2">
+                      <span className="text-xs text-zinc-400">Total:</span>
+                      <span className="text-xl font-mono font-black text-emerald-400">
+                        ${priceBreakdown.total.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                )}
+              </div>
 
               <button
                 onClick={handleCompleteBooking}
@@ -1585,8 +1644,12 @@ REASON: <1 sentence why it matches>`
                   </>
                 ) : (
                   <>
-                    <CreditCard className="h-4 w-4" />
-                    Confirm & Pay (${priceBreakdown.total.toFixed(2)})
+                    {paymentMethod === 'WALLET' ? (
+                      <Wallet className="h-4 w-4" />
+                    ) : (
+                      <CreditCard className="h-4 w-4" />
+                    )}
+                    Pay with {paymentMethod === 'WALLET' ? 'Wallet' : 'Card'} (${priceBreakdown.total.toFixed(2)})
                   </>
                 )}
               </button>
