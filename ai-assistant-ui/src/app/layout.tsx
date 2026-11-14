@@ -11,9 +11,20 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'CineMind — AI Movie Platform',
+  title: {
+    default: '🎬 CineMind — Autonomous AI Cinema Operating System',
+    template: '%s | CineMind AI',
+  },
   description:
-    'AI-powered movie booking, document intelligence, and analytics platform built with Gemini 2.0.',
+    'AI-powered cinema intelligence, high-concurrency seat reservation, and autonomous multi-agent operations.',
+  icons: {
+    icon: [
+      { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/favicon.svg', type: 'image/svg+xml' },
+    ],
+    shortcut: '/icon.svg',
+    apple: '/icon.svg',
+  },
 }
 
 export default function RootLayout({

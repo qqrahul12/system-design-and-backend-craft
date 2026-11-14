@@ -118,6 +118,18 @@ export default function Header() {
   const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    // Sync browser tab title dynamically with active route icon & name
+    if (typeof document !== 'undefined') {
+      const matched = Object.entries(PAGE_TITLES).find(([key]) =>
+        pathname === key || pathname.startsWith(key + '/')
+      )?.[1]
+      if (matched) {
+        document.title = `${matched.icon} ${matched.title} | CineMind AI`
+      } else {
+        document.title = '🎬 CineMind — Autonomous AI Cinema Operating System'
+      }
+    }
+
     fetch(`${API_BASE}/api/v1/auth/me`)
       .then((r) => (r.ok ? r.json() : null))
       .then((u) => { if (u) setCurrentUser(u) })
