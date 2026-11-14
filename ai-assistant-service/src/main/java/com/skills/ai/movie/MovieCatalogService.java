@@ -354,6 +354,69 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/uYPbbksJxIg", "Anthony Russo, Joe Russo", "Robert Downey Jr., Pedro Pascal, Vanessa Kirby, Florence Pugh", "PG-13");
         ingested.add(movieStore.get(205L));
 
+        addSeededMovie(206L, "The Batman Part II", "Action", 4.9, year, "2h 55m", 19.50, true,
+                "Batman descends deeper into Gotham's criminal underworld as the Court of Owls strikes from the city's ancient shadows.",
+                List.of("C3", "C4", "D3"), "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop",
+                "70mm Large Format Screen 2", "NOW_SHOWING", 96, "12:15 PM, 4:15 PM, 8:15 PM",
+                95, 86, 8.8, "Matt Reeves expands his dark detective opus into a hypnotic, masterfully composed crime thriller with unmatched atmospheric depth.",
+                "\"A triumph of film-noir suspense, brooding visual brilliance, and sheer cinematic authority.\" — Variety", 560,
+                "https://www.youtube.com/embed/mqqft2x_Aa4", "Matt Reeves", "Robert Pattinson, Zoë Kravitz, Colin Farrell, Andy Serkis", "PG-13");
+        ingested.add(movieStore.get(206L));
+
+        addSeededMovie(207L, "Spider-Man: Beyond the Spider-Verse", "Action", 4.9, year, "2h 30m", 18.50, true,
+                "Miles Morales must reckon with the multiverse's darkest anomalies to save both his father and every alternate universe from unraveling.",
+                List.of("A3", "A4", "B3"), "https://images.unsplash.com/photo-1604200213928-ba3cf4fc8436?w=600&auto=format&fit=crop",
+                "Dolby Cinema Auditorium 3", "NOW_SHOWING", 98, "11:00 AM, 2:30 PM, 6:00 PM, 9:30 PM",
+                97, 89, 9.0, "An astounding culmination that pushes the frontiers of animation and storytelling into an emotional and visual peak.",
+                "\"A mind-bending, heart-swelling masterpiece that cements the trilogy as a high-water mark in cinema history.\" — Empire", 610,
+                "https://www.youtube.com/embed/cqGjhVJWtEg", "Joaquim Dos Santos, Kemp Powers", "Shameik Moore, Hailee Steinfeld, Oscar Isaac, Daniel Kaluuya", "PG");
+        ingested.add(movieStore.get(207L));
+
+        addSeededMovie(208L, "The Mandalorian & Grogu", "Sci-Fi", 4.8, year, "2h 12m", 18.00, true,
+                "Din Djarin and his young apprentice Grogu are enlisted by the New Republic for a perilous secret mission across the galaxy's Outer Rim.",
+                List.of("B3", "B4"), "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop",
+                "IMAX 70mm Auditorium 1", "NOW_SHOWING", 94, "1:00 PM, 4:30 PM, 8:00 PM",
+                92, 81, 8.4, "Jon Favreau brings the Western-inflected space opera magic of Star Wars back to the big screen with exhilarating flair.",
+                "\"Star Wars returns to the cinema with pure joy, stunning kinetic battles, and boundless heart.\" — Total Film", 430,
+                "https://www.youtube.com/embed/aOC8E8R_n54", "Jon Favreau", "Pedro Pascal, Sigourney Weaver, Katee Sackhoff", "PG-13");
+        ingested.add(movieStore.get(208L));
+
+        addSeededMovie(209L, "Shrek 5", "Animation", 4.7, year, "1h 48m", 16.50, true,
+                "Shrek, Donkey, and Fiona embark on a wild adventure to save Far Far Away when an enchanted spell threatens to rewrite fairytale history.",
+                List.of("C2", "C3", "C4"), "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop",
+                "Dolby Cinema Auditorium 3", "NOW_SHOWING", 93, "11:30 AM, 2:15 PM, 5:00 PM, 7:45 PM",
+                90, 78, 8.1, "Irreverent, endlessly warm, and nostalgic, Shrek 5 proves the beloved ogre still has tremendous comedic bite and heart.",
+                "\"Laugh-out-loud funny and delightfully irreverent — a triumphant family cinema reunion.\" — Deadline", 370,
+                "https://www.youtube.com/embed/q098q1c6c0E", "Walt Dohrn", "Mike Myers, Eddie Murphy, Cameron Diaz, Antonio Banderas", "PG");
+        ingested.add(movieStore.get(209L));
+
+        addSeededMovie(210L, "Toy Story 5", "Animation", 4.8, year, "1h 52m", 17.00, true,
+                "Woody, Buzz, and the toys confront their greatest modern competitor yet: children captivated by tablet screens and digital electronics.",
+                List.of("D2", "D3", "D4"), "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop",
+                "ScreenX 270° Panoramic", "NOW_SHOWING", 91, "12:00 PM, 2:45 PM, 5:30 PM, 8:15 PM",
+                93, 83, 8.3, "Pixar tackles the digital age with philosophical poignancy, clever slapstick comedy, and timeless emotional warmth.",
+                "\"A wondrous, tear-inducing triumph that proves Pixar's greatest characters still have vital stories to tell.\" — IGN", 410,
+                "https://www.youtube.com/embed/wmiIUN-7qhE", "Andrew Stanton", "Tom Hanks, Tim Allen, Joan Cusack, Tony Hale", "G");
+        ingested.add(movieStore.get(210L));
+
+        addSeededMovie(211L, "A Quiet Place: Part III", "Horror", 4.7, year, "1h 55m", 17.50, true,
+                "The Abbott family makes a final desperate stand at an offshore sanctuary to transmit the sonic frequency that can liberate humanity.",
+                List.of("B2", "B3"), "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=600&auto=format&fit=crop",
+                "Indie Studio 4", "NOW_SHOWING", 89, "4:00 PM, 7:00 PM, 9:45 PM",
+                91, 80, 8.2, "Pulse-pounding acoustic terror crafted with unmatched sound engineering and ferocious maternal intensity from Emily Blunt.",
+                "\"A masterclass in visceral dread and razor-wire tension.\" — The Hollywood Reporter", 340,
+                "https://www.youtube.com/embed/BpdDN9d9Jio", "John Krasinski", "Emily Blunt, Millicent Simmonds, Noah Jupe, Cillian Murphy", "PG-13");
+        ingested.add(movieStore.get(211L));
+
+        addSeededMovie(212L, "Weapons", "Horror", 4.8, year, "2h 10m", 18.00, true,
+                "A community unravels in terror when high school students begin disappearing under eerie, interconnected supernatural circumstances.",
+                List.of("C3", "C4"), "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&auto=format&fit=crop",
+                "Dolby Cinema Auditorium 3", "NOW_SHOWING", 95, "5:00 PM, 8:15 PM, 11:15 PM",
+                94, 85, 8.5, "Zach Cregger follows up Barbarian with an unpredictable, nerve-shredding, multi-perspective horror masterpiece.",
+                "\"Genuinely terrifying, ingeniously plotted, and breathtakingly audacious.\" — Bloody Disgusting", 380,
+                "https://www.youtube.com/embed/kA244xewjcI", "Zach Cregger", "Josh Brolin, Julia Garner, Alden Ehrenreich, Benedict Wong", "R");
+        ingested.add(movieStore.get(212L));
+
         log.info("🍿 Ingested {} real-time {} theatrical blockbuster movies into CineMind database", ingested.size(), year);
         return ingested;
     }
