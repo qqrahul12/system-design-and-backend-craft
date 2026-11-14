@@ -24,8 +24,7 @@ public class AdminController {
     }
 
     @PostMapping("/briefing")
-    public ResponseEntity<Map<String, String>> generateBriefing() {
-        String briefing = adminAnalyticsService.generateExecutiveBriefing();
-        return ResponseEntity.ok(Map.of("briefing", briefing));
+    public ResponseEntity<Map<String, Object>> generateBriefing() {
+        return ResponseEntity.ok(adminAnalyticsService.getStructuredExecutiveBriefing());
     }
 }

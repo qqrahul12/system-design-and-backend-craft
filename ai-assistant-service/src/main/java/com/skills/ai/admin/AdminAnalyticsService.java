@@ -164,4 +164,50 @@ public class AdminAnalyticsService {
                 "- **Capacity Constraint & Dynamic Yield**: Peak Friday/Saturday shows are pacing at 96% sellout 48h out. Activating the AI dynamic surge (+ $2.50) is projected to capture **+$3,450** without dampening demand.\n\n" +
                 "> **Strategic Takeaway**: Reallocate Screen 3 late-night slots to *Inception* encores and restock organic popcorn kernel reserves before Friday matinee.";
     }
+
+    /**
+     * Returns structured briefing intelligence for high-fidelity executive card rendering.
+     */
+    public Map<String, Object> getStructuredExecutiveBriefing() {
+        String raw = generateExecutiveBriefing();
+        
+        List<Map<String, String>> highlights = List.of(
+                Map.of(
+                        "category", "Topline Revenue",
+                        "headline", "Strong Topline Acceleration",
+                        "metric", "$148,250 (+14.8%)",
+                        "badge", "88.4% Occupancy",
+                        "detail", "Propelled by continuous sold-out IMAX 70mm screenings of Dune: Part Two and Interstellar revival sessions.",
+                        "trend", "positive"
+                ),
+                Map.of(
+                        "category", "Sensory F&B Studio",
+                        "headline", "Gourmet F&B Outperformance",
+                        "metric", "$56,400 Gross",
+                        "badge", "38.1% Attach Rate",
+                        "detail", "Driven by Black Truffle Popcorn and craft beverage sensory combos, setting an all-time circuit record.",
+                        "trend", "positive"
+                ),
+                Map.of(
+                        "category", "Yield Optimization",
+                        "headline", "Capacity Constraint & Dynamic Yield",
+                        "metric", "96% Sellout Pacing",
+                        "badge", "+$3,450 Projected Lift",
+                        "detail", "Peak Friday/Saturday shows are pacing at 96% sellout 48h out. Activating the AI dynamic surge (+ $2.50) captures yield without dampening demand.",
+                        "trend", "action"
+                )
+        );
+
+        String strategicTakeaway = "Reallocate Screen 3 late-night slots to Inception encores and restock organic popcorn kernel reserves before Friday matinee.";
+
+        return Map.of(
+                "title", "CineMind Executive Operations Briefing",
+                "briefing", raw,
+                "highlights", highlights,
+                "strategicTakeaway", strategicTakeaway,
+                "generatedAt", new Date().toString(),
+                "circuitStatus", "OPTIMAL",
+                "aiConfidence", "98.4%"
+        );
+    }
 }

@@ -25,64 +25,79 @@ interface NavItem {
   badge?: string
 }
 
-const navItems: NavItem[] = [
+interface NavSection {
+  title: string
+  items: NavItem[]
+}
+
+const navSections: NavSection[] = [
   {
-    href: '/booking',
-    label: 'Smart Movie Booking',
-    icon: Film,
-    description: 'Seat layout & reservations',
+    title: 'Guest Experience',
+    items: [
+      {
+        href: '/booking',
+        label: 'Smart Movie Booking',
+        icon: Film,
+        description: 'Live seating & reservations',
+      },
+      {
+        href: '/concessions',
+        label: 'Gourmet F&B Studio',
+        icon: UtensilsCrossed,
+        description: 'AI pairings & seat delivery',
+        badge: 'NEW',
+      },
+      {
+        href: '/tickets',
+        label: 'Pass Wallet & Gate Scan',
+        icon: Ticket,
+        description: 'HMAC QR gate check-in',
+        badge: 'NEW',
+      },
+      {
+        href: '/chat',
+        label: 'AI Cinema Concierge',
+        icon: MessageSquare,
+        description: 'Dual Gemini 3.8 + Groq LPU',
+      },
+    ],
   },
   {
-    href: '/concessions',
-    label: 'Gourmet F&B Studio',
-    icon: UtensilsCrossed,
-    description: 'AI combos & genre pairings',
-    badge: 'NEW',
-  },
-  {
-    href: '/tickets',
-    label: 'Pass Wallet & Gate Scan',
-    icon: Ticket,
-    description: 'HMAC QR gate check-in',
-    badge: 'NEW',
-  },
-  {
-    href: '/documents',
-    label: 'Document Intelligence',
-    icon: FileText,
-    description: 'Vector embeddings & RAG',
-  },
-  {
-    href: '/agent',
-    label: 'Multi-Agent Swarm',
-    icon: Bot,
-    description: '7-Agent DAG & WebSocket',
-  },
-  {
-    href: '/tracing',
-    label: 'APM Waterfall Traces',
-    icon: Activity,
-    description: 'OpenTelemetry spans & latency',
-    badge: 'NEW',
-  },
-  {
-    href: '/analytics',
-    label: 'LLMOps & Telemetry',
-    icon: BarChart3,
-    description: 'Cache metrics & firewall',
-  },
-  {
-    href: '/admin',
-    label: 'Admin Studio & Intel',
-    icon: Sliders,
-    description: 'Box office, trends & catalog',
-    badge: 'NEW',
-  },
-  {
-    href: '/chat',
-    label: 'Multi-Model AI Chat',
-    icon: MessageSquare,
-    description: 'Gemini 3.8 + Groq LPU',
+    title: 'Enterprise Operations',
+    items: [
+      {
+        href: '/admin',
+        label: 'Executive Studio & Intel',
+        icon: Sliders,
+        description: 'Box office, yield & catalog',
+        badge: 'PRO',
+      },
+      {
+        href: '/agent',
+        label: 'Autonomous Agent Swarm',
+        icon: Bot,
+        description: '7-Agent booking DAG & logs',
+      },
+      {
+        href: '/tracing',
+        label: 'APM Waterfall Traces',
+        icon: Activity,
+        description: 'OpenTelemetry spans & latency',
+        badge: 'NEW',
+      },
+      {
+        href: '/analytics',
+        label: 'LLMOps & Telemetry',
+        icon: BarChart3,
+        description: 'Semantic cache & firewall',
+      },
+      {
+        href: '/documents',
+        label: 'Script & Catalog Knowledge',
+        icon: FileText,
+        description: 'Vector embeddings & RAG',
+      },
+    ],
   },
 ]
 
@@ -126,71 +141,73 @@ export default function Sidebar() {
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
-        <div>
-          <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#555]">
-            Core Modules
-          </p>
-          <ul className="space-y-1">
-            {navItems.map((item) => {
-              const Icon = item.icon
-              const isActive =
-                pathname === item.href || pathname.startsWith(item.href + '/')
+        {navSections.map((section) => (
+          <div key={section.title}>
+            <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#666]">
+              {section.title}
+            </p>
+            <ul className="space-y-1">
+              {section.items.map((item) => {
+                const Icon = item.icon
+                const isActive =
+                  pathname === item.href || pathname.startsWith(item.href + '/')
 
-              return (
-                <li key={item.href}>
-                  <Link
-                    href={item.href}
-                    className={clsx(
-                      'group relative flex items-center gap-3 rounded-xl px-3 py-2.5 text-xs transition-all duration-150',
-                      isActive
-                        ? 'text-white'
-                        : 'text-[#888] hover:bg-[#181818] hover:text-white',
-                    )}
-                    style={
-                      isActive
-                        ? {
-                            backgroundColor: '#7c3aed20',
-                            border: '1px solid #7c3aed55',
-                          }
-                        : undefined
-                    }
-                  >
-                    <div
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
                       className={clsx(
-                        'flex h-7 w-7 items-center justify-center rounded-lg transition-colors',
+                        'group relative flex items-center gap-3 rounded-xl px-3 py-2 text-xs transition-all duration-150',
                         isActive
-                          ? 'bg-[#7c3aed] text-white shadow'
-                          : 'bg-[#1a1a1a] text-[#666] group-hover:text-white',
+                          ? 'text-white'
+                          : 'text-[#888] hover:bg-[#181818] hover:text-white',
                       )}
+                      style={
+                        isActive
+                          ? {
+                              backgroundColor: '#7c3aed20',
+                              border: '1px solid #7c3aed55',
+                            }
+                          : undefined
+                      }
                     >
-                      <Icon className="h-3.5 w-3.5 shrink-0" />
-                    </div>
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-1.5">
-                        <p
-                          className={clsx(
-                            'truncate font-semibold',
-                            isActive ? 'text-white' : '',
-                          )}
-                        >
-                          {item.label}
-                        </p>
-                        {item.badge && (
-                          <span className="rounded bg-gradient-to-r from-purple-500 to-indigo-500 px-1.5 py-0.2 text-[9px] font-bold text-white shadow-sm">
-                            {item.badge}
-                          </span>
+                      <div
+                        className={clsx(
+                          'flex h-7 w-7 items-center justify-center rounded-lg transition-colors',
+                          isActive
+                            ? 'bg-[#7c3aed] text-white shadow'
+                            : 'bg-[#1a1a1a] text-[#666] group-hover:text-white',
                         )}
+                      >
+                        <Icon className="h-3.5 w-3.5 shrink-0" />
                       </div>
-                      <p className="mt-0.5 truncate text-[10px] text-[#555] group-hover:text-[#777]">
-                        {item.description}
-                      </p>
-                    </div>
-                  </Link>
-                </li>
-              )
-            })}
-          </ul>
-        </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-1.5">
+                          <p
+                            className={clsx(
+                              'truncate font-semibold',
+                              isActive ? 'text-white' : '',
+                            )}
+                          >
+                            {item.label}
+                          </p>
+                          {item.badge && (
+                            <span className="rounded bg-gradient-to-r from-purple-500 to-indigo-500 px-1.5 py-0.2 text-[9px] font-bold text-white shadow-sm">
+                              {item.badge}
+                            </span>
+                          )}
+                        </div>
+                        <p className="mt-0.5 truncate text-[10px] text-[#555] group-hover:text-[#777]">
+                          {item.description}
+                        </p>
+                      </div>
+                    </Link>
+                  </li>
+                )
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
       {/* Footer Info */}
