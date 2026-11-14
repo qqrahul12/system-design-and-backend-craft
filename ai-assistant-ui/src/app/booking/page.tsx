@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { Star, Sparkles, Ticket, Info, CheckCircle2, ShieldCheck, Armchair, CreditCard, Search, X, SlidersHorizontal, Bot, Loader2, Compass } from 'lucide-react'
 
 const API_BASE =
@@ -21,7 +21,7 @@ interface Movie {
   suggestedSeats: string[]
 }
 
-const MOVIES: Movie[] = [
+const INITIAL_MOVIES: Movie[] = [
   {
     id: 1,
     title: 'Interstellar',
@@ -101,6 +101,23 @@ const ROWS = ['A', 'B', 'C', 'D']
 const COLS = [1, 2, 3, 4, 5, 6]
 
 export default function BookingPage() {
+  const [movies, setMovies] = useState<Movie[]>(INITIAL_MOVIES)
+
+  useEffect(() => {
+    const API_BASE =
+      typeof window !== 'undefined'
+        ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
+        : 'http://localhost:8080'
+    fetch(`${API_BASE}/api/v1/movies`)
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (data && Array.isArray(data) && data.length > 0) {
+          setMovies(data)
+        }
+      })
+      .catch(() => {})
+  }, [])
+
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedGenre, setSelectedGenre] = useState('All')
   const [filterAiPicksOnly, setFilterAiPicksOnly] = useState(false)
@@ -138,49 +155,49 @@ export default function BookingPage() {
       // Space / Nolan / Wormhole
       if (queryLower.includes('space') || queryLower.includes('wormhole') || queryLower.includes('nolan') || queryLower.includes('father') || queryLower.includes('time')) {
         return {
-          movie: MOVIES[0], // Interstellar
+          movie: movies[0] || INITIAL_MOVIES[0], // Interstellar
           reason: 'Interstellar is Christopher Nolan’s definitive masterpiece on space, love across dimensions, and relativity.'
         }
       }
       // Epic / Desert / Sci-fi battle
       if (queryLower.includes('desert') || queryLower.includes('epic') || queryLower.includes('war') || queryLower.includes('chani') || queryLower.includes('dune')) {
         return {
-          movie: MOVIES[1], // Dune 2
+          movie: movies[1] || INITIAL_MOVIES[1], // Dune 2
           reason: 'Dune: Part Two delivers unmatched scale, desert warfare cinematography, and Hans Zimmer’s thunderous sound design.'
         }
       }
       // Historical / Physics / Drama
       if (queryLower.includes('history') || queryLower.includes('bomb') || queryLower.includes('physics') || queryLower.includes('drama') || queryLower.includes('oppenheimer')) {
         return {
-          movie: MOVIES[2], // Oppenheimer
+          movie: movies[2] || INITIAL_MOVIES[2], // Oppenheimer
           reason: 'Oppenheimer offers a gripping character study of historical brilliance and atomic tension.'
         }
       }
       // Animation / Multiverse / Action
       if (queryLower.includes('superhero') || queryLower.includes('spiderman') || queryLower.includes('spider') || queryLower.includes('multiverse') || queryLower.includes('action') || queryLower.includes('animation')) {
         return {
-          movie: MOVIES[3], // Spider-Man
+          movie: movies[3] || INITIAL_MOVIES[3], // Spider-Man
           reason: 'Across the Spider-Verse features groundbreaking animation styles and a thrilling high-velocity multiverse story.'
         }
       }
       // Romance / Emotional / Quiet
       if (queryLower.includes('love') || queryLower.includes('romance') || queryLower.includes('emotional') || queryLower.includes('relationship') || queryLower.includes('gentle')) {
         return {
-          movie: MOVIES[4], // Past Lives
+          movie: movies[4] || INITIAL_MOVIES[4], // Past Lives
           reason: 'Past Lives is an intimate, poignant meditation on destiny, lost love, and parallel paths.'
         }
       }
       // Cyberpunk / Detective / Mystery
       if (queryLower.includes('cyberpunk') || queryLower.includes('future') || queryLower.includes('detective') || queryLower.includes('ai') || queryLower.includes('blade')) {
         return {
-          movie: MOVIES[5], // Blade Runner
+          movie: movies[5] || INITIAL_MOVIES[5], // Blade Runner
           reason: 'Blade Runner 2049 is the gold standard for atmospheric neo-noir sci-fi and existential questions.'
         }
       }
 
       // Default highest rated AI pick
       return {
-        movie: MOVIES[0],
+        movie: movies[0] || INITIAL_MOVIES[0],
         reason: `Matched "${aiSearchPrompt}" with our highest-rated IMAX feature.`
       }
     }
@@ -190,7 +207,7 @@ export default function BookingPage() {
       const controller = new AbortController()
       const timeoutId = setTimeout(() => controller.abort(), 3500)
 
-      const catalogOverview = MOVIES.map(
+      const catalogOverview = movies.map(
         (m) => `${m.title} (Genre: ${m.genre}, Rating: ${m.rating}, Story: ${m.synopsis})`
       ).join(' | ')
 
@@ -216,7 +233,7 @@ REASON: <1 sentence why it matches>`
         const foundTitle = matchLine ? matchLine.replace('MATCH:', '').trim() : ''
         const reasonText = reasonLine ? reasonLine.replace('REASON:', '').trim() : ''
 
-        const targetMovie = MOVIES.find(
+        const targetMovie = movies.find(
           (m) =>
             (foundTitle && m.title.toLowerCase().includes(foundTitle.toLowerCase())) ||
             text.toLowerCase().includes(m.title.toLowerCase())
@@ -247,7 +264,7 @@ REASON: <1 sentence why it matches>`
 
   // Filter movies by search query, genre, and AI pick toggle
   const filteredMovies = useMemo(() => {
-    return MOVIES.filter((movie) => {
+    return movies.filter((movie) => {
       const matchesSearch =
         movie.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
         movie.synopsis.toLowerCase().includes(searchQuery.toLowerCase())
@@ -255,7 +272,7 @@ REASON: <1 sentence why it matches>`
       const matchesAiPick = !filterAiPicksOnly || movie.aiPick
       return matchesSearch && matchesGenre && matchesAiPick
     })
-  }, [searchQuery, selectedGenre, filterAiPicksOnly])
+  }, [movies, searchQuery, selectedGenre, filterAiPicksOnly])
 
   const handleSelectMovie = (movie: Movie) => {
     setSelectedMovie(movie)

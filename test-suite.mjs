@@ -2,7 +2,7 @@ import http from 'http';
 
 function request(options, body = null) {
   return new Promise((resolve, reject) => {
-    const req = http.request(options, (res) => {
+    const req = http.request({ ...options, timeout: 15000 }, (res) => {
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
@@ -12,6 +12,10 @@ function request(options, body = null) {
           body: data,
         });
       });
+    });
+    req.on('timeout', () => {
+      req.destroy();
+      reject(new Error('Request timed out after 15s'));
     });
     req.on('error', (err) => reject(err));
     if (body) req.write(body);
@@ -40,7 +44,7 @@ async function runTestSuite() {
 
   // 1. Frontend Route Tests
   console.log('--- 1. Frontend Route Availability (Port 3000) ---');
-  for (const path of ['/booking', '/concessions', '/tickets', '/documents', '/agent', '/tracing', '/analytics', '/chat']) {
+  for (const path of ['/admin', '/booking', '/concessions', '/tickets', '/documents', '/agent', '/tracing', '/analytics', '/chat']) {
     await test(`GET http://127.0.0.1:3000${path}`, async () => {
       const res = await request({
         hostname: '127.0.0.1',
@@ -308,6 +312,63 @@ async function runTestSuite() {
     if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
     const sessions = JSON.parse(res.body);
     if (!Array.isArray(sessions) || sessions.length === 0) throw new Error('Expected at least 1 session');
+  });
+
+  // 9. Live Theatrical Movie Catalog Tests
+  console.log('\n--- 9. Live Theatrical Movie Catalog (/api/v1/movies) ---');
+  await test('Fetch All Theatrical Movies', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/movies',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const movies = JSON.parse(res.body);
+    if (!Array.isArray(movies) || movies.length < 10) throw new Error(`Expected at least 10 movies, got ${movies.length}`);
+  });
+
+  await test('AI Draft Theatrical Movie Assistant (/api/v1/movies/ai-draft)', async () => {
+    const payload = JSON.stringify({ title: 'Tron: Ares', genre: 'Sci-Fi' });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/movies/ai-draft',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const drafted = JSON.parse(res.body);
+    if (!drafted.title || !drafted.synopsis || !drafted.price) throw new Error('AI draft missing fields');
+  });
+
+  // 10. Admin Analytics & Predictive Intel Tests
+  console.log('\n--- 10. Executive Analytics & Predictive Intel (/api/v1/admin) ---');
+  await test('Dashboard Box Office Analytics (/api/v1/admin/analytics)', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/analytics',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (!data.kpis?.totalGrossRevenue || !data.dailyRevenue || !data.genreTrends || !data.aiRecommendations) {
+      throw new Error('Analytics payload missing required sections');
+    }
+  });
+
+  await test('Generate AI Executive Briefing (/api/v1/admin/briefing)', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/briefing',
+      method: 'POST',
+      headers: { 'Content-Length': '0' },
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (!data.briefing || data.briefing.length < 50) throw new Error('Executive briefing too short or missing');
   });
 
   console.log('\n====================================================');

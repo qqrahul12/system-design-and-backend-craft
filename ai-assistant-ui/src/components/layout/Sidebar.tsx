@@ -13,6 +13,7 @@ import {
   UtensilsCrossed,
   Ticket,
   Activity,
+  Sliders,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -69,6 +70,13 @@ const navItems: NavItem[] = [
     label: 'LLMOps & Telemetry',
     icon: BarChart3,
     description: 'Cache metrics & firewall',
+  },
+  {
+    href: '/admin',
+    label: 'Admin Studio & Intel',
+    icon: Sliders,
+    description: 'Box office, trends & catalog',
+    badge: 'NEW',
   },
   {
     href: '/chat',

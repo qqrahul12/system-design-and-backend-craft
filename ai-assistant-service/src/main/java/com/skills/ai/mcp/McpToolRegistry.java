@@ -3,6 +3,8 @@ package com.skills.ai.mcp;
 import com.skills.ai.concessions.ConcessionCombo;
 import com.skills.ai.concessions.ConcessionItem;
 import com.skills.ai.concessions.ConcessionsService;
+import com.skills.ai.movie.Movie;
+import com.skills.ai.movie.MovieCatalogService;
 import com.skills.ai.rag.InMemoryVectorStore;
 import com.skills.ai.rag.RagService;
 import lombok.RequiredArgsConstructor;
@@ -26,6 +28,7 @@ public class McpToolRegistry {
     private final RagService ragService;
     private final InMemoryVectorStore vectorStore;
     private final ConcessionsService concessionsService;
+    private final MovieCatalogService movieCatalogService;
 
     private final Map<String, McpToolDefinition> toolDefinitions = new HashMap<>();
     private final Map<String, Function<Map<String, Object>, McpToolDefinition.CallResult>> toolExecutors = new HashMap<>();
@@ -39,16 +42,25 @@ public class McpToolRegistry {
                         .inputSchema(Map.of(
                                 "type", "object",
                                 "properties", Map.of(
-                                        "genre", Map.of("type", "string", "description", "Optional genre filter: Sci-Fi, Action, Drama"),
+                                        "genre", Map.of("type", "string", "description", "Optional genre filter: Sci-Fi, Action, Drama, Horror"),
                                         "query", Map.of("type", "string", "description", "Search keywords in movie title")
                                 )
                         ))
                         .build(),
                 args -> {
                     String q = (String) args.getOrDefault("query", "");
-                    return McpToolDefinition.CallResult.text(String.format(
-                            "Found 3 shows: 1. Inception (IMAX, 9:30 PM, $15) 2. Interstellar (Dolby, 7:00 PM, $18) 3. Oppenheimer (Standard, 8:15 PM, $12). Query: '%s'",
-                            q));
+                    String genre = (String) args.getOrDefault("genre", "");
+                    List<Movie> results = movieCatalogService.getAllMovies(genre, null, q);
+                    if (results.isEmpty()) {
+                        return McpToolDefinition.CallResult.text("No movies found matching criteria.");
+                    }
+                    StringBuilder sb = new StringBuilder("Found " + results.size() + " theatrical releases in CineMind catalog:\n");
+                    for (int i = 0; i < Math.min(5, results.size()); i++) {
+                        Movie m = results.get(i);
+                        sb.append(String.format("%d. %s (%s, Rating: %.1f, $%.2f) - Auditorium: %s, Shows: %s\n",
+                                i + 1, m.getTitle(), m.getGenre(), m.getRating(), m.getPrice(), m.getAuditorium(), m.getShowtimes()));
+                    }
+                    return McpToolDefinition.CallResult.text(sb.toString().trim());
                 }
         );
 
