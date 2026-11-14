@@ -42,6 +42,7 @@ interface Movie {
   genre: string
   rating: number
   year: number
+  releaseDate?: string
   duration: string
   price: number
   aiPick: boolean
@@ -1081,8 +1082,8 @@ REASON: <1 sentence why it matches>`
                     <div className="flex justify-between items-start">
                       <div>
                         <h3 className="font-semibold text-white leading-tight">{movie.title}</h3>
-                        <p className="mt-0.5 text-[11px] text-[#666]">
-                          {movie.year} · {movie.duration}
+                        <p className="mt-0.5 text-[11px] text-zinc-400 font-mono">
+                          {movie.releaseDate || movie.year} · {movie.duration}
                         </p>
                       </div>
                       <span className="text-sm font-bold text-emerald-400 font-mono">
@@ -1729,7 +1730,7 @@ REASON: <1 sentence why it matches>`
                     </span>
                   )}
                   <span className="rounded-full bg-purple-500/20 border border-purple-500/30 px-2.5 py-0.5 text-xs font-semibold text-purple-300">
-                    {inspectingReviewMovie.year} · {inspectingReviewMovie.duration}
+                    Premiere: {inspectingReviewMovie.releaseDate || inspectingReviewMovie.year} · {inspectingReviewMovie.duration}
                   </span>
                 </div>
                 <p className="text-xs text-zinc-400 mt-1">

@@ -137,12 +137,40 @@ public class MovieCatalogService {
                                 Integer rottenTomatoes, Integer metacritic, Double imdbRating,
                                 String criticConsensus, String topCriticQuote, Integer reviewsCount,
                                 String trailerUrl, String director, String cast, String ageRating) {
+        String releaseDate = switch (id != null ? id.intValue() : 0) {
+            case 1 -> "2014-11-07"; // Interstellar
+            case 2 -> "2024-03-01"; // Dune: Part Two
+            case 3 -> "2023-07-21"; // Oppenheimer
+            case 4 -> "2023-06-02"; // Spider-Man: Across the Spider-Verse
+            case 5 -> "2023-06-02"; // Past Lives
+            case 6 -> "2017-10-06"; // Blade Runner 2049
+            case 7 -> "2024-11-22"; // Gladiator II
+            case 8 -> "2025-10-10"; // Tron: Ares
+            case 9 -> "2010-07-16"; // Inception
+            case 10 -> "2024-05-24"; // Furiosa
+            case 11 -> "2024-08-16"; // Alien: Romulus
+            case 12, 206 -> "2026-10-02"; // The Batman: Part II
+            case 201 -> "2026-03-20"; // Project Hail Mary
+            case 202 -> "2026-01-31"; // Mickey 17
+            case 203 -> "2026-07-11"; // Superman
+            case 204 -> "2026-12-19"; // Avatar: Fire and Ash
+            case 205 -> "2026-05-01"; // Avengers: Doomsday
+            case 207 -> "2026-06-05"; // Spider-Man: Beyond the Spider-Verse
+            case 208 -> "2026-05-22"; // The Mandalorian & Grogu
+            case 209 -> "2026-07-01"; // Shrek 5
+            case 210 -> "2026-06-19"; // Toy Story 5
+            case 211 -> "2026-09-18"; // A Quiet Place: Part III
+            case 212 -> "2026-01-16"; // Weapons
+            default -> (year != null ? year : 2026) + "-05-22";
+        };
+
         Movie movie = Movie.builder()
                 .id(id)
                 .title(title)
                 .genre(genre)
                 .rating(rating)
                 .year(year)
+                .releaseDate(releaseDate)
                 .duration(duration)
                 .price(price)
                 .aiPick(aiPick)
@@ -183,6 +211,18 @@ public class MovieCatalogService {
     public Movie createMovie(Movie movie) {
         if (movie.getId() == null) {
             movie.setId(idSequence.incrementAndGet());
+        }
+        if (movie.getReleaseDate() != null && !movie.getReleaseDate().isBlank()) {
+            try {
+                if (movie.getYear() == null) {
+                    movie.setYear(Integer.parseInt(movie.getReleaseDate().substring(0, 4)));
+                }
+            } catch (Exception ignored) {}
+        } else if (movie.getYear() != null) {
+            movie.setReleaseDate(movie.getYear() + "-05-22");
+        } else {
+            movie.setYear(2026);
+            movie.setReleaseDate("2026-05-22");
         }
         if (movie.getSuggestedSeats() == null || movie.getSuggestedSeats().isEmpty()) {
             movie.setSuggestedSeats(List.of("C3", "C4"));

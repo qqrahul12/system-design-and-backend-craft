@@ -20,6 +20,7 @@ public class Movie {
     private String genre;
     private Double rating;
     private Integer year;
+    private String releaseDate; // ISO-8601 formatted, e.g. "2026-05-22"
     private String duration;
     private Double price;
     private Boolean aiPick;

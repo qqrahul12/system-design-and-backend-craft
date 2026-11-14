@@ -41,6 +41,7 @@ interface Movie {
   genre: string
   rating: number
   year: number
+  releaseDate?: string
   duration: string
   price: number
   aiPick: boolean
@@ -263,7 +264,8 @@ export default function AdminPage() {
   // Add Movie Form state
   const [newTitle, setNewTitle] = useState('')
   const [newGenre, setNewGenre] = useState('Sci-Fi')
-  const [newYear, setNewYear] = useState(2025)
+  const [newYear, setNewYear] = useState(2026)
+  const [newReleaseDate, setNewReleaseDate] = useState('2026-05-22')
   const [newDuration, setNewDuration] = useState('2h 20m')
   const [newPrice, setNewPrice] = useState(17.5)
   const [newAuditorium, setNewAuditorium] = useState('IMAX 70mm Auditorium 1')
@@ -443,10 +445,12 @@ export default function AdminPage() {
 
   const handleCreateMovie = async (e: React.FormEvent) => {
     e.preventDefault()
+    const derivedYear = newReleaseDate ? new Date(newReleaseDate).getFullYear() : Number(newYear)
     const payload = {
       title: newTitle,
       genre: newGenre,
-      year: Number(newYear),
+      year: derivedYear,
+      releaseDate: newReleaseDate,
       duration: newDuration,
       price: Number(newPrice),
       rating: 4.8,
@@ -533,7 +537,8 @@ export default function AdminPage() {
   const resetForm = () => {
     setNewTitle('')
     setNewGenre('Sci-Fi')
-    setNewYear(2025)
+    setNewYear(2026)
+    setNewReleaseDate('2026-05-22')
     setNewDuration('2h 20m')
     setNewPrice(17.5)
     setNewSynopsis('')
@@ -1120,7 +1125,7 @@ export default function AdminPage() {
               <thead>
                 <tr className="border-b border-zinc-800 bg-zinc-950/60 text-xs font-semibold uppercase tracking-wider text-zinc-400">
                   <th className="py-4 px-6">Movie</th>
-                  <th className="py-4 px-4">Genre / Year</th>
+                  <th className="py-4 px-4">Genre / Release Date</th>
                   <th className="py-4 px-4">Auditorium & Shows</th>
                   <th className="py-4 px-4">Price</th>
                   <th className="py-4 px-4">Rating</th>
@@ -1152,7 +1157,9 @@ export default function AdminPage() {
                       <span className="rounded-md bg-zinc-800 px-2 py-1 text-xs font-medium text-zinc-300">
                         {movie.genre}
                       </span>
-                      <span className="text-xs text-zinc-500 block mt-1">{movie.year} • {movie.duration}</span>
+                      <span className="text-xs text-zinc-400 block mt-1 font-mono">
+                        {movie.releaseDate || movie.year} • {movie.duration}
+                      </span>
                     </td>
 
                     <td className="py-4 px-4">
@@ -1464,13 +1471,18 @@ export default function AdminPage() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Release Year</label>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Theatrical Release Date</label>
                   <input
-                    type="number"
+                    type="date"
                     required
-                    value={newYear}
-                    onChange={(e) => setNewYear(Number(e.target.value))}
-                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                    value={newReleaseDate}
+                    onChange={(e) => {
+                      setNewReleaseDate(e.target.value)
+                      if (e.target.value) {
+                        setNewYear(new Date(e.target.value).getFullYear())
+                      }
+                    }}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none [color-scheme:dark]"
                   />
                 </div>
               </div>
