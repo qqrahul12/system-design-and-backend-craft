@@ -152,29 +152,57 @@ public class ChatService {
         String backupModel = useGroq ? GEMINI_MODEL : GROQ_MODEL;
 
         log.info("Starting streaming chat via primary provider={} ({})", provider, primaryModel);
-        return primaryClient.prompt()
-                .system(SYSTEM_PROMPT)
-                .user(message)
-                .stream()
-                .content()
-                .onErrorResume(ex -> {
-                    log.warn("⚠️ Primary LLM stream ({}) failed with '{}'. Auto-failing over to backup provider ({})",
-                            primaryModel, ex.getMessage(), backupModel);
-                    return backupClient.prompt()
-                            .system(SYSTEM_PROMPT)
-                            .user(message)
-                            .stream()
-                            .content()
-                            .onErrorResume(backupEx -> {
-                                log.error("❌ Both LLM streaming providers exhausted: primary='{}', backup='{}'",
-                                        ex.getMessage(), backupEx.getMessage());
-                                return Flux.just(
-                                        "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). ",
-                                        "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational! ",
-                                        "Please explore our latest theatrical releases or try asking your query again in a few moments."
-                                );
-                            });
-                });
+        try {
+            return primaryClient.prompt()
+                    .system(SYSTEM_PROMPT)
+                    .user(message)
+                    .stream()
+                    .content()
+                    .onErrorResume(ex -> {
+                        log.warn("⚠️ Primary LLM stream ({}) failed with '{}'. Auto-failing over to backup provider ({})",
+                                primaryModel, ex.getMessage(), backupModel);
+                        try {
+                            return backupClient.prompt()
+                                    .system(SYSTEM_PROMPT)
+                                    .user(message)
+                                    .stream()
+                                    .content()
+                                    .onErrorResume(backupEx -> {
+                                        log.error("❌ Both LLM streaming providers exhausted: primary='{}', backup='{}'",
+                                                ex.getMessage(), backupEx.getMessage());
+                                        return Flux.just(
+                                                "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). ",
+                                                "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational! ",
+                                                "Please explore our latest theatrical releases or try asking your query again in a few moments."
+                                        );
+                                    });
+                        } catch (Exception backupSyncEx) {
+                            log.error("❌ Backup LLM client threw synchronous exception: {}", backupSyncEx.getMessage());
+                            return Flux.just(
+                                    "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
+                                    "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational!"
+                            );
+                        }
+                    });
+        } catch (Exception primarySyncEx) {
+            log.warn("⚠️ Primary LLM client threw synchronous exception: {}. Falling back to backup.", primarySyncEx.getMessage());
+            try {
+                return backupClient.prompt()
+                        .system(SYSTEM_PROMPT)
+                        .user(message)
+                        .stream()
+                        .content()
+                        .onErrorResume(backupEx -> Flux.just(
+                                "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
+                                "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational!"
+                        ));
+            } catch (Exception allFailed) {
+                return Flux.just(
+                        "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
+                        "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational!"
+                );
+            }
+        }
     }
 
     public Flux<String> streamChat(String message) {

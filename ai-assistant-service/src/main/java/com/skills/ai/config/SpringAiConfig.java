@@ -4,6 +4,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.openai.OpenAiChatModel;
 import org.springframework.ai.openai.OpenAiChatOptions;
 import org.springframework.ai.openai.api.OpenAiApi;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -70,7 +71,7 @@ public class SpringAiConfig {
 
     @Bean(name = "geminiChatClient")
     @Primary
-    public ChatClient geminiChatClient(OpenAiChatModel geminiChatModel) {
+    public ChatClient geminiChatClient(@Qualifier("geminiChatModel") OpenAiChatModel geminiChatModel) {
         return ChatClient.builder(geminiChatModel).build();
     }
 
@@ -96,7 +97,7 @@ public class SpringAiConfig {
     }
 
     @Bean(name = "groqChatClient")
-    public ChatClient groqChatClient(OpenAiChatModel groqChatModel) {
+    public ChatClient groqChatClient(@Qualifier("groqChatModel") OpenAiChatModel groqChatModel) {
         return ChatClient.builder(groqChatModel).build();
     }
 }
