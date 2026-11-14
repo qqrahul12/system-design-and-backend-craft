@@ -24,6 +24,7 @@ export interface UserShare {
   userName: string;
   shareAmount: number;
   paid: boolean;
+  isPaid?: boolean;
   paymentMethod?: string;
   settledAt?: string;
 }
@@ -54,6 +55,9 @@ export const splitService = {
   getUsers: (): Promise<SplitUser[]> => apiClient.get<SplitUser[]>('/api/v1/split/users'),
 
   getGroups: (): Promise<SplitGroup[]> => apiClient.get<SplitGroup[]>('/api/v1/split/groups'),
+
+  createGroup: (payload: { name: string; description?: string; memberIds?: string[] }): Promise<SplitGroup> =>
+    apiClient.post<SplitGroup>('/api/v1/split/groups', payload),
 
   getExpenses: (): Promise<SplitExpense[]> => apiClient.get<SplitExpense[]>('/api/v1/split/expenses'),
 
