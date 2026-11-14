@@ -33,6 +33,30 @@ public class TicketController {
                 .orElse(ResponseEntity.notFound().build());
     }
 
+    @GetMapping("/seats")
+    public ResponseEntity<Map<String, Object>> getAuditoriumSeats(
+            @RequestParam(required = false) String movie,
+            @RequestParam(required = false) String showtime
+    ) {
+        return ResponseEntity.ok(ticketService.getAuditoriumSeats(movie, showtime));
+    }
+
+    @PostMapping("/lock")
+    public ResponseEntity<TicketService.SeatLock> acquireSeatLock(@RequestBody Map<String, Object> req) {
+        String movie = (String) req.getOrDefault("movieTitle", "Interstellar");
+        String showtime = (String) req.getOrDefault("showTime", "7:30 PM");
+        @SuppressWarnings("unchecked")
+        List<String> seats = req.containsKey("seats") ? (List<String>) req.get("seats") : List.of("B3", "B4");
+        return ResponseEntity.ok(ticketService.acquireSeatLock(movie, showtime, seats));
+    }
+
+    @PostMapping("/unlock")
+    public ResponseEntity<Map<String, Object>> releaseSeatLock(@RequestBody Map<String, String> req) {
+        String lockToken = req.get("lockToken");
+        boolean released = ticketService.releaseSeatLock(lockToken);
+        return ResponseEntity.ok(Map.of("released", released, "lockToken", lockToken != null ? lockToken : ""));
+    }
+
     @PostMapping("/issue")
     public DigitalTicket issueTicket(@RequestBody Map<String, Object> req) {
         String movie = (String) req.getOrDefault("movieTitle", "Inception");

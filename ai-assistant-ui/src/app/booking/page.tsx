@@ -22,6 +22,11 @@ import {
   QrCode,
   Play,
   Clock,
+  Crown,
+  Accessibility,
+  Lock,
+  Timer,
+  AlertCircle,
 } from 'lucide-react'
 
 const API_BASE =
@@ -131,8 +136,68 @@ const INITIAL_MOVIES: Movie[] = [
 ]
 
 const GENRES = ['All', 'Sci-Fi', 'Epic', 'Drama', 'Action', 'Romance']
-const ROWS = ['A', 'B', 'C', 'D']
-const COLS = [1, 2, 3, 4, 5, 6]
+const ROWS = ['A', 'B', 'C', 'D', 'E']
+const COLS_LEFT = [1, 2, 3]
+const COLS_RIGHT = [4, 5, 6]
+
+type SeatTier = 'VIP_RECLINER' | 'PRIME_RESERVED' | 'STANDARD' | 'ACCESSIBLE'
+
+interface TierConfig {
+  name: string
+  basePrice: number
+  description: string
+  seats: string[]
+  badgeColor: string
+  borderColor: string
+}
+
+const SEAT_TIERS: Record<SeatTier, TierConfig> = {
+  VIP_RECLINER: {
+    name: 'VIP Heated Leather Recliner',
+    basePrice: 24.5,
+    description: 'Motorized reclining, heated seat, food tray, Dolby Atmos focal center',
+    seats: ['C3', 'C4', 'D3', 'D4'],
+    badgeColor: 'text-amber-300 bg-amber-500/10 border-amber-500/30',
+    borderColor: 'border-amber-400/80',
+  },
+  PRIME_RESERVED: {
+    name: 'Prime Stadium Reserved',
+    basePrice: 19.5,
+    description: 'Extra legroom, luxury plush rocker, central field of view',
+    seats: ['B3', 'B4', 'C2', 'C5', 'D2', 'D5'],
+    badgeColor: 'text-purple-300 bg-purple-500/10 border-purple-500/30',
+    borderColor: 'border-purple-400/70',
+  },
+  STANDARD: {
+    name: 'Standard Stadium',
+    basePrice: 16.0,
+    description: 'Ergonomic high-back theater seat with cup holder',
+    seats: ['A2', 'A3', 'A4', 'A5', 'B2', 'B5', 'E2', 'E3', 'E4', 'E5'],
+    badgeColor: 'text-zinc-300 bg-zinc-800 border-zinc-700',
+    borderColor: 'border-zinc-700',
+  },
+  ACCESSIBLE: {
+    name: 'Wheelchair & Companion Bay',
+    basePrice: 16.0,
+    description: 'Step-free flat entrance bay with companion adjacent seating',
+    seats: ['A1', 'A6', 'E1', 'E6'],
+    badgeColor: 'text-cyan-300 bg-cyan-500/10 border-cyan-500/30',
+    borderColor: 'border-cyan-400/70',
+  },
+}
+
+function getSeatTier(seatId: string): SeatTier {
+  if (SEAT_TIERS.VIP_RECLINER.seats.includes(seatId)) return 'VIP_RECLINER'
+  if (SEAT_TIERS.PRIME_RESERVED.seats.includes(seatId)) return 'PRIME_RESERVED'
+  if (SEAT_TIERS.ACCESSIBLE.seats.includes(seatId)) return 'ACCESSIBLE'
+  return 'STANDARD'
+}
+
+function getFormatMultiplier(fmt: string): number {
+  if (fmt.includes('IMAX')) return 1.15
+  if (fmt.includes('Dolby')) return 1.05
+  return 1.0
+}
 
 export default function BookingPage() {
   const [movies, setMovies] = useState<Movie[]>(INITIAL_MOVIES)
@@ -167,6 +232,16 @@ export default function BookingPage() {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [selectedSeats, setSelectedSeats] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+
+  // Real-Time Distributed Seat Inventory & 10-Minute Lock State
+  const [occupiedSeats, setOccupiedSeats] = useState<string[]>([])
+  const [lockedSeats, setLockedSeats] = useState<string[]>([])
+  const [activeLockToken, setActiveLockToken] = useState<string | null>(null)
+  const [lockExpiresAt, setLockExpiresAt] = useState<number | null>(null)
+  const [secondsRemaining, setSecondsRemaining] = useState<number>(0)
+  const [isLocking, setIsLocking] = useState<boolean>(false)
+  const [lockWarning, setLockWarning] = useState<string | null>(null)
+
   const [bookingConfirmation, setBookingConfirmation] = useState<{
     ticketId: string
     txnId: string
@@ -315,13 +390,114 @@ REASON: <1 sentence why it matches>`
     })
   }, [movies, searchQuery, selectedGenre, filterAiPicksOnly])
 
-  const handleSelectMovie = (movie: Movie, customShowtime?: string, customFormat?: string) => {
+  // Refetch seat inventory whenever selected movie or showtime changes
+  useEffect(() => {
+    if (!selectedMovie) return
+
+    let isMounted = true
+    const fetchInventory = async () => {
+      try {
+        const res = await fetch(
+          `${API_BASE}/api/v1/tickets/seats?movie=${encodeURIComponent(
+            selectedMovie.title
+          )}&showtime=${encodeURIComponent(selectedShowtime)}`
+        )
+        if (res.ok) {
+          const data = await res.json()
+          if (isMounted) {
+            setOccupiedSeats(data.occupiedSeats || [])
+            setLockedSeats(data.lockedSeats || [])
+          }
+        }
+      } catch {
+        if (isMounted) {
+          setOccupiedSeats(['B2', 'D5', 'A3', 'D6'])
+        }
+      }
+    }
+
+    fetchInventory()
+    return () => {
+      isMounted = false
+    }
+  }, [selectedMovie, selectedShowtime])
+
+  // 10-Minute Distributed Lock Countdown Timer
+  useEffect(() => {
+    if (!lockExpiresAt) return
+    const interval = setInterval(() => {
+      const diff = Math.max(0, Math.floor((lockExpiresAt - Date.now()) / 1000))
+      setSecondsRemaining(diff)
+      if (diff === 0) {
+        clearInterval(interval)
+        setSelectedSeats([])
+        setActiveLockToken(null)
+        setLockExpiresAt(null)
+        setLockWarning(
+          '⏰ Your 10-minute seat lock expired. Seats have been returned to the public booking pool.'
+        )
+        if (selectedMovie) {
+          fetch(
+            `${API_BASE}/api/v1/tickets/seats?movie=${encodeURIComponent(
+              selectedMovie.title
+            )}&showtime=${encodeURIComponent(selectedShowtime)}`
+          )
+            .then((r) => (r.ok ? r.json() : null))
+            .then((d) => {
+              if (d) {
+                setOccupiedSeats(d.occupiedSeats || [])
+                setLockedSeats(d.lockedSeats || [])
+              }
+            })
+            .catch(() => {})
+        }
+      }
+    }, 1000)
+    return () => clearInterval(interval)
+  }, [lockExpiresAt, selectedMovie, selectedShowtime])
+
+  // Itemized dynamic price breakdown
+  const priceBreakdown = useMemo(() => {
+    const tierCounts: Record<SeatTier, number> = {
+      VIP_RECLINER: 0,
+      PRIME_RESERVED: 0,
+      STANDARD: 0,
+      ACCESSIBLE: 0,
+    }
+    selectedSeats.forEach((s) => {
+      const t = getSeatTier(s)
+      tierCounts[t]++
+    })
+
+    const multiplier = getFormatMultiplier(selectedFormat)
+    let total = 0
+    const items: { tier: SeatTier; name: string; count: number; unitPrice: number; subtotal: number }[] = []
+
+    for (const [tierKey, count] of Object.entries(tierCounts) as [SeatTier, number][]) {
+      if (count > 0) {
+        const unit = Math.round(SEAT_TIERS[tierKey].basePrice * multiplier * 100) / 100
+        const sub = Math.round(unit * count * 100) / 100
+        total += sub
+        items.push({
+          tier: tierKey,
+          name: SEAT_TIERS[tierKey].name,
+          count,
+          unitPrice: unit,
+          subtotal: sub,
+        })
+      }
+    }
+    return { items, total: Math.round(total * 100) / 100 }
+  }, [selectedSeats, selectedFormat])
+
+  const handleSelectMovie = async (movie: Movie, customShowtime?: string, customFormat?: string) => {
     setSelectedMovie(movie)
-    setSelectedSeats(movie.suggestedSeats)
     setBookingConfirmation(null)
+    setLockWarning(null)
 
     const times = movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : ['7:30 PM']
-    setSelectedShowtime(customShowtime || times[0] || '7:30 PM')
+    const time = customShowtime || times[0] || '7:30 PM'
+    setSelectedShowtime(time)
 
     const defaultFmt =
       customFormat ||
@@ -332,6 +508,56 @@ REASON: <1 sentence why it matches>`
         : 'Standard 4K Laser')
     setSelectedFormat(defaultFmt)
 
+    // Release any previous lock
+    if (activeLockToken) {
+      fetch(`${API_BASE}/api/v1/tickets/unlock`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ lockToken: activeLockToken }),
+      }).catch(() => {})
+      setActiveLockToken(null)
+      setLockExpiresAt(null)
+      setSecondsRemaining(0)
+    }
+
+    // Try pre-locking suggested seats if available
+    try {
+      const seatRes = await fetch(
+        `${API_BASE}/api/v1/tickets/seats?movie=${encodeURIComponent(movie.title)}&showtime=${encodeURIComponent(time)}`
+      )
+      if (seatRes.ok) {
+        const seatData = await seatRes.json()
+        const occupied = seatData.occupiedSeats || []
+        setOccupiedSeats(occupied)
+        setLockedSeats(seatData.lockedSeats || [])
+
+        const availableSuggested = movie.suggestedSeats.filter((s) => !occupied.includes(s))
+        const seatsToLock = availableSuggested.length > 0 ? availableSuggested : []
+        setSelectedSeats(seatsToLock)
+
+        if (seatsToLock.length > 0) {
+          const lockRes = await fetch(`${API_BASE}/api/v1/tickets/lock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              movieTitle: movie.title,
+              showTime: time,
+              seats: seatsToLock,
+            }),
+          })
+          if (lockRes.ok) {
+            const lk = await lockRes.json()
+            setActiveLockToken(lk.lockToken)
+            const exp = new Date(lk.expiresAt).getTime()
+            setLockExpiresAt(exp)
+            setSecondsRemaining(Math.max(0, Math.floor((exp - Date.now()) / 1000)))
+          }
+        }
+      }
+    } catch {
+      setSelectedSeats(movie.suggestedSeats)
+    }
+
     // Smooth scroll to seat selector
     const seatEl = document.getElementById('seat-selector-section')
     if (seatEl) {
@@ -339,10 +565,59 @@ REASON: <1 sentence why it matches>`
     }
   }
 
-  const toggleSeat = (seatId: string) => {
-    setSelectedSeats((prev) =>
-      prev.includes(seatId) ? prev.filter((s) => s !== seatId) : [...prev, seatId]
-    )
+  const toggleSeat = async (seatId: string) => {
+    if (occupiedSeats.includes(seatId)) return
+    if (lockedSeats.includes(seatId) && !selectedSeats.includes(seatId)) return
+
+    const newSeats = selectedSeats.includes(seatId)
+      ? selectedSeats.filter((s) => s !== seatId)
+      : [...selectedSeats, seatId]
+
+    setSelectedSeats(newSeats)
+    setLockWarning(null)
+
+    if (!selectedMovie) return
+
+    if (newSeats.length > 0) {
+      setIsLocking(true)
+      try {
+        const res = await fetch(`${API_BASE}/api/v1/tickets/lock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            movieTitle: selectedMovie.title,
+            showTime: selectedShowtime,
+            seats: newSeats,
+          }),
+        })
+        if (res.ok) {
+          const lockData = await res.json()
+          setActiveLockToken(lockData.lockToken)
+          const expTime = new Date(lockData.expiresAt).getTime()
+          setLockExpiresAt(expTime)
+          setSecondsRemaining(Math.max(0, Math.floor((expTime - Date.now()) / 1000)))
+        }
+      } catch {
+        // Fallback local lock
+        setActiveLockToken('LOCK-LOCAL-' + Math.random().toString(36).substring(2, 8).toUpperCase())
+        const expTime = Date.now() + 600 * 1000
+        setLockExpiresAt(expTime)
+        setSecondsRemaining(600)
+      } finally {
+        setIsLocking(false)
+      }
+    } else {
+      if (activeLockToken) {
+        fetch(`${API_BASE}/api/v1/tickets/unlock`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ lockToken: activeLockToken }),
+        }).catch(() => {})
+        setActiveLockToken(null)
+        setLockExpiresAt(null)
+        setSecondsRemaining(0)
+      }
+    }
   }
 
   const handleCompleteBooking = async () => {
@@ -350,10 +625,7 @@ REASON: <1 sentence why it matches>`
 
     setIsProcessing(true)
 
-    const formatMultiplier =
-      selectedFormat === 'IMAX 70mm' ? 1.15 : selectedFormat === 'Dolby Cinema' ? 1.05 : 1.0
-    const calculatedPrice = Math.round(selectedMovie.price * formatMultiplier * 100) / 100
-    const totalAmount = calculatedPrice * selectedSeats.length
+    const totalAmount = priceBreakdown.total
     const showTime = selectedShowtime
     const auditorium = `${selectedFormat} (${selectedMovie.auditorium || 'Screen 1'})`
 
@@ -364,7 +636,7 @@ REASON: <1 sentence why it matches>`
         body: JSON.stringify({
           movieTitle: selectedMovie.title,
           showTime,
-          format: auditorium.includes('IMAX') ? 'IMAX 70mm' : 'Dolby Cinema',
+          format: selectedFormat,
           auditorium,
           seats: selectedSeats,
           totalPaid: totalAmount,
@@ -382,12 +654,30 @@ REASON: <1 sentence why it matches>`
           auditorium,
           showTime,
         })
+
+        // Release lock and mark seats occupied
+        if (activeLockToken) {
+          fetch(`${API_BASE}/api/v1/tickets/unlock`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ lockToken: activeLockToken }),
+          }).catch(() => {})
+          setActiveLockToken(null)
+          setLockExpiresAt(null)
+          setSecondsRemaining(0)
+        }
+        setOccupiedSeats((prev) => [...prev, ...selectedSeats])
+        setSelectedSeats([])
       } else {
         throw new Error('Ticket issue failed')
       }
     } catch {
       // Local fallback
-      const fallbackTicketId = 'TKT-' + selectedMovie.title.substring(0, 4).toUpperCase() + '-' + Math.random().toString(36).substring(2, 6).toUpperCase()
+      const fallbackTicketId =
+        'TKT-' +
+        selectedMovie.title.substring(0, 4).toUpperCase() +
+        '-' +
+        Math.random().toString(36).substring(2, 6).toUpperCase()
       setBookingConfirmation({
         ticketId: fallbackTicketId,
         txnId: 'TXN-' + Math.random().toString(36).substring(2, 9).toUpperCase(),
@@ -397,6 +687,8 @@ REASON: <1 sentence why it matches>`
         auditorium,
         showTime,
       })
+      setOccupiedSeats((prev) => [...prev, ...selectedSeats])
+      setSelectedSeats([])
     } finally {
       setIsProcessing(false)
     }
@@ -733,35 +1025,51 @@ REASON: <1 sentence why it matches>`
       {/* Interactive Seat Picker Section */}
       <div
         id="seat-selector-section"
-        className="rounded-xl border p-6 space-y-6"
-        style={{ backgroundColor: '#111111', borderColor: selectedMovie ? '#7c3aed44' : '#222' }}
+        className="rounded-2xl border p-6 space-y-6"
+        style={{
+          backgroundColor: '#101014',
+          borderColor: selectedMovie ? '#7c3aed55' : '#222',
+          boxShadow: selectedMovie ? '0 0 30px rgba(124, 58, 237, 0.1)' : 'none',
+        }}
       >
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 className="text-base font-semibold text-white flex items-center gap-2">
-              <Armchair className="h-5 w-5 text-[#7c3aed]" />
-              {selectedMovie ? `Interactive Seat Selection: ${selectedMovie.title}` : 'Seat Selection'}
+            <h2 className="text-lg font-bold text-white flex items-center gap-2">
+              <Armchair className="h-5 w-5 text-[#a78bfa]" />
+              {selectedMovie ? `Auditorium Seating Matrix: ${selectedMovie.title}` : 'Select a Movie to Choose Seats'}
             </h2>
-            <p className="text-xs text-[#777] mt-0.5">
+            <p className="text-xs text-zinc-400 mt-0.5">
               {selectedMovie
-                ? '🤖 AI recommended seats are highlighted in purple (central field of view).'
-                : 'Click "Book Now" or use the AI Agent Search above to pick a movie.'}
+                ? 'VIP Recliners, Prime Stadium, and Wheelchair bays with live 10-minute distributed reservation lock.'
+                : 'Click "Book Seats" on any movie above to enter the auditorium.'}
             </p>
           </div>
 
           {selectedMovie && (
-            <div className="flex items-center gap-3 text-xs">
+            <div className="flex items-center gap-3 text-xs flex-wrap">
               <div className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded-sm bg-[#7c3aed]" />
-                <span className="text-white">AI Suggestion</span>
+                <span className="h-3 w-3 rounded-sm bg-emerald-500 shadow-sm shadow-emerald-500/50" />
+                <span className="text-emerald-400 font-semibold">Your Pick</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded-sm bg-emerald-500" />
-                <span className="text-white">Selected</span>
+                <span className="h-3 w-3 rounded-sm border border-amber-400 bg-amber-500/20" />
+                <span className="text-amber-300">VIP Recliner ($24.50)</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className="h-3 w-3 rounded-sm bg-[#222]" />
-                <span className="text-[#666]">Available</span>
+                <span className="h-3 w-3 rounded-sm border border-purple-400 bg-purple-500/20" />
+                <span className="text-purple-300">Prime ($19.50)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm border border-cyan-400 bg-cyan-500/20" />
+                <span className="text-cyan-300">Accessible ($16.00)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm border border-zinc-700 bg-zinc-800" />
+                <span className="text-zinc-400">Standard ($16.00)</span>
+              </div>
+              <div className="flex items-center gap-1.5">
+                <span className="h-3 w-3 rounded-sm bg-zinc-900 border border-zinc-800 text-zinc-600 text-[9px] flex items-center justify-center">✕</span>
+                <span className="text-zinc-500">Occupied</span>
               </div>
             </div>
           )}
@@ -772,29 +1080,36 @@ REASON: <1 sentence why it matches>`
             {/* Theatrical Format & Showtime Bar */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
-                  Auditorium Format & Experience
+                <div className="text-[10px] font-bold uppercase tracking-wider text-purple-400 flex items-center gap-1.5">
+                  <Sparkles className="h-3 w-3" />
+                  Auditorium Experience & Projection Format
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
-                  {['IMAX 70mm', 'Dolby Cinema', 'Standard 4K Laser'].map((fmt) => (
+                  {[
+                    { label: 'IMAX 70mm', mult: '+15% Dynamic Rate' },
+                    { label: 'Dolby Cinema', mult: '+5% Dual Laser' },
+                    { label: 'Standard 4K Laser', mult: 'Standard' },
+                  ].map((fmt) => (
                     <button
-                      key={fmt}
-                      onClick={() => setSelectedFormat(fmt)}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
-                        selectedFormat === fmt
+                      key={fmt.label}
+                      onClick={() => setSelectedFormat(fmt.label)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 ${
+                        selectedFormat === fmt.label
                           ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 ring-1 ring-purple-400'
                           : 'bg-zinc-800 text-zinc-400 hover:text-white border border-zinc-700'
                       }`}
                     >
-                      {fmt}
+                      <span>{fmt.label}</span>
+                      <span className="text-[10px] opacity-75 font-mono">({fmt.mult})</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               <div className="space-y-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                  Active Showtime
+                <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+                  <Clock className="h-3 w-3" />
+                  Auditorium Showtime
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
                   {(selectedMovie.showtimes ? selectedMovie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => (
@@ -814,81 +1129,281 @@ REASON: <1 sentence why it matches>`
               </div>
             </div>
 
-            {/* Screen indicator */}
-            <div className="w-full text-center space-y-1">
-              <div className="mx-auto h-1.5 w-3/4 rounded-full bg-gradient-to-r from-transparent via-[#7c3aed] to-transparent" />
-              <p className="text-[10px] uppercase tracking-widest text-[#555]">Cinema Screen</p>
+            {/* Distributed Real-Time Seat Lock Banner */}
+            {activeLockToken && secondsRemaining > 0 && (
+              <div className="rounded-xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-950 p-4 flex flex-col sm:flex-row items-center justify-between gap-3 animate-fade-in shadow-lg">
+                <div className="flex items-center gap-3">
+                  <div className="h-9 w-9 rounded-lg bg-purple-600/20 border border-purple-500/40 flex items-center justify-center shrink-0">
+                    <Lock className="h-4 w-4 text-purple-400 animate-pulse" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-white uppercase tracking-wider">
+                        Distributed Seat Lock Active
+                      </span>
+                      <span className="font-mono text-[11px] text-purple-300 bg-purple-500/10 px-2 py-0.5 rounded border border-purple-500/30">
+                        {activeLockToken}
+                      </span>
+                    </div>
+                    <p className="text-xs text-zinc-400 mt-0.5">
+                      Seats <span className="font-mono text-purple-300 font-bold">{selectedSeats.join(', ')}</span> are held in real-time across all box office terminals.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 bg-zinc-950 px-3 py-1.5 rounded-lg border border-purple-500/30 shrink-0">
+                  <Timer className="h-4 w-4 text-emerald-400" />
+                  <span className="text-xs text-zinc-400 font-medium">Expires In:</span>
+                  <span className="font-mono text-sm font-bold text-emerald-400">
+                    {Math.floor(secondsRemaining / 60)
+                      .toString()
+                      .padStart(2, '0')}
+                    :{(secondsRemaining % 60).toString().padStart(2, '0')}
+                  </span>
+                </div>
+              </div>
+            )}
+
+            {/* Lock Expiry Warning Alert */}
+            {lockWarning && (
+              <div className="rounded-xl border border-amber-500/40 bg-amber-950/30 p-3.5 flex items-center gap-3 text-amber-300 text-xs">
+                <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+                <span>{lockWarning}</span>
+              </div>
+            )}
+
+            {/* Realistic Curved Theatrical Screen Arc */}
+            <div className="w-full text-center space-y-2 py-2">
+              <div className="relative mx-auto w-4/5 max-w-xl">
+                <div
+                  className="h-2 w-full rounded-t-full bg-gradient-to-r from-purple-500/20 via-purple-400 to-purple-500/20 shadow-lg shadow-purple-500/30"
+                  style={{
+                    boxShadow: '0 0 25px rgba(168, 85, 247, 0.5)',
+                  }}
+                />
+                <div
+                  className="h-10 w-full"
+                  style={{
+                    background:
+                      'radial-gradient(ellipse at 50% 0%, rgba(168,85,247,0.18) 0%, transparent 70%)',
+                  }}
+                />
+              </div>
+              <p className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-500">
+                ⚡ 70MM DUAL LASER CURVED CINEMA SCREEN
+              </p>
             </div>
 
-            {/* Seat Matrix */}
-            <div className="flex flex-col items-center gap-3">
+            {/* Realistic Seating Layout with Center Aisle */}
+            <div className="flex flex-col items-center gap-3.5 py-2">
               {ROWS.map((row) => (
-                <div key={row} className="flex items-center gap-2">
-                  <span className="w-4 text-xs font-mono text-[#555]">{row}</span>
-                  <div className="flex gap-2">
-                    {COLS.map((col) => {
+                <div key={row} className="flex items-center gap-2 sm:gap-3">
+                  {/* Left row label */}
+                  <span className="w-5 text-center text-xs font-mono font-bold text-zinc-500">
+                    {row}
+                  </span>
+
+                  {/* Left Seating Block (Columns 1, 2, 3) */}
+                  <div className="flex gap-2 sm:gap-2.5">
+                    {COLS_LEFT.map((col) => {
                       const seatId = `${row}${col}`
                       const isSelected = selectedSeats.includes(seatId)
+                      const isOccupied = occupiedSeats.includes(seatId)
+                      const isLocked = lockedSeats.includes(seatId) && !isSelected
                       const isAiPick = selectedMovie.suggestedSeats.includes(seatId)
+                      const tier = getSeatTier(seatId)
+                      const tierConfig = SEAT_TIERS[tier]
+                      const price = Math.round(tierConfig.basePrice * getFormatMultiplier(selectedFormat) * 100) / 100
 
                       return (
                         <button
                           key={seatId}
+                          disabled={isOccupied || isLocked}
                           onClick={() => toggleSeat(seatId)}
-                          className={`h-9 w-9 rounded-md flex items-center justify-center text-xs font-mono font-medium transition-all ${
+                          className={`relative h-10 w-10 sm:h-11 sm:w-11 rounded-lg flex flex-col items-center justify-center text-xs font-mono font-bold transition-all active:scale-95 ${
                             isSelected
-                              ? 'bg-emerald-500 text-white shadow-md scale-105'
-                              : isAiPick
-                              ? 'bg-[#7c3aed] text-white border border-[#a78bfa]'
-                              : 'bg-[#1a1a1a] text-[#888] border border-[#2a2a2a] hover:border-[#444]'
+                              ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 z-10'
+                              : isOccupied
+                              ? 'bg-zinc-900/60 text-zinc-700 border border-zinc-800/80 cursor-not-allowed opacity-60'
+                              : isLocked
+                              ? 'bg-purple-950/40 text-purple-400 border border-purple-500/40 cursor-not-allowed'
+                              : tier === 'VIP_RECLINER'
+                              ? 'bg-amber-950/20 text-amber-300 border border-amber-400/80 hover:bg-amber-900/40 shadow-sm shadow-amber-500/10'
+                              : tier === 'PRIME_RESERVED'
+                              ? 'bg-purple-950/20 text-purple-300 border border-purple-400/70 hover:bg-purple-900/40 shadow-sm shadow-purple-500/10'
+                              : tier === 'ACCESSIBLE'
+                              ? 'bg-cyan-950/20 text-cyan-300 border border-cyan-400/70 hover:bg-cyan-900/40'
+                              : 'bg-zinc-900 text-zinc-300 border border-zinc-700 hover:border-zinc-500 hover:text-white'
                           }`}
-                          title={`Seat ${seatId} ${isAiPick ? '(AI Recommended)' : ''}`}
+                          title={`${seatId} • ${tierConfig.name} • $${price} ${
+                            isOccupied
+                              ? '(Occupied)'
+                              : isLocked
+                              ? '(Locked by guest)'
+                              : isAiPick
+                              ? '(AI Suggestion)'
+                              : ''
+                          }`}
                         >
-                          {col}
+                          <div className="flex items-center gap-0.5">
+                            {tier === 'VIP_RECLINER' && !isOccupied && (
+                              <Crown className="h-2.5 w-2.5 text-amber-400" />
+                            )}
+                            {tier === 'ACCESSIBLE' && !isOccupied && (
+                              <Accessibility className="h-2.5 w-2.5 text-cyan-400" />
+                            )}
+                            <span>{seatId}</span>
+                          </div>
+                          {isOccupied ? (
+                            <span className="text-[9px] text-zinc-600 leading-none">✕</span>
+                          ) : (
+                            <span className="text-[9px] opacity-70 leading-none">${price}</span>
+                          )}
                         </button>
                       )
                     })}
                   </div>
+
+                  {/* Center Aisle Walkway */}
+                  <div className="w-8 sm:w-12 text-center flex flex-col items-center justify-center">
+                    <span className="text-[9px] font-mono tracking-widest text-zinc-600 uppercase select-none">
+                      Aisle
+                    </span>
+                  </div>
+
+                  {/* Right Seating Block (Columns 4, 5, 6) */}
+                  <div className="flex gap-2 sm:gap-2.5">
+                    {COLS_RIGHT.map((col) => {
+                      const seatId = `${row}${col}`
+                      const isSelected = selectedSeats.includes(seatId)
+                      const isOccupied = occupiedSeats.includes(seatId)
+                      const isLocked = lockedSeats.includes(seatId) && !isSelected
+                      const isAiPick = selectedMovie.suggestedSeats.includes(seatId)
+                      const tier = getSeatTier(seatId)
+                      const tierConfig = SEAT_TIERS[tier]
+                      const price = Math.round(tierConfig.basePrice * getFormatMultiplier(selectedFormat) * 100) / 100
+
+                      return (
+                        <button
+                          key={seatId}
+                          disabled={isOccupied || isLocked}
+                          onClick={() => toggleSeat(seatId)}
+                          className={`relative h-10 w-10 sm:h-11 sm:w-11 rounded-lg flex flex-col items-center justify-center text-xs font-mono font-bold transition-all active:scale-95 ${
+                            isSelected
+                              ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 z-10'
+                              : isOccupied
+                              ? 'bg-zinc-900/60 text-zinc-700 border border-zinc-800/80 cursor-not-allowed opacity-60'
+                              : isLocked
+                              ? 'bg-purple-950/40 text-purple-400 border border-purple-500/40 cursor-not-allowed'
+                              : tier === 'VIP_RECLINER'
+                              ? 'bg-amber-950/20 text-amber-300 border border-amber-400/80 hover:bg-amber-900/40 shadow-sm shadow-amber-500/10'
+                              : tier === 'PRIME_RESERVED'
+                              ? 'bg-purple-950/20 text-purple-300 border border-purple-400/70 hover:bg-purple-900/40 shadow-sm shadow-purple-500/10'
+                              : tier === 'ACCESSIBLE'
+                              ? 'bg-cyan-950/20 text-cyan-300 border border-cyan-400/70 hover:bg-cyan-900/40'
+                              : 'bg-zinc-900 text-zinc-300 border border-zinc-700 hover:border-zinc-500 hover:text-white'
+                          }`}
+                          title={`${seatId} • ${tierConfig.name} • $${price} ${
+                            isOccupied
+                              ? '(Occupied)'
+                              : isLocked
+                              ? '(Locked by guest)'
+                              : isAiPick
+                              ? '(AI Suggestion)'
+                              : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-0.5">
+                            {tier === 'VIP_RECLINER' && !isOccupied && (
+                              <Crown className="h-2.5 w-2.5 text-amber-400" />
+                            )}
+                            {tier === 'ACCESSIBLE' && !isOccupied && (
+                              <Accessibility className="h-2.5 w-2.5 text-cyan-400" />
+                            )}
+                            <span>{seatId}</span>
+                          </div>
+                          {isOccupied ? (
+                            <span className="text-[9px] text-zinc-600 leading-none">✕</span>
+                          ) : (
+                            <span className="text-[9px] opacity-70 leading-none">${price}</span>
+                          )}
+                        </button>
+                      )
+                    })}
+                  </div>
+
+                  {/* Right row label */}
+                  <span className="w-5 text-center text-xs font-mono font-bold text-zinc-500">
+                    {row}
+                  </span>
                 </div>
               ))}
             </div>
 
-            {/* Booking Action Bar */}
-            <div className="pt-4 border-t border-[#222] flex items-center justify-between flex-wrap gap-4">
-              <div>
-                <p className="text-xs text-[#777]">Selected Seats:</p>
-                <p className="text-sm font-mono font-semibold text-white">
-                  {selectedSeats.length > 0 ? selectedSeats.join(', ') : 'None'}
-                </p>
+            {/* Itemized Dynamic Booking & Checkout Bar */}
+            <div className="pt-4 border-t border-zinc-800 flex items-center justify-between flex-wrap gap-4 bg-zinc-950/60 p-4 rounded-xl">
+              <div className="space-y-1">
+                <p className="text-xs text-zinc-400 font-medium">Selected Seats:</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                  {selectedSeats.length > 0 ? (
+                    selectedSeats.map((seatId) => {
+                      const tier = getSeatTier(seatId)
+                      const config = SEAT_TIERS[tier]
+                      return (
+                        <span
+                          key={seatId}
+                          className={`font-mono text-xs px-2 py-0.5 rounded border font-bold ${config.badgeColor}`}
+                        >
+                          {seatId} ({tier === 'VIP_RECLINER' ? 'VIP' : tier === 'PRIME_RESERVED' ? 'Prime' : tier === 'ACCESSIBLE' ? 'Access' : 'Std'})
+                        </span>
+                      )
+                    })
+                  ) : (
+                    <span className="text-xs text-zinc-600 font-mono italic">No seats selected</span>
+                  )}
+                </div>
               </div>
 
-              <div>
-                <p className="text-xs text-[#777]">Total Price:</p>
-                <p className="text-lg font-mono font-bold text-emerald-400">
-                  ${selectedMovie.price * selectedSeats.length}
-                </p>
-              </div>
+              {/* Itemized price breakdown */}
+              {priceBreakdown.items.length > 0 && (
+                <div className="text-right space-y-0.5">
+                  <div className="text-[11px] text-zinc-400">
+                    {priceBreakdown.items
+                      .map((it) => `${it.count}x ${it.tier === 'VIP_RECLINER' ? 'VIP' : it.tier === 'PRIME_RESERVED' ? 'Prime' : it.tier === 'ACCESSIBLE' ? 'Bay' : 'Std'} ($${it.unitPrice.toFixed(2)})`)
+                      .join(' + ')}
+                  </div>
+                  <div className="flex items-baseline justify-end gap-2">
+                    <span className="text-xs text-zinc-400">Total:</span>
+                    <span className="text-xl font-mono font-black text-emerald-400">
+                      ${priceBreakdown.total.toFixed(2)}
+                    </span>
+                  </div>
+                </div>
+              )}
 
               <button
                 onClick={handleCompleteBooking}
                 disabled={isProcessing || selectedSeats.length === 0}
-                className="flex items-center gap-2 px-6 py-2.5 rounded-lg text-sm font-medium text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 transition-all shadow-lg"
+                className="flex items-center gap-2 px-6 py-3 rounded-xl text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 transition-all shadow-lg shadow-emerald-600/30 active:scale-95 shrink-0"
               >
                 {isProcessing ? (
-                  <>Processing Reservation...</>
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                    Cryptographic Signing Pass...
+                  </>
                 ) : (
                   <>
                     <CreditCard className="h-4 w-4" />
-                    Confirm & Pay (${selectedMovie.price * selectedSeats.length})
+                    Confirm & Pay (${priceBreakdown.total.toFixed(2)})
                   </>
                 )}
               </button>
             </div>
           </div>
         ) : (
-          <div className="py-12 text-center text-[#555] space-y-2">
-            <Ticket className="h-8 w-8 mx-auto text-[#333]" />
-            <p className="text-sm">Click "Book Now" or ask the AI Concierge above to select a movie.</p>
+          <div className="py-12 text-center text-zinc-500 space-y-2">
+            <Ticket className="h-8 w-8 mx-auto text-zinc-600" />
+            <p className="text-sm">Click "Book Seats" on any movie above to choose your seats.</p>
           </div>
         )}
 

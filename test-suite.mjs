@@ -331,6 +331,51 @@ async function runTestSuite() {
     if (!ticket.ticketId || ticket.status !== 'ISSUED') throw new Error('Ticket issue failed');
   });
 
+  await test('Auditorium Seat Tiers & Occupancy (/api/v1/tickets/seats)', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/tickets/seats?movie=Interstellar&showtime=7:30+PM',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (!data.tierCatalog || !data.tierCatalog.VIP_RECLINER) throw new Error('Missing VIP_RECLINER tier');
+    if (!data.occupiedSeats || !Array.isArray(data.occupiedSeats)) throw new Error('Missing occupiedSeats array');
+    if (!data.rows || data.rows.length !== 5) throw new Error('Expected 5 rows');
+  });
+
+  await test('Distributed Seat Lock & Release (/api/v1/tickets/lock & unlock)', async () => {
+    const lockPayload = JSON.stringify({
+      movieTitle: 'Interstellar',
+      showTime: '7:30 PM',
+      seats: ['C3', 'C4'],
+    });
+    const lockRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/tickets/lock',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(lockPayload) },
+    }, lockPayload);
+    if (lockRes.statusCode !== 200) throw new Error(`Expected 200, got ${lockRes.statusCode}`);
+    const lockData = JSON.parse(lockRes.body);
+    if (!lockData.lockToken || !lockData.expiresAt) throw new Error('Invalid seat lock response');
+
+    // Test unlock
+    const unlockPayload = JSON.stringify({ lockToken: lockData.lockToken });
+    const unlockRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/tickets/unlock',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(unlockPayload) },
+    }, unlockPayload);
+    if (unlockRes.statusCode !== 200) throw new Error(`Expected 200, got ${unlockRes.statusCode}`);
+    const unlockData = JSON.parse(unlockRes.body);
+    if (!unlockData.released) throw new Error('Seat unlock failed');
+  });
+
   await test('Place Concessions Order to Seat (/api/v1/concessions/order)', async () => {
     const payload = JSON.stringify({
       items: [{ name: 'Artisan Warm Butter Popcorn', qty: 2, price: 8.5 }],
