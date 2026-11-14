@@ -30,7 +30,7 @@ public class AdminAnalyticsService {
     private final MovieCatalogService movieCatalogService;
     private final TicketService ticketService;
     private final ConcessionsService concessionsService;
-    private final McpToolRegistry mcpToolRegistry;
+    private final CinemaInsightsService cinemaInsightsService;
     private final ChatClient geminiChatClient;
     private final ChatClient groqChatClient;
 
@@ -38,14 +38,14 @@ public class AdminAnalyticsService {
             MovieCatalogService movieCatalogService,
             TicketService ticketService,
             ConcessionsService concessionsService,
-            McpToolRegistry mcpToolRegistry,
+            CinemaInsightsService cinemaInsightsService,
             @Autowired(required = false) @Qualifier("geminiChatClient") ChatClient geminiChatClient,
             @Autowired(required = false) @Qualifier("groqChatClient") ChatClient groqChatClient
     ) {
         this.movieCatalogService = movieCatalogService;
         this.ticketService = ticketService;
         this.concessionsService = concessionsService;
-        this.mcpToolRegistry = mcpToolRegistry;
+        this.cinemaInsightsService = cinemaInsightsService;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
     }
@@ -164,8 +164,8 @@ public class AdminAnalyticsService {
         }
         genreTrends.sort((a, b) -> Integer.compare((Integer) b.get("share"), (Integer) a.get("share")));
 
-        // 3. Public Insights Sourced via Model Context Protocol (MCP) Tool Call
-        Map<String, Object> publicInsights = mcpToolRegistry.fetchPublicCinemaInsights();
+        // 3. Domain Market Intelligence (Separation of Concerns: Domain Service layer)
+        Map<String, Object> publicInsights = cinemaInsightsService.calculateMarketInsights();
 
         // 4. Predictive AI Recommendations (Cross-referencing DB metrics against MCP benchmarks)
         double dynamicSurgeLift = Math.max(500.0, Math.round(totalGrossRevenue * 0.12));

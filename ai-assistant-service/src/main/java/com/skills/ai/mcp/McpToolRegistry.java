@@ -39,6 +39,7 @@ public class McpToolRegistry {
     private final WalletService walletService;
     private final AuthService authService;
     private final SplitMoneyService splitMoneyService;
+    private final com.skills.ai.admin.CinemaInsightsService cinemaInsightsService;
 
     private final Map<String, McpToolDefinition> toolDefinitions = new HashMap<>();
     private final Map<String, Function<Map<String, Object>, McpToolDefinition.CallResult>> toolExecutors = new HashMap<>();
@@ -430,8 +431,8 @@ public class McpToolRegistry {
                         .inputSchema(Map.of("type", "object"))
                         .build(),
                 args -> {
-                    Map<String, Object> insights = fetchPublicCinemaInsights();
-                    return McpToolDefinition.CallResult.text(formatPublicInsightsAsText(insights));
+                    Map<String, Object> insights = cinemaInsightsService.calculateMarketInsights();
+                    return McpToolDefinition.CallResult.text(cinemaInsightsService.formatInsightsAsText(insights));
                 }
         );
 
@@ -465,95 +466,11 @@ public class McpToolRegistry {
     }
 
     public Map<String, Object> fetchPublicCinemaInsights() {
-        List<Movie> movies = movieCatalogService.getAllMovies(null, null, null);
-        List<DigitalTicket> tickets = ticketService.listTickets();
-        List<com.skills.ai.concessions.ConcessionOrder> orders = concessionsService.listOrders();
-
-        double avgTicketPrice = tickets.isEmpty() ? 16.50 :
-                tickets.stream().mapToDouble(DigitalTicket::totalPaid).average().orElse(16.50);
-        avgTicketPrice = Math.round(avgTicketPrice * 100.0) / 100.0;
-
-        double attachRate = tickets.isEmpty() ? 32.5 :
-                Math.min(100.0, Math.round(((double) orders.size() / tickets.size()) * 1000.0) / 10.0);
-
-        double avgRating = movies.isEmpty() ? 4.8 :
-                movies.stream().mapToDouble(Movie::getRating).average().orElse(4.8);
-        double sentimentIndex = Math.round(avgRating * 2.0 * 10.0) / 10.0;
-
-        // Group by genre dynamically from catalog
-        Map<String, List<Movie>> byGenre = movies.stream()
-                .filter(m -> m.getGenre() != null)
-                .collect(java.util.stream.Collectors.groupingBy(Movie::getGenre));
-        int totalMovies = movies.size();
-        List<Map<String, Object>> genreTrends = new ArrayList<>();
-        for (Map.Entry<String, List<Movie>> entry : byGenre.entrySet()) {
-            String genre = entry.getKey();
-            List<Movie> gMovies = entry.getValue();
-            int count = gMovies.size();
-            int share = (int) Math.round((count * 100.0) / (totalMovies > 0 ? totalMovies : 1));
-            double avgG = gMovies.stream().mapToDouble(Movie::getRating).average().orElse(4.7);
-            double sentimentScore = Math.round(avgG * 2.0 * 10.0) / 10.0;
-            int growthVal = (share * 2) / 3 + 8;
-            genreTrends.add(Map.of(
-                    "genre", genre,
-                    "share", share,
-                    "growth", "+" + growthVal + "%",
-                    "sentiment", sentimentScore
-            ));
-        }
-        genreTrends.sort((a, b) -> Integer.compare((Integer) b.get("share"), (Integer) a.get("share")));
-
-        // Top titles
-        List<Movie> topMovies = movies.stream()
-                .sorted((a, b) -> Integer.compare(b.getOccupancyRate() != null ? b.getOccupancyRate() : 0, a.getOccupancyRate() != null ? a.getOccupancyRate() : 0))
-                .limit(2)
-                .toList();
-        String topTitles = topMovies.stream().map(Movie::getTitle).collect(java.util.stream.Collectors.joining(" and "));
-
-        String keyTakeaway = String.format(
-                "Patrons demonstrate strong engagement for %s screenings across premium formats. Dynamic prime-time yield optimization can be safely tested without impacting attendance.",
-                topTitles.isBlank() ? "premium catalog" : topTitles
-        );
-
-        return Map.of(
-                "source", "Model Context Protocol (MCP: get_public_cinema_insights)",
-                "verifiedAt", java.time.Instant.now().toString(),
-                "nationalIndustryBenchmarks", Map.of(
-                        "nationalAvgTicketPrice", avgTicketPrice,
-                        "nationalConcessionAttachRate", attachRate,
-                        "nationalYoYBoxOfficeGrowth", "+8.4%",
-                        "premiumLargeFormatShare", 72.4,
-                        "nationalRepeatViewingFactor", "2.8x"
-                ),
-                "macroAudienceSentiment", Map.of(
-                        "sentimentIndex", sentimentIndex,
-                        "inelasticPriceTolerance", "High for IMAX 70mm & Dolby Atmos",
-                        "keyAudienceTakeaway", keyTakeaway
-                ),
-                "publicGenreTrends", genreTrends
-        );
+        return cinemaInsightsService.calculateMarketInsights();
     }
 
     public String formatPublicInsightsAsText(Map<String, Object> insights) {
-        @SuppressWarnings("unchecked")
-        Map<String, Object> bench = (Map<String, Object>) insights.getOrDefault("nationalIndustryBenchmarks", Map.of());
-        @SuppressWarnings("unchecked")
-        Map<String, Object> sentiment = (Map<String, Object>) insights.getOrDefault("macroAudienceSentiment", Map.of());
-
-        return String.format(
-                "Verified Public Cinema Industry Intelligence (via MCP):\n" +
-                "• National Avg Ticket Price: $%.2f | National F&B Attach Rate: %.1f%%\n" +
-                "• National Box Office YoY Growth: %s | Premium Large Format Share: %.1f%%\n" +
-                "• Macro Audience Sentiment: %.1f/10 (%s)\n" +
-                "• Audience Takeaway: %s",
-                ((Number) bench.getOrDefault("nationalAvgTicketPrice", 16.50)).doubleValue(),
-                ((Number) bench.getOrDefault("nationalConcessionAttachRate", 28.5)).doubleValue(),
-                bench.getOrDefault("nationalYoYBoxOfficeGrowth", "+8.4%"),
-                ((Number) bench.getOrDefault("premiumLargeFormatShare", 72.4)).doubleValue(),
-                ((Number) sentiment.getOrDefault("sentimentIndex", 9.2)).doubleValue(),
-                sentiment.getOrDefault("inelasticPriceTolerance", "High for Large Format"),
-                sentiment.getOrDefault("keyAudienceTakeaway", "High audience retention across screenings.")
-        );
+        return cinemaInsightsService.formatInsightsAsText(insights);
     }
 
     public void registerTool(McpToolDefinition definition, Function<Map<String, Object>, McpToolDefinition.CallResult> executor) {
