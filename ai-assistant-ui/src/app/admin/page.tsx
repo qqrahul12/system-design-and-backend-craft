@@ -114,6 +114,17 @@ interface ExecutiveBriefing {
   rawText?: string
 }
 
+function normalizeYouTubeEmbedUrl(url: string): string {
+  if (!url) return 'https://www.youtube.com/embed/zSWdZVtXT7E'
+  const trimmed = url.trim()
+  if (trimmed.includes('youtube.com/embed/')) return trimmed
+  const match = trimmed.match(/(?:watch\?v=|youtu\.be\/|youtube\.com\/shorts\/)([a-zA-Z0-9_-]{11})/)
+  if (match && match[1]) {
+    return `https://www.youtube.com/embed/${match[1]}`
+  }
+  return trimmed
+}
+
 function parseBriefingPayload(data: any): ExecutiveBriefing {
   if (data && Array.isArray(data.highlights) && data.highlights.length > 0) {
     return {
@@ -272,6 +283,10 @@ export default function AdminPage() {
   const [newShowtimes, setNewShowtimes] = useState('1:00 PM, 4:30 PM, 8:00 PM')
   const [newSynopsis, setNewSynopsis] = useState('')
   const [newPosterUrl, setNewPosterUrl] = useState('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop')
+  const [newTrailerUrl, setNewTrailerUrl] = useState('https://www.youtube.com/watch?v=zSWdZVtXT7E')
+  const [newDirector, setNewDirector] = useState('Denis Villeneuve')
+  const [newCast, setNewCast] = useState('Timothée Chalamet, Zendaya')
+  const [newAgeRating, setNewAgeRating] = useState('PG-13')
 
   const fetchData = async () => {
     setIsLoading(true)
@@ -435,6 +450,10 @@ export default function AdminPage() {
         setNewSynopsis(drafted.synopsis || '')
         setNewAuditorium(drafted.auditorium || 'IMAX 70mm Auditorium 1')
         setNewShowtimes(drafted.showtimes || '1:00 PM, 4:30 PM, 8:00 PM')
+        if (drafted.trailerUrl) setNewTrailerUrl(drafted.trailerUrl)
+        if (drafted.director) setNewDirector(drafted.director)
+        if (drafted.cast) setNewCast(drafted.cast)
+        if (drafted.ageRating) setNewAgeRating(drafted.ageRating)
       }
     } catch (err) {
       console.error('Drafting failed', err)
@@ -462,6 +481,10 @@ export default function AdminPage() {
       occupancyRate: 85,
       showtimes: newShowtimes,
       posterUrl: newPosterUrl,
+      trailerUrl: normalizeYouTubeEmbedUrl(newTrailerUrl),
+      director: newDirector || 'Visionary Director',
+      cast: newCast || 'Leading Ensemble',
+      ageRating: newAgeRating || 'PG-13',
     }
 
     try {
@@ -544,6 +567,10 @@ export default function AdminPage() {
     setNewSynopsis('')
     setNewAuditorium('IMAX 70mm Auditorium 1')
     setNewShowtimes('1:00 PM, 4:30 PM, 8:00 PM')
+    setNewTrailerUrl('https://www.youtube.com/watch?v=zSWdZVtXT7E')
+    setNewDirector('Denis Villeneuve')
+    setNewCast('Timothée Chalamet, Zendaya')
+    setNewAgeRating('PG-13')
   }
 
   const filteredMovies = movies.filter((m) => {
@@ -1387,7 +1414,7 @@ export default function AdminPage() {
       {/* Add Movie Modal */}
       {isAddModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-xl rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
+          <div className="relative w-full max-w-xl max-h-[90vh] overflow-y-auto rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-2xl">
             <button
               onClick={() => setIsAddModalOpen(false)}
               className="absolute top-4 right-4 rounded-lg p-1 text-zinc-400 hover:bg-zinc-800 hover:text-white"
@@ -1522,6 +1549,69 @@ export default function AdminPage() {
                   onChange={(e) => setNewSynopsis(e.target.value)}
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
                 />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block text-xs font-semibold text-zinc-300">YouTube Trailer URL</label>
+                  <span className="text-[10px] text-purple-400 font-mono">Watch/Shorts auto-embed converted</span>
+                </div>
+                <input
+                  type="url"
+                  placeholder="https://www.youtube.com/watch?v=... or youtu.be/..."
+                  value={newTrailerUrl}
+                  onChange={(e) => setNewTrailerUrl(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                />
+                {newTrailerUrl && (
+                  <div className="mt-2 rounded-xl overflow-hidden border border-zinc-800 bg-black aspect-video max-h-40 relative">
+                    <iframe
+                      src={normalizeYouTubeEmbedUrl(newTrailerUrl)}
+                      title="Trailer Preview"
+                      className="w-full h-full"
+                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                    />
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Director</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Denis Villeneuve"
+                    value={newDirector}
+                    onChange={(e) => setNewDirector(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-zinc-300 mb-1">Lead Cast</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. Timothée Chalamet, Zendaya"
+                    value={newCast}
+                    onChange={(e) => setNewCast(e.target.value)}
+                    className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1">MPAA Age Rating</label>
+                <select
+                  value={newAgeRating}
+                  onChange={(e) => setNewAgeRating(e.target.value)}
+                  className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
+                >
+                  <option value="G">G — General Audiences</option>
+                  <option value="PG">PG — Parental Guidance Suggested</option>
+                  <option value="PG-13">PG-13 — Parents Strongly Cautioned</option>
+                  <option value="R">R — Restricted (Under 17 Requires Parent)</option>
+                  <option value="NC-17">NC-17 — Adults Only</option>
+                </select>
               </div>
 
               <div className="flex justify-end gap-3 pt-3">

@@ -254,9 +254,36 @@ public class MovieCatalogService {
         if (movie.getReviewsCount() == null) {
             movie.setReviewsCount(280);
         }
+        if (movie.getTrailerUrl() != null && !movie.getTrailerUrl().isBlank()) {
+            movie.setTrailerUrl(normalizeTrailerUrl(movie.getTrailerUrl()));
+        } else {
+            movie.setTrailerUrl("https://www.youtube.com/embed/zSWdZVtXT7E");
+        }
+        if (movie.getDirector() == null || movie.getDirector().isBlank()) {
+            movie.setDirector("Visionary Director");
+        }
+        if (movie.getCast() == null || movie.getCast().isBlank()) {
+            movie.setCast("Leading Ensemble");
+        }
+        if (movie.getAgeRating() == null || movie.getAgeRating().isBlank()) {
+            movie.setAgeRating("PG-13");
+        }
         movieStore.put(movie.getId(), movie);
-        log.info("🎬 Created movie: id={}, title='{}'", movie.getId(), movie.getTitle());
+        log.info("🎬 Created movie: id={}, title='{}', trailer='{}'", movie.getId(), movie.getTitle(), movie.getTrailerUrl());
         return movie;
+    }
+
+    public static String normalizeTrailerUrl(String url) {
+        if (url == null || url.isBlank()) return "https://www.youtube.com/embed/zSWdZVtXT7E";
+        String trimmed = url.trim();
+        if (trimmed.contains("youtube.com/embed/")) {
+            return trimmed;
+        }
+        var m = java.util.regex.Pattern.compile("(?:youtube\\.com/watch\\?v=|youtu\\.be/|youtube\\.com/shorts/)([a-zA-Z0-9_-]{11})").matcher(trimmed);
+        if (m.find()) {
+            return "https://www.youtube.com/embed/" + m.group(1);
+        }
+        return trimmed;
     }
 
     public Optional<Movie> updateMovie(Long id, Movie updated) {
@@ -333,7 +360,8 @@ public class MovieCatalogService {
                 .duration(duration)
                 .price(price)
                 .rating(4.8)
-                .year(2025)
+                .year(2026)
+                .releaseDate("2026-05-22")
                 .aiPick(true)
                 .synopsis(synopsis)
                 .suggestedSeats(List.of("C3", "C4"))
@@ -342,6 +370,10 @@ public class MovieCatalogService {
                 .occupancyRate(85)
                 .showtimes("1:00 PM, 4:30 PM, 8:00 PM")
                 .posterUrl("https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop")
+                .trailerUrl("https://www.youtube.com/embed/zSWdZVtXT7E")
+                .director("Visionary Director")
+                .cast("Leading Cast")
+                .ageRating("PG-13")
                 .build();
     }
 

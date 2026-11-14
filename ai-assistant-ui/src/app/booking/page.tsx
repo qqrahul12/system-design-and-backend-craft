@@ -1706,7 +1706,7 @@ REASON: <1 sentence why it matches>`
                 className="flex items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-5 py-3 text-xs font-bold text-amber-300 hover:bg-amber-500/20 transition active:scale-95"
               >
                 <UtensilsCrossed className="h-4 w-4 text-amber-400" />
-                Order Gourmet F&B to Seat {bookingConfirmation.seats[0]}
+                Order Gourmet F&B ({bookingConfirmation.seats.length > 1 ? `Seats ${bookingConfirmation.seats.join(', ')}` : `Seat ${bookingConfirmation.seats[0]}`})
               </Link>
             </div>
           </div>

@@ -56,6 +56,16 @@ interface ConcessionCombo {
   matchedGenre: string
 }
 
+interface UserTicket {
+  ticketId: string
+  movieTitle: string
+  showTime?: string
+  format?: string
+  auditorium?: string
+  seats: string[]
+  status?: string
+}
+
 const GENRES = ['Sci-Fi', 'Action', 'Drama', 'Epic', 'Horror', 'Romance']
 
 function ConcessionsContent() {
@@ -76,6 +86,10 @@ function ConcessionsContent() {
   const [cart, setCart] = useState<Record<string, number>>({})
   const [isLoadingCombos, setIsLoadingCombos] = useState(false)
   const [addedNotice, setAddedNotice] = useState<string | null>(null)
+
+  // Active Movie Passes & Seat Selector State
+  const [userTickets, setUserTickets] = useState<UserTicket[]>([])
+  const [selectedTicketId, setSelectedTicketId] = useState<string | null>(null)
 
   // Checkout & Live Kitchen Tracker State
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false)
@@ -139,7 +153,7 @@ function ConcessionsContent() {
     fetchMenu()
     fetchCombos(selectedGenre, partySize)
     fetchOrders()
-    detectTicketSeat()
+    fetchTickets()
     fetchWallet()
 
     // SSE Stream for Real-Time Kitchen Order Updates
@@ -195,20 +209,94 @@ function ConcessionsContent() {
     }
   }, [])
 
-  const detectTicketSeat = async () => {
-    if (seatsParam) return
+  const fetchTickets = async () => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/tickets`)
+      let list: UserTicket[] = []
       if (res.ok) {
-        const tickets = await res.json()
-        if (Array.isArray(tickets) && tickets.length > 0) {
-          const latest = tickets[tickets.length - 1]
-          if (latest.seats && latest.seats.length > 0) {
-            setDeliverySeat(`${latest.auditorium || 'Auditorium 1'}, Seat ${latest.seats[0]}`)
+        const raw = await res.json()
+        if (Array.isArray(raw)) {
+          list = raw
+        }
+      }
+
+      // If query parameters provided (e.g. redirected from booking confirmation)
+      if (movieParam && seatsParam) {
+        const parsedSeats = seatsParam.split(',').map((s) => s.trim()).filter(Boolean)
+        const match = list.find((t) => t.movieTitle.toLowerCase() === movieParam.toLowerCase())
+        if (match) {
+          setSelectedTicketId(match.ticketId)
+        } else {
+          const synth: UserTicket = {
+            ticketId: `PASS-URL-${Date.now().toString().slice(-4)}`,
+            movieTitle: movieParam,
+            showTime: 'Current Screening',
+            format: 'IMAX 70mm',
+            auditorium: auditoriumParam || 'IMAX 70mm Auditorium 1',
+            seats: parsedSeats,
+            status: 'ISSUED',
+          }
+          list = [synth, ...list]
+          setSelectedTicketId(synth.ticketId)
+        }
+        const aud = auditoriumParam || match?.auditorium || 'Auditorium 1'
+        if (parsedSeats.length === 1) {
+          setDeliverySeat(`${aud}, Seat ${parsedSeats[0]}`)
+        } else if (parsedSeats.length > 1) {
+          setDeliverySeat(`${aud}, Seats ${parsedSeats.join(', ')}`)
+        }
+      } else if (list.length > 0) {
+        const latest = list[list.length - 1]
+        setSelectedTicketId(latest.ticketId)
+        const aud = latest.auditorium || 'Auditorium 1'
+        if (latest.seats && latest.seats.length > 0) {
+          if (latest.seats.length === 1) {
+            setDeliverySeat(`${aud}, Seat ${latest.seats[0]}`)
+          } else {
+            setDeliverySeat(`${aud}, Seats ${latest.seats.join(', ')}`)
           }
         }
       }
-    } catch {}
+      setUserTickets(list)
+    } catch (err) {
+      console.warn('Failed to fetch user tickets:', err)
+    }
+  }
+
+  const handleSelectTicket = (ticket: UserTicket) => {
+    setSelectedTicketId(ticket.ticketId)
+    const aud = ticket.auditorium || 'Auditorium 1'
+    if (ticket.seats && ticket.seats.length > 0) {
+      if (ticket.seats.length === 1) {
+        setDeliverySeat(`${aud}, Seat ${ticket.seats[0]}`)
+      } else {
+        setDeliverySeat(`${aud}, Seats ${ticket.seats.join(', ')}`)
+      }
+    }
+
+    // Auto-harmonize culinary genre to selected movie
+    const title = ticket.movieTitle.toLowerCase()
+    let g = 'Action'
+    if (title.includes('dune') || title.includes('interstellar') || title.includes('sci-fi') || title.includes('tron') || title.includes('matrix')) {
+      g = 'Sci-Fi'
+    } else if (title.includes('oppenheimer') || title.includes('drama') || title.includes('godfather')) {
+      g = 'Drama'
+    } else if (title.includes('horror') || title.includes('alien') || title.includes('conjuring') || title.includes('nosferatu')) {
+      g = 'Horror'
+    } else if (title.includes('gladiator') || title.includes('batman') || title.includes('wick') || title.includes('avengers')) {
+      g = 'Action'
+    } else if (title.includes('epic') || title.includes('lord of the rings')) {
+      g = 'Epic'
+    } else if (title.includes('romance') || title.includes('love')) {
+      g = 'Romance'
+    }
+    handleGenreChange(g)
+    showNotice(`Active pass switched to "${ticket.movieTitle}". F&B pairings recalculated.`)
+  }
+
+  const handleSelectSeatDestination = (destination: string) => {
+    setDeliverySeat(destination)
+    showNotice(`Delivery destination set to: ${destination}`)
   }
 
   const fetchWallet = async () => {
@@ -436,6 +524,8 @@ function ConcessionsContent() {
   const cartTax = Math.round(cartSubtotal * 0.08 * 100) / 100
   const cartTotal = Math.round((cartSubtotal + cartTax) * 100) / 100
 
+  const activeTicket = userTickets.find((t) => t.ticketId === selectedTicketId) || (userTickets.length > 0 ? userTickets[0] : null)
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">
       {/* Toast Notification */}
@@ -639,6 +729,155 @@ function ConcessionsContent() {
         </div>
       )}
 
+      {/* Active Theatrical Pass & Seat Delivery Destination Pod */}
+      <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/20 via-zinc-900 to-zinc-950 p-5 space-y-4 shadow-xl">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800/80 pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
+              <Ticket className="h-4 w-4" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-bold text-white">Active Theatrical Pass & Seat Delivery</h3>
+                <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-semibold text-emerald-400 border border-emerald-500/20">
+                  Seat-Connected
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400">
+                Gourmet treats, chef bites, and craft beverages are delivered directly to your cup holder before the show begins.
+              </p>
+            </div>
+          </div>
+
+          {userTickets.length > 1 && (
+            <div className="flex items-center gap-1.5 text-xs text-zinc-400">
+              <span>Multiple Bookings:</span>
+              <span className="font-bold text-amber-400">{userTickets.length} Passes Active</span>
+            </div>
+          )}
+        </div>
+
+        {/* Multiple Bookings Switcher (if user has multiple tickets) */}
+        {userTickets.length > 1 && (
+          <div className="space-y-1.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              Switch Active Booking:
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {userTickets.map((t) => {
+                const isSelected = activeTicket?.ticketId === t.ticketId
+                return (
+                  <button
+                    key={t.ticketId}
+                    type="button"
+                    onClick={() => handleSelectTicket(t)}
+                    className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold border transition-all ${
+                      isSelected
+                        ? 'bg-amber-500/20 border-amber-500 text-amber-200 shadow-md shadow-amber-500/10 ring-1 ring-amber-400'
+                        : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white hover:border-zinc-700'
+                    }`}
+                  >
+                    <Ticket className="h-3.5 w-3.5 text-amber-400" />
+                    <span>{t.movieTitle}</span>
+                    <span className="text-[10px] text-zinc-500 font-mono">
+                      ({t.seats && t.seats.length > 0 ? t.seats.join(', ') : 'VIP'})
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* Active Pass Details & Seat Destination Selector */}
+        {activeTicket ? (
+          <div className="rounded-xl border border-zinc-800/80 bg-zinc-900/60 p-4 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+              <div>
+                <span className="font-bold text-white text-sm">{activeTicket.movieTitle}</span>
+                <span className="text-zinc-500 mx-2">•</span>
+                <span className="text-zinc-400">{activeTicket.auditorium || 'Auditorium 1'}</span>
+                <span className="text-zinc-500 mx-2">•</span>
+                <span className="text-zinc-400">{activeTicket.showTime || 'Today'}</span>
+                {activeTicket.format && (
+                  <span className="ml-2 rounded bg-purple-500/20 px-1.5 py-0.5 text-[10px] font-mono text-purple-300 border border-purple-500/30">
+                    {activeTicket.format}
+                  </span>
+                )}
+              </div>
+              <div className="text-xs text-zinc-400">
+                Current Delivery Target: <strong className="text-amber-400 font-mono">{deliverySeat}</strong>
+              </div>
+            </div>
+
+            <div className="space-y-1.5 pt-1">
+              <label className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400 block">
+                Select Delivery Destination for this Order:
+              </label>
+              <div className="flex flex-wrap gap-2">
+                {activeTicket.seats && activeTicket.seats.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() =>
+                      handleSelectSeatDestination(
+                        `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                      )
+                    }
+                    className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
+                      deliverySeat ===
+                      `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                        ? 'bg-amber-500 text-black border-amber-400 font-bold shadow-sm shadow-amber-500/30'
+                        : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white'
+                    }`}
+                  >
+                    👥 All Booked Seats ({activeTicket.seats.join(', ')})
+                  </button>
+                )}
+
+                {activeTicket.seats &&
+                  activeTicket.seats.map((seat) => {
+                    const fullTarget = `${activeTicket.auditorium || 'Auditorium 1'}, Seat ${seat}`
+                    const isSelected = deliverySeat === fullTarget
+                    return (
+                      <button
+                        key={seat}
+                        type="button"
+                        onClick={() => handleSelectSeatDestination(fullTarget)}
+                        className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
+                          isSelected
+                            ? 'bg-amber-500 text-black border-amber-400 font-bold shadow-sm shadow-amber-500/30'
+                            : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white'
+                        }`}
+                      >
+                        💺 Seat {seat}
+                      </button>
+                    )
+                  })}
+
+                <button
+                  type="button"
+                  onClick={() => handleSelectSeatDestination('Express VIP Pickup Counter')}
+                  className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
+                    deliverySeat === 'Express VIP Pickup Counter'
+                      ? 'bg-amber-500 text-black border-amber-400 font-bold shadow-sm shadow-amber-500/30'
+                      : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white'
+                  }`}
+                >
+                  🛎️ Express VIP Pickup Counter
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="flex items-center justify-between text-xs text-zinc-400 p-3 rounded-xl bg-zinc-900 border border-zinc-800">
+            <span>No active tickets found in session. Destination defaults to Express VIP Counter.</span>
+            <Link href="/booking" className="text-purple-400 hover:underline font-semibold">
+              Book Tickets First &rarr;
+            </Link>
+          </div>
+        )}
+      </div>
+
       {/* Genre Selector for AI Recommendations */}
       <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -830,10 +1069,67 @@ function ConcessionsContent() {
                 </div>
 
                 {/* Delivery Seat Selector */}
-                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-1.5">
-                  <label className="text-xs font-semibold text-zinc-300 block">
-                    Theater Seat Delivery Destination:
-                  </label>
+                <div className="rounded-xl border border-zinc-800 bg-zinc-950 p-3.5 space-y-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-xs font-semibold text-zinc-300 block">
+                      Theater Seat Delivery Destination:
+                    </label>
+                    <span className="text-[10px] text-amber-400 font-mono">In-Seat Service</span>
+                  </div>
+
+                  {/* Quick Seat Chips from active pass */}
+                  {activeTicket && activeTicket.seats && activeTicket.seats.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5 pb-1">
+                      {activeTicket.seats.length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            setDeliverySeat(
+                              `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                            )
+                          }
+                          className={`text-[10px] px-2 py-0.5 rounded border transition ${
+                            deliverySeat ===
+                            `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                              ? 'bg-amber-500 text-black border-amber-400 font-bold'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          All ({activeTicket.seats.join(', ')})
+                        </button>
+                      )}
+                      {activeTicket.seats.map((seat) => {
+                        const fullTarget = `${activeTicket.auditorium || 'Auditorium 1'}, Seat ${seat}`
+                        const isSelected = deliverySeat === fullTarget
+                        return (
+                          <button
+                            key={seat}
+                            type="button"
+                            onClick={() => setDeliverySeat(fullTarget)}
+                            className={`text-[10px] px-2 py-0.5 rounded border transition ${
+                              isSelected
+                                ? 'bg-amber-500 text-black border-amber-400 font-bold'
+                                : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                            }`}
+                          >
+                            Seat {seat}
+                          </button>
+                        )
+                      })}
+                      <button
+                        type="button"
+                        onClick={() => setDeliverySeat('Express VIP Pickup Counter')}
+                        className={`text-[10px] px-2 py-0.5 rounded border transition ${
+                          deliverySeat === 'Express VIP Pickup Counter'
+                            ? 'bg-amber-500 text-black border-amber-400 font-bold'
+                            : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                        }`}
+                      >
+                        VIP Counter
+                      </button>
+                    </div>
+                  )}
+
                   <input
                     type="text"
                     value={deliverySeat}
