@@ -1,5 +1,8 @@
 package com.skills.ai.mcp;
 
+import com.skills.ai.concessions.ConcessionCombo;
+import com.skills.ai.concessions.ConcessionItem;
+import com.skills.ai.concessions.ConcessionsService;
 import com.skills.ai.rag.InMemoryVectorStore;
 import com.skills.ai.rag.RagService;
 import lombok.RequiredArgsConstructor;
@@ -22,6 +25,7 @@ public class McpToolRegistry {
 
     private final RagService ragService;
     private final InMemoryVectorStore vectorStore;
+    private final ConcessionsService concessionsService;
 
     private final Map<String, McpToolDefinition> toolDefinitions = new HashMap<>();
     private final Map<String, Function<Map<String, Object>, McpToolDefinition.CallResult>> toolExecutors = new HashMap<>();
@@ -209,6 +213,52 @@ public class McpToolRegistry {
                     return McpToolDefinition.CallResult.text(String.format(
                             "Compliance Verified: %d seats for '%s' approved. Age criteria met (%d yrs). No blacklisted entities detected.",
                             count, movie, age));
+                }
+        );
+
+        // 8. Concessions Menu Tool
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("get_concessions_menu")
+                        .description("Lists CineMind gourmet F&B items with pricing, calories, and dietary certifications.")
+                        .inputSchema(Map.of("type", "object"))
+                        .build(),
+                args -> {
+                    List<ConcessionItem> items = concessionsService.getMenu();
+                    StringBuilder sb = new StringBuilder("CineMind Concessions Menu:\n");
+                    for (ConcessionItem item : items) {
+                        sb.append(String.format("• %s %s - $%.2f (%d cal, %s)\n",
+                                item.icon(), item.name(), item.price(), item.calories(), String.join(", ", item.dietary())));
+                    }
+                    return McpToolDefinition.CallResult.text(sb.toString().trim());
+                }
+        );
+
+        // 9. Recommend Concessions Combos Tool
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("recommend_concessions")
+                        .description("AI-curated food & beverage sensory combos tailored to movie genre and party size.")
+                        .inputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "genre", Map.of("type", "string", "description", "Movie genre e.g. Sci-Fi, Action, Drama"),
+                                        "partySize", Map.of("type", "number", "description", "Number of patrons")
+                                ),
+                                "required", List.of("genre")
+                        ))
+                        .build(),
+                args -> {
+                    String genre = (String) args.getOrDefault("genre", "Sci-Fi");
+                    Number party = (Number) args.getOrDefault("partySize", 2);
+                    List<ConcessionCombo> combos = concessionsService.recommendCombos(genre, party.intValue());
+                    if (combos.isEmpty()) {
+                        return McpToolDefinition.CallResult.text("No specific combo for genre: " + genre);
+                    }
+                    ConcessionCombo c = combos.get(0);
+                    return McpToolDefinition.CallResult.text(String.format(
+                            "Recommended Combo: %s | Price: $%.2f (Save $%.2f) | Rationale: %s",
+                            c.name(), c.comboPrice(), c.savings(), c.aiRationale()));
                 }
         );
     }

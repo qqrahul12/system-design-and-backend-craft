@@ -2,6 +2,11 @@ package com.skills.ai.agent;
 
 import com.skills.ai.mcp.McpToolDefinition;
 import com.skills.ai.mcp.McpToolRegistry;
+import com.skills.ai.session.SessionStoreService;
+import com.skills.ai.session.SessionSummary;
+import com.skills.ai.telemetry.TraceCollectorService;
+import com.skills.ai.telemetry.TraceRecord;
+import com.skills.ai.telemetry.TraceSpan;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,8 +25,9 @@ import java.util.*;
  * 2. Catalog & Schedule Specialist (Movie search & showtime curator)
  * 3. Seat Inventory Strategist (Auditorium layout & view angle optimizer)
  * 4. Theater Policy & RAG Specialist (Vector semantic retrieval for rules)
- * 5. Pricing & Billing Specialist (Discounts & idempotent payments)
- * 6. Compliance & Quality Critic (Constraint verification & safety audit)
+ * 5. Gourmet Concessions Specialist (F&B sensory pairings & combos)
+ * 6. Pricing & Billing Specialist (Discounts & idempotent payments)
+ * 7. Compliance & Quality Critic (Constraint verification & safety audit)
  */
 @Slf4j
 @Service
@@ -30,14 +36,20 @@ public class MultiAgentOrchestratorService {
     private final McpToolRegistry toolRegistry;
     private final ChatClient geminiChatClient;
     private final ChatClient groqChatClient;
+    private final TraceCollectorService traceCollector;
+    private final SessionStoreService sessionStore;
 
     public MultiAgentOrchestratorService(
             McpToolRegistry toolRegistry,
             @Qualifier("geminiChatClient") ChatClient geminiChatClient,
-            @Qualifier("groqChatClient") ChatClient groqChatClient) {
+            @Qualifier("groqChatClient") ChatClient groqChatClient,
+            TraceCollectorService traceCollector,
+            SessionStoreService sessionStore) {
         this.toolRegistry = toolRegistry;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
+        this.traceCollector = traceCollector;
+        this.sessionStore = sessionStore;
     }
 
     public List<AgentPersona> getAgentRoster() {
@@ -77,6 +89,15 @@ public class MultiAgentOrchestratorService {
                         "Queries internal CineMind vector store for concessions rules, cancellation/refund policies, and VIP privileges.",
                         List.of("rag_knowledge_search"),
                         "Gemini Embedding + RAG"
+                ),
+                new AgentPersona(
+                        "concessions",
+                        "Gourmet Concessions Specialist",
+                        "🍿",
+                        "F&B & Sensory Pairing",
+                        "Curates cinema food, beverage, and combo pairings matched to movie genre and dietary preferences.",
+                        List.of("get_concessions_menu", "recommend_concessions"),
+                        "Groq LPU (Sub-second)"
                 ),
                 new AgentPersona(
                         "billing",
@@ -201,7 +222,28 @@ public class MultiAgentOrchestratorService {
                 Instant.now()
         ));
 
-        // Step 5: Pricing & Billing Agent - Promo Code & Payment Processing
+        // Step 5: Gourmet Concessions Agent - Sensory Pairings & Combos
+        long fStart = System.currentTimeMillis();
+        String movieGenre = searchTarget.equalsIgnoreCase("Interstellar") || searchTarget.equalsIgnoreCase("Dune") ? "Sci-Fi" : "Drama";
+        Map<String, Object> concessionsInput = Map.of("genre", movieGenre, "partySize", 2);
+        McpToolDefinition.CallResult concessionsResult = toolRegistry.executeTool("recommend_concessions", concessionsInput);
+        String concessionsText = concessionsResult.getContent().isEmpty() ? "" : concessionsResult.getContent().get(0).getText();
+        steps.add(new AgentExecutionStep(
+                stepCounter++,
+                "concessions",
+                "Gourmet Concessions Specialist",
+                "🍿",
+                "Executing MCP Tool: recommend_concessions",
+                "Curating sensory beverage and artisanal snack pairings tailored to " + movieGenre + " narrative tone...",
+                "recommend_concessions",
+                concessionsInput,
+                concessionsText,
+                concessionsResult.isError(),
+                System.currentTimeMillis() - fStart,
+                Instant.now()
+        ));
+
+        // Step 6: Pricing & Billing Agent - Promo Code & Payment Processing
         long bStart = System.currentTimeMillis();
         String promoCode = objective.toUpperCase().contains("STUDENT") ? "STUDENT10" :
                 (objective.toUpperCase().contains("VIP") ? "VIP50" : "CINE20");
@@ -229,7 +271,7 @@ public class MultiAgentOrchestratorService {
                 Instant.now()
         ));
 
-        // Step 6: Critic & Compliance Agent - Quality Audit
+        // Step 7: Critic & Compliance Agent - Quality Audit
         long crStart = System.currentTimeMillis();
         Map<String, Object> auditInput = Map.of("movieTitle", searchTarget, "seatCount", 2, "userAge", 22);
         McpToolDefinition.CallResult auditResult = toolRegistry.executeTool("audit_compliance", auditInput);
@@ -249,15 +291,16 @@ public class MultiAgentOrchestratorService {
                 Instant.now()
         ));
 
-        // Step 7: Supervisor Synthesis via LLM
+        // Step 8: Supervisor Synthesis via LLM
         String finalSynthesis = synthesizeWithLlm(chatClient, objective, steps, modelName);
 
-        // Generate visual DAG graph nodes and edges
+        // Generate visual DAG graph nodes and edges across 7 agents
         List<AgentGraphNode> nodes = List.of(
                 new AgentGraphNode("supervisor", "Supervisor", "👑", "Planner & Dispatcher", "COMPLETED"),
                 new AgentGraphNode("catalog", "Catalog Agent", "🎥", "Movie Inventory", "COMPLETED"),
                 new AgentGraphNode("inventory", "Inventory Agent", "💺", "Seats & Locking", "COMPLETED"),
                 new AgentGraphNode("rag_policy", "Policy RAG Agent", "📚", "Knowledge Base", "COMPLETED"),
+                new AgentGraphNode("concessions", "Concessions Agent", "🍿", "F&B Pairings", "COMPLETED"),
                 new AgentGraphNode("billing", "Billing Agent", "💳", "Promos & Payments", "COMPLETED"),
                 new AgentGraphNode("critic", "Critic Agent", "⚖️", "Audit & Verification", "COMPLETED")
         );
@@ -266,12 +309,60 @@ public class MultiAgentOrchestratorService {
                 new AgentGraphEdge("supervisor", "catalog", "Dispatches show query"),
                 new AgentGraphEdge("catalog", "inventory", "Provides show context"),
                 new AgentGraphEdge("inventory", "rag_policy", "Requests policy validation"),
-                new AgentGraphEdge("rag_policy", "billing", "Confirms concessions & terms"),
+                new AgentGraphEdge("rag_policy", "concessions", "Validates dietary rules"),
+                new AgentGraphEdge("concessions", "billing", "Bundles gourmet combos"),
                 new AgentGraphEdge("billing", "critic", "Submits transaction for audit"),
                 new AgentGraphEdge("critic", "supervisor", "Signs off on fulfillment")
         );
 
         long totalDurationMs = System.currentTimeMillis() - startTime;
+
+        // --- Cross-Cutting Telemetry Trace Recording ---
+        String traceId = "trc-" + UUID.randomUUID().toString().substring(0, 8);
+        List<TraceSpan> spans = new ArrayList<>();
+        Instant spanBase = Instant.ofEpochMilli(startTime);
+        for (AgentExecutionStep s : steps) {
+            spans.add(new TraceSpan(
+                    traceId,
+                    "spn-" + s.stepIndex(),
+                    s.stepIndex() > 1 ? "spn-" + (s.stepIndex() - 1) : null,
+                    s.agentId() + "_" + (s.toolName() != null ? s.toolName() : "reasoning"),
+                    "ai-assistant-service",
+                    s.timestamp(),
+                    Math.max(1, s.durationMs()),
+                    s.isError() ? "ERROR" : "OK",
+                    Map.of(
+                            "agent", s.agentName(),
+                            "action", s.action(),
+                            "tool", s.toolName() != null ? s.toolName() : "none"
+                    )
+            ));
+        }
+        traceCollector.recordTrace(new TraceRecord(
+                traceId,
+                "multi_agent_swarm_execution",
+                spanBase,
+                totalDurationMs,
+                "OK",
+                spans.size(),
+                spans
+        ));
+
+        // --- Multi-Turn Session Persistence ---
+        String sessionId = "ses-swarm-" + UUID.randomUUID().toString().substring(0, 8);
+        sessionStore.saveSession(new SessionSummary(
+                sessionId,
+                objective.length() > 40 ? objective.substring(0, 37) + "..." : objective,
+                "SWARM_ORCHESTRATION",
+                Instant.now(),
+                Instant.now(),
+                steps.size(),
+                "Completed 7-agent DAG execution in " + totalDurationMs + "ms. Model: " + modelName,
+                List.of(
+                        Map.of("objective", objective),
+                        Map.of("synthesis", finalSynthesis.substring(0, Math.min(200, finalSynthesis.length())))
+                )
+        ));
 
         return new OrchestrationResponse(
                 objective,

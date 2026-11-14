@@ -10,6 +10,9 @@ import {
   MessageSquare,
   Sparkles,
   Zap,
+  UtensilsCrossed,
+  Ticket,
+  Activity,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -18,6 +21,7 @@ interface NavItem {
   label: string
   icon: React.ComponentType<{ className?: string }>
   description: string
+  badge?: string
 }
 
 const navItems: NavItem[] = [
@@ -28,6 +32,20 @@ const navItems: NavItem[] = [
     description: 'Seat layout & reservations',
   },
   {
+    href: '/concessions',
+    label: 'Gourmet F&B Studio',
+    icon: UtensilsCrossed,
+    description: 'AI combos & genre pairings',
+    badge: 'NEW',
+  },
+  {
+    href: '/tickets',
+    label: 'Pass Wallet & Gate Scan',
+    icon: Ticket,
+    description: 'HMAC QR gate check-in',
+    badge: 'NEW',
+  },
+  {
     href: '/documents',
     label: 'Document Intelligence',
     icon: FileText,
@@ -35,9 +53,16 @@ const navItems: NavItem[] = [
   },
   {
     href: '/agent',
-    label: 'MCP Agent Console',
+    label: 'Multi-Agent Swarm',
     icon: Bot,
-    description: 'JSON-RPC Tool discovery',
+    description: '7-Agent DAG & WebSocket',
+  },
+  {
+    href: '/tracing',
+    label: 'APM Waterfall Traces',
+    icon: Activity,
+    description: 'OpenTelemetry spans & latency',
+    badge: 'NEW',
   },
   {
     href: '/analytics',
@@ -133,14 +158,21 @@ export default function Sidebar() {
                       <Icon className="h-3.5 w-3.5 shrink-0" />
                     </div>
                     <div className="min-w-0">
-                      <p
-                        className={clsx(
-                          'truncate font-semibold',
-                          isActive ? 'text-white' : '',
+                      <div className="flex items-center gap-1.5">
+                        <p
+                          className={clsx(
+                            'truncate font-semibold',
+                            isActive ? 'text-white' : '',
+                          )}
+                        >
+                          {item.label}
+                        </p>
+                        {item.badge && (
+                          <span className="rounded bg-gradient-to-r from-purple-500 to-indigo-500 px-1.5 py-0.2 text-[9px] font-bold text-white shadow-sm">
+                            {item.badge}
+                          </span>
                         )}
-                      >
-                        {item.label}
-                      </p>
+                      </div>
                       <p className="mt-0.5 truncate text-[10px] text-[#555] group-hover:text-[#777]">
                         {item.description}
                       </p>
