@@ -14,4 +14,8 @@ public record SplitUser(
     public String getFullName() {
         return firstName + " " + lastName;
     }
+
+    public String getName() {
+        return firstName + " " + lastName;
+    }
 }

@@ -29,10 +29,56 @@ const API_BASE =
 
 interface SplitUser {
   id: string
-  name: string
+  name?: string
+  fullName?: string
+  firstName?: string
+  lastName?: string
   email: string
+  phoneNumber?: string
   avatarUrl?: string
 }
+
+const DEFAULT_SQUAD_USERS: SplitUser[] = [
+  {
+    id: 'usr-marcus',
+    name: 'Marcus Kane',
+    fullName: 'Marcus Kane',
+    firstName: 'Marcus',
+    lastName: 'Kane',
+    email: 'marcus.kane@cinemind.io',
+    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
+  },
+  {
+    id: 'usr-alex',
+    name: 'Alex Mercer',
+    fullName: 'Alex Mercer',
+    firstName: 'Alex',
+    lastName: 'Mercer',
+    email: 'alex.mercer@cinemind.io',
+    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+  },
+  {
+    id: 'usr-elena',
+    name: 'Elena Rostova',
+    fullName: 'Elena Rostova',
+    firstName: 'Elena',
+    lastName: 'Rostova',
+    email: 'elena.rostova@cinemind.io',
+    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
+  },
+  {
+    id: 'usr-chloe',
+    name: 'Chloe Bennett',
+    fullName: 'Chloe Bennett',
+    firstName: 'Chloe',
+    lastName: 'Bennett',
+    email: 'chloe.bennett@cinemind.io',
+    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
+  },
+]
+
+const getUserDisplayName = (u: SplitUser) =>
+  u.fullName || u.name || `${u.firstName || ''} ${u.lastName || ''}`.trim() || u.email
 
 interface SplitGroup {
   id: string
@@ -65,7 +111,7 @@ interface SplitExpense {
 
 export default function SplitPage() {
   const [groups, setGroups] = useState<SplitGroup[]>([])
-  const [users, setUsers] = useState<SplitUser[]>([])
+  const [users, setUsers] = useState<SplitUser[]>(DEFAULT_SQUAD_USERS)
   const [expenses, setExpenses] = useState<SplitExpense[]>([])
   const [balances, setBalances] = useState<Record<string, number>>({})
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL')
@@ -78,7 +124,7 @@ export default function SplitPage() {
   const [expenseName, setExpenseName] = useState('')
   const [expenseTotal, setExpenseTotal] = useState('')
   const [selectedPayerId, setSelectedPayerId] = useState('usr-marcus')
-  const [selectedMembers, setSelectedMembers] = useState<string[]>(['usr-marcus', 'usr-alex', 'usr-sarah'])
+  const [selectedMembers, setSelectedMembers] = useState<string[]>(['usr-marcus', 'usr-alex', 'usr-elena', 'usr-chloe'])
   const [isCreatingExpense, setIsCreatingExpense] = useState(false)
 
   const showNotification = (msg: string) => {
@@ -96,7 +142,12 @@ export default function SplitPage() {
         fetch(`${API_BASE}/api/v1/split/balances`),
       ])
 
-      if (uRes.ok) setUsers(await uRes.json())
+      if (uRes.ok) {
+        const fetchedUsers: SplitUser[] = await uRes.json()
+        if (fetchedUsers && fetchedUsers.length > 0) {
+          setUsers(fetchedUsers)
+        }
+      }
       if (gRes.ok) setGroups(await gRes.json())
       if (eRes.ok) setExpenses(await eRes.json())
       if (bRes.ok) setBalances(await bRes.json())
@@ -504,7 +555,7 @@ export default function SplitPage() {
                 >
                   {users.map((u) => (
                     <option key={u.id} value={u.id}>
-                      {u.name} ({u.email})
+                      {getUserDisplayName(u)} ({u.email})
                     </option>
                   ))}
                 </select>
@@ -514,9 +565,10 @@ export default function SplitPage() {
                 <label className="text-xs font-semibold text-zinc-300 uppercase tracking-wider block mb-2">
                   Select Squad Members to Split With ({selectedMembers.length})
                 </label>
-                <div className="grid grid-cols-2 gap-2 max-h-40 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-1">
                   {users.map((u) => {
                     const isChecked = selectedMembers.includes(u.id)
+                    const displayName = getUserDisplayName(u)
                     return (
                       <button
                         type="button"
@@ -524,12 +576,28 @@ export default function SplitPage() {
                         onClick={() => toggleMemberSelection(u.id)}
                         className={`flex items-center justify-between p-2.5 rounded-xl border text-left text-xs font-semibold transition ${
                           isChecked
-                            ? 'border-indigo-500 bg-indigo-600/20 text-white'
-                            : 'border-zinc-800 bg-zinc-950 text-zinc-400'
+                            ? 'border-indigo-500 bg-indigo-600/20 text-white shadow-sm shadow-indigo-600/20'
+                            : 'border-zinc-800 bg-zinc-950 text-zinc-400 hover:border-zinc-700'
                         }`}
                       >
-                        <span className="truncate">{u.name}</span>
-                        {isChecked && <CheckCircle2 className="h-3.5 w-3.5 text-indigo-400 shrink-0" />}
+                        <div className="flex items-center gap-2 min-w-0">
+                          {u.avatarUrl ? (
+                            <img
+                              src={u.avatarUrl}
+                              alt={displayName}
+                              className="h-6 w-6 rounded-full object-cover shrink-0 border border-zinc-700"
+                            />
+                          ) : (
+                            <div className="h-6 w-6 rounded-full bg-indigo-500/20 flex items-center justify-center text-[10px] text-indigo-300 font-bold shrink-0">
+                              {displayName.charAt(0)}
+                            </div>
+                          )}
+                          <div className="truncate">
+                            <p className="truncate text-xs font-semibold text-zinc-200">{displayName}</p>
+                            <p className="truncate text-[10px] text-zinc-500">{u.email}</p>
+                          </div>
+                        </div>
+                        {isChecked && <CheckCircle2 className="h-4 w-4 text-indigo-400 shrink-0 ml-1.5" />}
                       </button>
                     )
                   })}
