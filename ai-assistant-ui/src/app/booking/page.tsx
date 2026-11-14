@@ -401,15 +401,17 @@ export default function BookingPage() {
     }
   }
 
-  // AI Agent Natural Language Movie Search with fast client timeout & fallback
-  const handleAiAgentSearch = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!aiSearchPrompt.trim() || isAiSearching) return
+  // Unified Omnibar AI Agent Natural Language Movie Search with fast client timeout & fallback
+  const handleAiAgentSearch = async (e?: React.FormEvent, promptOverride?: string) => {
+    if (e) e.preventDefault()
+    const query = (promptOverride !== undefined ? promptOverride : searchQuery).trim()
+    if (!query || isAiSearching) return
 
     setIsAiSearching(true)
     setAiRecommendation(null)
+    setSearchQuery(query)
 
-    const queryLower = aiSearchPrompt.toLowerCase()
+    const queryLower = query.toLowerCase()
 
     // Smart semantic keyword mapping
     const findBestMatchLocally = () => {
@@ -455,11 +457,38 @@ export default function BookingPage() {
           reason: 'Blade Runner 2049 is the gold standard for atmospheric neo-noir sci-fi and existential questions.'
         }
       }
+      // Batman / Gotham / Crime / Mystery / Noir
+      if (queryLower.includes('batman') || queryLower.includes('gotham') || queryLower.includes('dark') || queryLower.includes('crime') || queryLower.includes('detective') || queryLower.includes('mystery')) {
+        const bm = movies.find(m => m.title.toLowerCase().includes('batman'))
+        if (bm) {
+          return {
+            movie: bm,
+            reason: 'The Batman Part II delivers a dark neo-noir detective thriller in rainy, corrupt Gotham City.'
+          }
+        }
+      }
+      // Dream / Heist / Inception
+      if (queryLower.includes('dream') || queryLower.includes('heist') || queryLower.includes('mind') || queryLower.includes('subconscious')) {
+        const inc = movies.find(m => m.title.toLowerCase().includes('inception'))
+        if (inc) {
+          return {
+            movie: inc,
+            reason: 'Inception is a mind-bending architectural dream heist with gravity-defying action.'
+          }
+        }
+      }
 
       // Default highest rated AI pick
+      const textMatch = movies.find(m => m.title.toLowerCase().includes(queryLower) || m.synopsis.toLowerCase().includes(queryLower))
+      if (textMatch) {
+        return {
+          movie: textMatch,
+          reason: `Matched "${query}" with ${textMatch.title} based on genre and thematic synopsis.`
+        }
+      }
       return {
         movie: movies[0] || INITIAL_MOVIES[0],
-        reason: `Matched "${aiSearchPrompt}" with our highest-rated IMAX feature.`
+        reason: `Matched "${query}" with our highest-rated IMAX feature.`
       }
     }
 
@@ -472,7 +501,7 @@ export default function BookingPage() {
         (m) => `${m.title} (Genre: ${m.genre}, Rating: ${m.rating}, Story: ${m.synopsis})`
       ).join(' | ')
 
-      const prompt = `User preference: "${aiSearchPrompt.trim()}". Current movies: ${catalogOverview}.
+      const prompt = `User preference: "${query}". Current movies: ${catalogOverview}.
 Return strictly:
 MATCH: <Exact Movie Title>
 REASON: <1 sentence why it matches>`
@@ -940,121 +969,165 @@ REASON: <1 sentence why it matches>`
         </div>
       )}
 
-      {/* AI Movie Concierge Agent Bar */}
+      {/* Unified Smart Search & AI Concierge Omnibar */}
       <div
-        className="rounded-xl border p-5 space-y-3"
+        className="rounded-2xl border p-5 space-y-4 shadow-xl"
         style={{
-          background: 'linear-gradient(145deg, #18112e 0%, #111111 100%)',
+          background: 'linear-gradient(145deg, #16112a 0%, #111113 100%)',
           borderColor: '#7c3aed44',
-          boxShadow: '0 0 24px #7c3aed15',
+          boxShadow: '0 0 28px #7c3aed15',
         }}
       >
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 font-semibold text-sm text-purple-300">
-            <Bot className="h-4 w-4 text-[#a78bfa]" />
-            <span>AI Movie Concierge Agent</span>
-          </div>
-          <span className="text-[11px] text-[#888] font-mono">Autonomous Search & Recommendation</span>
-        </div>
-
-        <form onSubmit={handleAiAgentSearch} className="flex gap-2">
-          <div className="relative flex-1">
-            <Compass className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#7c3aed]" />
-            <input
-              type="text"
-              placeholder="e.g. 'I want something deeply emotional and visual' or 'High energy sci-fi with time travel'..."
-              value={aiSearchPrompt}
-              onChange={(e) => setAiSearchPrompt(e.target.value)}
-              className="w-full rounded-lg pl-10 pr-4 py-2.5 text-sm text-white bg-[#0d0d0d] border border-[#2a2a2a] focus:border-[#7c3aed] outline-none"
-            />
-          </div>
-          <button
-            type="submit"
-            disabled={isAiSearching || !aiSearchPrompt.trim()}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg text-sm font-medium text-white bg-[#7c3aed] hover:bg-[#6d28d9] disabled:opacity-40 transition-all shrink-0 shadow-lg"
-          >
-            {isAiSearching ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" /> Agent Searching...
-              </>
-            ) : (
-              <>
-                <Sparkles className="h-4 w-4" /> Agent Search
-              </>
-            )}
-          </button>
-        </form>
-
-        {aiRecommendation && (
-          <div className="rounded-lg p-3 text-xs bg-[#7c3aed15] border border-[#7c3aed40] text-purple-200 flex items-start gap-2.5 animate-slide-up">
-            <Sparkles className="h-4 w-4 text-[#a78bfa] shrink-0 mt-0.5" />
-            <div className="space-y-0.5">
-              <p className="font-semibold text-white">
-                Agent Match:{' '}
-                <span className="text-[#a78bfa] underline cursor-pointer">
-                  {aiRecommendation.suggestedMovieTitle || 'Custom Recommendation'}
-                </span>{' '}
-                — (Selected & Scrolled to Seat Selection below!)
-              </p>
-              <p className="text-[#ccc] leading-relaxed">{aiRecommendation.reasoning}</p>
+        {/* Top Header of Omnibar */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-purple-600/20 text-purple-400 border border-purple-500/30">
+              <Sparkles className="h-4 w-4 text-purple-400" />
+            </span>
+            <div>
+              <h2 className="text-sm font-bold text-white tracking-tight flex items-center gap-1.5">
+                Smart Catalog Search & AI Concierge
+                <span className="rounded bg-purple-500/20 px-2 py-0.5 text-[10px] font-mono text-purple-300 border border-purple-500/30">
+                  Unified Omnibar
+                </span>
+              </h2>
             </div>
           </div>
-        )}
-      </div>
+          <span className="text-[11px] text-zinc-400 font-mono">
+            Instant Real-Time Filtering & Autonomous Agent Match
+          </span>
+        </div>
 
-      {/* Manual Keyword Search & Filters */}
-      <div
-        className="rounded-xl border p-4 space-y-4"
-        style={{ backgroundColor: '#111111', borderColor: '#222' }}
-      >
-        <div className="flex flex-col sm:flex-row items-center gap-3">
-          {/* Keyword Search */}
-          <div className="relative flex-1 w-full">
-            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#666]" />
+        {/* Single Unified Omnibar Form */}
+        <form onSubmit={(e) => handleAiAgentSearch(e)} className="flex flex-col sm:flex-row gap-2.5">
+          <div className="relative flex-1">
+            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-purple-400" />
             <input
               type="text"
-              placeholder="Search catalog by title, actor, or genre..."
+              placeholder="Search by title, actor, genre, or ask AI (e.g. 'deep emotional sci-fi', 'mind-bending thriller')..."
               value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full rounded-lg pl-10 pr-9 py-2 text-sm text-white bg-[#1a1a1a] border border-[#2a2a2a] focus:border-[#7c3aed] outline-none"
+              onChange={(e) => {
+                setSearchQuery(e.target.value)
+                if (aiRecommendation) setAiRecommendation(null)
+              }}
+              className="w-full rounded-xl pl-10 pr-9 py-3 text-sm text-white bg-[#0d0d0f] border border-zinc-800 focus:border-purple-500 outline-none transition placeholder:text-zinc-500 shadow-inner"
             />
             {searchQuery && (
               <button
-                onClick={() => setSearchQuery('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-[#666] hover:text-white"
+                type="button"
+                onClick={() => {
+                  setSearchQuery('')
+                  setAiRecommendation(null)
+                }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white p-1"
+                title="Clear Search"
               >
                 <X className="h-4 w-4" />
               </button>
             )}
           </div>
 
-          {/* AI Picks Only Toggle */}
-          <button
-            onClick={() => setFilterAiPicksOnly(!filterAiPicksOnly)}
-            className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-medium border transition-all shrink-0 ${
-              filterAiPicksOnly
-                ? 'bg-[#7c3aed20] border-[#7c3aed] text-white shadow-sm'
-                : 'bg-[#1a1a1a] border-[#2a2a2a] text-[#888] hover:text-white'
-            }`}
-          >
-            <Sparkles className={`h-3.5 w-3.5 ${filterAiPicksOnly ? 'text-[#a78bfa]' : 'text-[#666]'}`} />
-            AI Picks Only
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="submit"
+              disabled={isAiSearching || !searchQuery.trim()}
+              className="flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-90 disabled:opacity-40 transition active:scale-95 shrink-0 shadow-lg shadow-purple-600/30"
+            >
+              {isAiSearching ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <span>Agent Matching...</span>
+                </>
+              ) : (
+                <>
+                  <Bot className="h-4 w-4 text-purple-200" />
+                  <span>Ask AI Concierge</span>
+                </>
+              )}
+            </button>
+
+            {/* AI Picks Only Toggle */}
+            <button
+              type="button"
+              onClick={() => setFilterAiPicksOnly(!filterAiPicksOnly)}
+              className={`flex items-center gap-1.5 px-3.5 py-3 rounded-xl text-xs font-semibold border transition shrink-0 ${
+                filterAiPicksOnly
+                  ? 'bg-purple-600/20 border-purple-500 text-purple-200 shadow-sm'
+                  : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Sparkles className={`h-3.5 w-3.5 ${filterAiPicksOnly ? 'text-purple-400' : 'text-zinc-500'}`} />
+              AI Picks
+            </button>
+          </div>
+        </form>
+
+        {/* Quick Inspiration Prompts (1-Click) */}
+        <div className="flex items-center gap-2 flex-wrap text-[11px] text-zinc-400 pt-0.5">
+          <span className="text-zinc-500 font-mono text-[10px] uppercase tracking-wider flex items-center gap-1">
+            <Sparkles className="h-3 w-3 text-purple-400" /> Ideas:
+          </span>
+          {[
+            'Space & Wormhole',
+            'Epic Desert Sci-Fi',
+            'Dark Neo-Noir Detective',
+            'Mind-Bending Dream Heist',
+            'Cyberpunk Neo-Tokyo',
+          ].map((promptText) => (
+            <button
+              key={promptText}
+              type="button"
+              onClick={() => handleAiAgentSearch(undefined, promptText)}
+              className="px-2.5 py-1 rounded-lg bg-zinc-900/80 hover:bg-purple-950/60 border border-zinc-800 hover:border-purple-500/40 text-zinc-300 hover:text-purple-200 transition active:scale-95"
+            >
+              "{promptText}"
+            </button>
+          ))}
         </div>
 
-        {/* Genre Filter Pills */}
-        <div className="flex items-center gap-2 overflow-x-auto pb-1">
-          <span className="text-xs text-[#555] flex items-center gap-1 mr-1">
+        {/* AI Agent Recommendation Callout Banner */}
+        {aiRecommendation && (
+          <div className="rounded-xl p-3.5 text-xs bg-purple-950/40 border border-purple-500/40 text-purple-200 flex items-start justify-between gap-3 animate-slide-up">
+            <div className="flex items-start gap-2.5">
+              <Sparkles className="h-4 w-4 text-purple-400 shrink-0 mt-0.5" />
+              <div className="space-y-0.5">
+                <p className="font-bold text-white">
+                  AI Concierge Match:{' '}
+                  <span className="text-purple-300 underline font-black">
+                    {aiRecommendation.suggestedMovieTitle || 'Custom Recommendation'}
+                  </span>{' '}
+                  <span className="text-[11px] text-emerald-400 font-normal">
+                    — Selected & Scrolled to Seat Selection below!
+                  </span>
+                </p>
+                <p className="text-zinc-300 leading-relaxed text-[11px]">{aiRecommendation.reasoning}</p>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => setAiRecommendation(null)}
+              className="text-zinc-400 hover:text-white p-1"
+              title="Dismiss recommendation"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Genre Filter Pills Row */}
+        <div className="flex items-center gap-2 overflow-x-auto pt-2 border-t border-zinc-800/80">
+          <span className="text-xs text-zinc-500 flex items-center gap-1 mr-1 shrink-0">
             <SlidersHorizontal className="h-3.5 w-3.5" /> Genres:
           </span>
           {GENRES.map((genre) => (
             <button
               key={genre}
+              type="button"
               onClick={() => setSelectedGenre(genre)}
-              className={`px-3 py-1 rounded-full text-xs font-medium transition-all ${
+              className={`px-3 py-1 rounded-full text-xs font-medium transition shrink-0 ${
                 selectedGenre === genre
-                  ? 'bg-[#7c3aed] text-white shadow'
-                  : 'bg-[#181818] border border-[#262626] text-[#777] hover:text-[#bbb]'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                  : 'bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200'
               }`}
             >
               {genre}
