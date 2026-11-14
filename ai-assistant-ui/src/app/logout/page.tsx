@@ -17,8 +17,18 @@ export default function LogoutPage() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
     })
-      .then(() => setDone(true))
-      .catch(() => setDone(true))
+      .then(() => {
+        setDone(true)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('cinemind-auth-changed'))
+        }
+      })
+      .catch(() => {
+        setDone(true)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('cinemind-auth-changed'))
+        }
+      })
   }, [])
 
   return (

@@ -79,10 +79,19 @@ export default function LoginPage() {
 
       if (res.ok) {
         const user = await res.json()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('cinemind-auth-changed'))
+        }
         setStatusMsg(`Welcome back, ${user.fullName}! Redirecting...`)
         setTimeout(() => {
-          router.push('/profile')
-        }, 800)
+          if (user.role === 'EXECUTIVE_ADMIN') {
+            router.push('/admin')
+          } else if (user.role === 'AUDITORIUM_USHER') {
+            router.push('/tickets')
+          } else {
+            router.push('/booking')
+          }
+        }, 600)
       } else {
         setStatusMsg('Login failed. Please verify credentials.')
       }

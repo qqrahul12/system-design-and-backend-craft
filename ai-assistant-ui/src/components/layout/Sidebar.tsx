@@ -24,6 +24,9 @@ import {
   Plus,
   Users,
   User,
+  Key,
+  LogIn,
+  Shield,
 } from 'lucide-react'
 import { clsx } from 'clsx'
 
@@ -38,10 +41,14 @@ interface NavItem {
   icon: React.ComponentType<{ className?: string }>
   description: string
   badge?: string
+  requiresAuth?: boolean
+  allowedRoles?: string[]
 }
 
 interface NavSection {
   title: string
+  requiresAuth?: boolean
+  allowedRoles?: string[]
   items: NavItem[]
 }
 
@@ -54,6 +61,7 @@ const navSections: NavSection[] = [
         label: 'Smart Movie Booking',
         icon: Film,
         description: 'Live seating & reservations',
+        requiresAuth: false,
       },
       {
         href: '/concessions',
@@ -61,6 +69,7 @@ const navSections: NavSection[] = [
         icon: UtensilsCrossed,
         description: 'AI pairings & seat delivery',
         badge: 'NEW',
+        requiresAuth: false,
       },
       {
         href: '/tickets',
@@ -68,17 +77,22 @@ const navSections: NavSection[] = [
         icon: Ticket,
         description: 'HMAC QR gate check-in',
         badge: 'NEW',
+        requiresAuth: true,
+        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'AUDITORIUM_USHER', 'STANDARD_GUEST'],
       },
       {
         href: '/chat',
         label: 'AI Cinema Concierge',
         icon: MessageSquare,
         description: 'Dual Gemini 3.8 + Groq LPU',
+        requiresAuth: false,
       },
     ],
   },
   {
     title: 'Fintech & Social Hub',
+    requiresAuth: true,
+    allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'STANDARD_GUEST'],
     items: [
       {
         href: '/wallet',
@@ -86,6 +100,8 @@ const navSections: NavSection[] = [
         icon: Wallet,
         description: 'Instant top-up & cashback',
         badge: 'VIP',
+        requiresAuth: true,
+        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'STANDARD_GUEST'],
       },
       {
         href: '/split',
@@ -93,17 +109,23 @@ const navSections: NavSection[] = [
         icon: Users,
         description: 'Group bill splitting & settle',
         badge: 'NEW',
+        requiresAuth: true,
+        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'STANDARD_GUEST'],
       },
       {
         href: '/profile',
         label: 'Profile & RBAC Security',
         icon: User,
         description: 'Persona switch & permissions',
+        requiresAuth: true,
+        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'AUDITORIUM_USHER', 'STANDARD_GUEST'],
       },
     ],
   },
   {
     title: 'Enterprise Operations',
+    requiresAuth: true,
+    allowedRoles: ['EXECUTIVE_ADMIN'], // Only visible to Executive Operations Directors
     items: [
       {
         href: '/admin',
@@ -111,12 +133,16 @@ const navSections: NavSection[] = [
         icon: Sliders,
         description: 'Box office, yield & catalog',
         badge: 'PRO',
+        requiresAuth: true,
+        allowedRoles: ['EXECUTIVE_ADMIN'],
       },
       {
         href: '/agent',
         label: 'Autonomous Agent Swarm',
         icon: Bot,
         description: '7-Agent booking DAG & logs',
+        requiresAuth: true,
+        allowedRoles: ['EXECUTIVE_ADMIN'],
       },
       {
         href: '/tracing',
@@ -124,18 +150,24 @@ const navSections: NavSection[] = [
         icon: Activity,
         description: 'OpenTelemetry spans & latency',
         badge: 'NEW',
+        requiresAuth: true,
+        allowedRoles: ['EXECUTIVE_ADMIN'],
       },
       {
         href: '/analytics',
         label: 'LLMOps & Telemetry',
         icon: BarChart3,
         description: 'Semantic cache & firewall',
+        requiresAuth: true,
+        allowedRoles: ['EXECUTIVE_ADMIN'],
       },
       {
         href: '/documents',
         label: 'Script & Catalog Knowledge',
         icon: FileText,
         description: 'Vector embeddings & RAG',
+        requiresAuth: true,
+        allowedRoles: ['EXECUTIVE_ADMIN'],
       },
     ],
   },
@@ -143,39 +175,57 @@ const navSections: NavSection[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const isLoggedOutPage = pathname === '/logout'
   const [ticketCount, setTicketCount] = useState<number>(0)
   const [hasActiveOrder, setHasActiveOrder] = useState<boolean>(false)
-  const [currentUser, setCurrentUser] = useState<any>({
-    fullName: 'Alex Vance',
-    role: 'VIP_PATRON',
-    roleDisplayName: 'Gold Lounge VIP Member',
-    membershipTier: 'CineMind Founder Gold',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-  })
-  const [walletBalance, setWalletBalance] = useState<number>(175.00)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [walletBalance, setWalletBalance] = useState<number>(0)
   const [personas, setPersonas] = useState<any[]>([])
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
   const [isTopUpLoading, setIsTopUpLoading] = useState<boolean>(false)
   const [notice, setNotice] = useState<string | null>(null)
   const [circuitOccupancy, setCircuitOccupancy] = useState<number | null>(null)
 
+  const isAuthenticated = Boolean(
+    currentUser &&
+    currentUser.isAuthenticated &&
+    currentUser.role !== 'ANONYMOUS' &&
+    pathname !== '/logout'
+  )
+
   const fetchAuthAndWallet = async () => {
+    if (pathname === '/logout') {
+      setCurrentUser(null)
+      setWalletBalance(0)
+      return
+    }
     try {
       const authRes = await fetch(`${API_BASE}/api/v1/auth/me`)
       if (authRes.ok) {
         const u = await authRes.json()
-        setCurrentUser(u)
+        if (u && u.isAuthenticated && u.role !== 'ANONYMOUS') {
+          setCurrentUser(u)
+        } else {
+          setCurrentUser(null)
+        }
+      } else {
+        setCurrentUser(null)
       }
+
       const personasRes = await fetch(`${API_BASE}/api/v1/auth/personas`)
       if (personasRes.ok) {
         const p = await personasRes.json()
         setPersonas(p)
       }
+
       const walletRes = await fetch(`${API_BASE}/api/v1/wallet`)
       if (walletRes.ok) {
         const w = await walletRes.json()
-        setWalletBalance(w.balance)
+        setWalletBalance(w.balance || 0)
+      } else {
+        setWalletBalance(0)
       }
+
       const analyticsRes = await fetch(`${API_BASE}/api/v1/admin/analytics/dashboard`)
       if (analyticsRes.ok) {
         const a = await analyticsRes.json()
@@ -183,11 +233,21 @@ export default function Sidebar() {
           setCircuitOccupancy(a.kpis.circuitOccupancyRate)
         }
       }
-    } catch {}
+    } catch {
+      setCurrentUser(null)
+      setWalletBalance(0)
+    }
   }
 
   useEffect(() => {
     fetchAuthAndWallet()
+
+    const handleAuthChange = () => {
+      fetchAuthAndWallet()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cinemind-auth-changed', handleAuthChange)
+    }
 
     // 1. Initial fetch
     fetch(`${API_BASE}/api/v1/tickets`)
@@ -240,10 +300,13 @@ export default function Sidebar() {
     } catch {}
 
     return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('cinemind-auth-changed', handleAuthChange)
+      }
       if (seatSource) seatSource.close()
       if (orderSource) orderSource.close()
     }
-  }, [])
+  }, [pathname])
 
   const handleRoleSwitch = async (roleName: string) => {
     try {
@@ -256,6 +319,9 @@ export default function Sidebar() {
         const u = await res.json()
         setCurrentUser(u)
         setNotice(`Switched persona to ${u.fullName} (${u.roleDisplayName})`)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('cinemind-auth-changed'))
+        }
         setTimeout(() => setNotice(null), 3000)
       }
     } catch {}
@@ -278,6 +344,24 @@ export default function Sidebar() {
     } catch {} finally {
       setIsTopUpLoading(false)
     }
+  }
+
+  const isItemVisible = (item: NavItem) => {
+    if (!isAuthenticated) {
+      return !item.requiresAuth
+    }
+    if (item.allowedRoles && (!currentUser || !item.allowedRoles.includes(currentUser.role))) {
+      return false
+    }
+    return true
+  }
+
+  const isSectionVisible = (section: NavSection) => {
+    if (section.requiresAuth && !isAuthenticated) return false
+    if (section.allowedRoles && (!isAuthenticated || !currentUser || !section.allowedRoles.includes(currentUser.role))) {
+      return false
+    }
+    return section.items.some((item) => isItemVisible(item))
   }
 
   return (
@@ -317,50 +401,83 @@ export default function Sidebar() {
 
       {/* User Persona & Fintech Wallet Pod */}
       <div className="px-3 py-2.5 border-b border-[#1f1f1f]">
-        <button
-          onClick={() => setIsModalOpen(true)}
-          className="w-full flex items-center justify-between p-2 rounded-xl bg-[#161616] hover:bg-[#202020] border border-[#242424] transition text-left group shadow-sm"
-          title="Click to switch active role or top up wallet"
-        >
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="relative">
-              <img
-                src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
-                alt="Avatar"
-                className="w-8 h-8 rounded-full object-cover border border-purple-500/40"
-              />
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-black" />
+        {isAuthenticated ? (
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="w-full flex items-center justify-between p-2 rounded-xl bg-[#161616] hover:bg-[#202020] border border-[#242424] transition text-left group shadow-sm"
+            title="Click to switch active role or top up wallet"
+          >
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="relative">
+                <img
+                  src={
+                    currentUser?.avatarUrl ||
+                    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'
+                  }
+                  alt="Avatar"
+                  className="w-8 h-8 rounded-full object-cover border border-purple-500/40"
+                />
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-black" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white truncate">
+                  {currentUser?.fullName}
+                </p>
+                <p className="text-[10px] text-purple-400 font-mono truncate">
+                  {currentUser?.role === 'VIP_PATRON'
+                    ? '👑 VIP Member'
+                    : currentUser?.role === 'EXECUTIVE_ADMIN'
+                    ? '🛡️ Director'
+                    : currentUser?.role === 'AUDITORIUM_USHER'
+                    ? '🎟️ Floor Usher'
+                    : '👤 Member'}
+                </p>
+              </div>
             </div>
-            <div className="min-w-0">
-              <p className="text-xs font-bold text-white truncate">
-                {currentUser?.fullName}
-              </p>
-              <p className="text-[10px] text-purple-400 font-mono truncate">
-                {currentUser?.role === 'VIP_PATRON' ? '👑 VIP Member'
-                  : currentUser?.role === 'EXECUTIVE_ADMIN' ? '🛡️ Director'
-                  : currentUser?.role === 'AUDITORIUM_USHER' ? '🎟️ Floor Usher'
-                  : '👤 Guest'}
-              </p>
+            {currentUser?.role !== 'AUDITORIUM_USHER' && (
+              <div className="text-right shrink-0">
+                <span className="text-[11px] font-mono font-bold text-emerald-400 block">
+                  ${walletBalance.toFixed(2)}
+                </span>
+                <span className="text-[9px] text-[#666] font-mono">Wallet</span>
+              </div>
+            )}
+          </button>
+        ) : (
+          <div className="rounded-xl border border-zinc-800 bg-[#161616] p-3 space-y-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-zinc-400">
+                <User className="h-4 w-4" />
+              </div>
+              <div className="min-w-0">
+                <p className="text-xs font-bold text-white">Guest Visitor</p>
+                <p className="text-[10px] text-zinc-500">Browsing Mode</p>
+              </div>
             </div>
+            <Link
+              href="/login"
+              className="flex items-center justify-center gap-1.5 w-full py-1.5 rounded-lg bg-purple-600 hover:bg-purple-500 text-white font-semibold text-xs shadow-md shadow-purple-600/20 transition"
+            >
+              <Key className="h-3.5 w-3.5" />
+              <span>Sign In / Access</span>
+            </Link>
           </div>
-          <div className="text-right shrink-0">
-            <span className="text-[11px] font-mono font-bold text-emerald-400 block">
-              ${walletBalance.toFixed(2)}
-            </span>
-            <span className="text-[9px] text-[#666] font-mono">Wallet</span>
-          </div>
-        </button>
+        )}
       </div>
 
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-4 py-5 space-y-6">
-        {navSections.map((section) => (
-          <div key={section.title}>
-            <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#666]">
-              {section.title}
-            </p>
-            <ul className="space-y-1">
-              {section.items.map((item) => {
+        {navSections.filter(isSectionVisible).map((section) => {
+          const visibleItems = section.items.filter(isItemVisible)
+          if (visibleItems.length === 0) return null
+
+          return (
+            <div key={section.title}>
+              <p className="mb-2 px-2 text-[10px] font-semibold uppercase tracking-wider text-[#666]">
+                {section.title}
+              </p>
+              <ul className="space-y-1">
+                {visibleItems.map((item) => {
                 const Icon = item.icon
                 const isActive =
                   pathname === item.href || pathname.startsWith(item.href + '/')
@@ -428,7 +545,7 @@ export default function Sidebar() {
               })}
             </ul>
           </div>
-        ))}
+        )})}
       </nav>
 
       {/* Footer Info */}

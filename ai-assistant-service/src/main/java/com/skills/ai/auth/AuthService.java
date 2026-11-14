@@ -20,7 +20,8 @@ public class AuthService {
         VIP_PATRON,
         EXECUTIVE_ADMIN,
         AUDITORIUM_USHER,
-        STANDARD_GUEST
+        STANDARD_GUEST,
+        ANONYMOUS
     }
 
     @Builder
@@ -34,8 +35,23 @@ public class AuthService {
             double discountRate,
             String avatarUrl,
             List<String> permissions,
-            Instant lastLogin
+            Instant lastLogin,
+            boolean isAuthenticated
     ) {}
+
+    public static final UserProfile ANONYMOUS_USER = UserProfile.builder()
+            .userId("usr-guest-anon")
+            .fullName("Guest Visitor")
+            .email("guest@cinemind.io")
+            .role(UserRole.ANONYMOUS)
+            .roleDisplayName("Guest (Not Signed In)")
+            .membershipTier("None")
+            .discountRate(0.0)
+            .avatarUrl("")
+            .permissions(List.of("VIEW_MOVIES", "VIEW_SHOWTIMES", "CHAT_CONCIERGE"))
+            .lastLogin(null)
+            .isAuthenticated(false)
+            .build();
 
     private final Map<UserRole, UserProfile> personaCatalog = new ConcurrentHashMap<>();
     private volatile UserRole currentRole = UserRole.VIP_PATRON;
@@ -56,6 +72,7 @@ public class AuthService {
                 .avatarUrl("https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop")
                 .permissions(List.of("BOOK_SEATS", "ORDER_FNB", "VIP_RECLINER_ACCESS", "HEATED_SEATS", "IN_SEAT_DELIVERY"))
                 .lastLogin(Instant.now())
+                .isAuthenticated(true)
                 .build());
 
         personaCatalog.put(UserRole.EXECUTIVE_ADMIN, UserProfile.builder()
@@ -69,6 +86,7 @@ public class AuthService {
                 .avatarUrl("https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop")
                 .permissions(List.of("VIEW_BOX_OFFICE", "DYNAMIC_YIELD_SURGE", "CATALOG_MUTATE", "APM_TRACES", "LLMOPS_TELEMETRY", "RAG_INGESTION"))
                 .lastLogin(Instant.now())
+                .isAuthenticated(true)
                 .build());
 
         personaCatalog.put(UserRole.AUDITORIUM_USHER, UserProfile.builder()
@@ -82,6 +100,7 @@ public class AuthService {
                 .avatarUrl("https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop")
                 .permissions(List.of("SCAN_GATE_PASS", "OVERRIDE_TURNSTILE", "DISPATCH_FNB_ORDER", "WAYFINDER_GUIDE"))
                 .lastLogin(Instant.now())
+                .isAuthenticated(true)
                 .build());
 
         personaCatalog.put(UserRole.STANDARD_GUEST, UserProfile.builder()
@@ -89,16 +108,20 @@ public class AuthService {
                 .fullName("Jordan Lee")
                 .email("jordan.lee@example.com")
                 .role(UserRole.STANDARD_GUEST)
-                .roleDisplayName("Standard Guest Patron")
-                .membershipTier("General Audience")
+                .roleDisplayName("Standard Patron")
+                .membershipTier("General Member")
                 .discountRate(0.0)
                 .avatarUrl("https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop")
                 .permissions(List.of("BOOK_SEATS", "ORDER_FNB", "VIEW_TICKETS"))
                 .lastLogin(Instant.now())
+                .isAuthenticated(true)
                 .build());
     }
 
     public UserProfile getCurrentUser() {
+        if (currentRole == UserRole.ANONYMOUS) {
+            return ANONYMOUS_USER;
+        }
         return personaCatalog.getOrDefault(currentRole, personaCatalog.get(UserRole.VIP_PATRON));
     }
 
@@ -107,6 +130,9 @@ public class AuthService {
     }
 
     public UserProfile switchRole(UserRole role) {
+        if (role == UserRole.ANONYMOUS) {
+            return logout();
+        }
         if (role != null && personaCatalog.containsKey(role)) {
             this.currentRole = role;
             log.info("👤 Active user switched to role: {} ({})", role, getCurrentUser().fullName());
@@ -115,8 +141,8 @@ public class AuthService {
     }
 
     public UserProfile logout() {
-        this.currentRole = UserRole.STANDARD_GUEST;
-        log.info("🚪 User logged out. Session transitioned to STANDARD_GUEST");
-        return getCurrentUser();
+        this.currentRole = UserRole.ANONYMOUS;
+        log.info("🚪 User logged out. Session transitioned to ANONYMOUS");
+        return ANONYMOUS_USER;
     }
 }

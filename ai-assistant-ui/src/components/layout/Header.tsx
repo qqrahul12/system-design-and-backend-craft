@@ -106,16 +106,49 @@ const PAGE_TITLES: Record<string, { title: string; subtitle: string; icon: strin
 
 export default function Header() {
   const pathname = usePathname()
-  const [currentUser, setCurrentUser] = useState<any>({
-    fullName: 'Alex Vance',
-    role: 'VIP_PATRON',
-    roleDisplayName: 'Gold Lounge VIP Member',
-    membershipTier: 'CineMind Founder Gold',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-  })
-  const [walletBalance, setWalletBalance] = useState<number>(175.0)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [walletBalance, setWalletBalance] = useState<number>(0)
   const [isMenuOpen, setIsMenuOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+
+  const isAuthenticated = Boolean(
+    currentUser &&
+    currentUser.isAuthenticated &&
+    currentUser.role !== 'ANONYMOUS' &&
+    pathname !== '/logout'
+  )
+
+  const fetchAuth = async () => {
+    if (pathname === '/logout') {
+      setCurrentUser(null)
+      setWalletBalance(0)
+      return
+    }
+    try {
+      const r = await fetch(`${API_BASE}/api/v1/auth/me`)
+      if (r.ok) {
+        const u = await r.json()
+        if (u && u.isAuthenticated && u.role !== 'ANONYMOUS') {
+          setCurrentUser(u)
+        } else {
+          setCurrentUser(null)
+        }
+      } else {
+        setCurrentUser(null)
+      }
+
+      const wRes = await fetch(`${API_BASE}/api/v1/wallet`)
+      if (wRes.ok) {
+        const w = await wRes.json()
+        setWalletBalance(w.balance || 0)
+      } else {
+        setWalletBalance(0)
+      }
+    } catch {
+      setCurrentUser(null)
+      setWalletBalance(0)
+    }
+  }
 
   useEffect(() => {
     // Sync browser tab title dynamically with active route icon & name
@@ -130,15 +163,14 @@ export default function Header() {
       }
     }
 
-    fetch(`${API_BASE}/api/v1/auth/me`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((u) => { if (u) setCurrentUser(u) })
-      .catch(() => {})
+    fetchAuth()
 
-    fetch(`${API_BASE}/api/v1/wallet`)
-      .then((r) => (r.ok ? r.json() : null))
-      .then((w) => { if (w) setWalletBalance(w.balance) })
-      .catch(() => {})
+    const handleAuthChange = () => {
+      fetchAuth()
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('cinemind-auth-changed', handleAuthChange)
+    }
 
     const handleClickOutside = (e: MouseEvent) => {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
@@ -146,7 +178,12 @@ export default function Header() {
       }
     }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('cinemind-auth-changed', handleAuthChange)
+      }
+      document.removeEventListener('mousedown', handleClickOutside)
+    }
   }, [pathname])
 
   const pageInfo =
@@ -199,132 +236,147 @@ export default function Header() {
           <span className="text-[11px] font-medium">Online</span>
         </div>
 
-        {/* User Account Menu Pod */}
-        <div className="relative" ref={menuRef}>
-          <button
-            onClick={() => setIsMenuOpen((prev) => !prev)}
-            className="flex items-center gap-2.5 p-1.5 pl-2.5 rounded-full bg-[#161616] hover:bg-[#202020] border border-[#282828] hover:border-purple-500/50 transition group shadow-sm"
-          >
-            <div className="flex flex-col items-end mr-0.5 hidden md:flex">
-              <span className="text-xs font-bold text-white group-hover:text-purple-300 transition truncate max-w-[120px]">
-                {currentUser?.fullName || 'Alex Vance'}
-              </span>
-              <span className="text-[9px] font-mono text-purple-400">
-                {currentUser?.role === 'VIP_PATRON' ? '👑 VIP Founder'
-                  : currentUser?.role === 'EXECUTIVE_ADMIN' ? '🛡️ Director'
-                  : currentUser?.role === 'AUDITORIUM_USHER' ? '🎟️ Usher'
-                  : 'Patron'}
-              </span>
-            </div>
+        {/* User Account Menu Pod OR Sign In Button */}
+        {isAuthenticated ? (
+          <div className="relative" ref={menuRef}>
+            <button
+              onClick={() => setIsMenuOpen((prev) => !prev)}
+              className="flex items-center gap-2.5 p-1.5 pl-2.5 rounded-full bg-[#161616] hover:bg-[#202020] border border-[#282828] hover:border-purple-500/50 transition group shadow-sm"
+            >
+              <div className="flex flex-col items-end mr-0.5 hidden md:flex">
+                <span className="text-xs font-bold text-white group-hover:text-purple-300 transition truncate max-w-[120px]">
+                  {currentUser?.fullName}
+                </span>
+                <span className="text-[9px] font-mono text-purple-400">
+                  {currentUser?.role === 'VIP_PATRON' ? '👑 VIP Founder'
+                    : currentUser?.role === 'EXECUTIVE_ADMIN' ? '🛡️ Director'
+                    : currentUser?.role === 'AUDITORIUM_USHER' ? '🎟️ Usher'
+                    : 'Member'}
+                </span>
+              </div>
 
-            <div className="relative">
-              <img
-                src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
-                alt="Avatar"
-                className="w-7 h-7 rounded-full object-cover border border-purple-500/40"
-              />
-              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-black" />
-            </div>
-
-            <ChevronDown className={`h-3.5 w-3.5 text-[#777] transition-transform duration-200 ${isMenuOpen ? 'rotate-180 text-white' : ''}`} />
-          </button>
-
-          {/* Dropdown Menu */}
-          {isMenuOpen && (
-            <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-[#141414] border border-[#282828] shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
-              <div className="flex items-center gap-3 p-2.5 border-b border-[#222]">
+              <div className="relative">
                 <img
                   src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
                   alt="Avatar"
-                  className="w-10 h-10 rounded-xl object-cover border border-[#333]"
+                  className="w-7 h-7 rounded-full object-cover border border-purple-500/40"
                 />
-                <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
-                  <p className="text-[10px] text-[#888] font-mono truncate">{currentUser?.email}</p>
-                  <span className="inline-block mt-1 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                    {currentUser?.membershipTier || 'Founder Gold'}
-                  </span>
-                </div>
+                <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 rounded-full bg-emerald-400 border border-black" />
               </div>
 
-              {/* Live Wallet Pill */}
-              <div className="mt-2.5 mb-2 p-2 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Wallet className="h-4 w-4 text-emerald-400" />
-                  <span className="text-xs text-[#aaa]">CineCash</span>
+              <ChevronDown className={`h-3.5 w-3.5 text-[#777] transition-transform duration-200 ${isMenuOpen ? 'rotate-180 text-white' : ''}`} />
+            </button>
+
+            {/* Dropdown Menu */}
+            {isMenuOpen && (
+              <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-[#141414] border border-[#282828] shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
+                <div className="flex items-center gap-3 p-2.5 border-b border-[#222]">
+                  <img
+                    src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
+                    alt="Avatar"
+                    className="w-10 h-10 rounded-xl object-cover border border-[#333]"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
+                    <p className="text-[10px] text-[#888] font-mono truncate">{currentUser?.email}</p>
+                    <span className="inline-block mt-1 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                      {currentUser?.membershipTier || 'Founder Gold'}
+                    </span>
+                  </div>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-mono font-bold text-emerald-400">
-                    ${walletBalance.toFixed(2)}
-                  </span>
+
+                {/* Live Wallet Pill (only for patron & admin) */}
+                {currentUser?.role !== 'AUDITORIUM_USHER' && (
+                  <div className="mt-2.5 mb-2 p-2 rounded-xl bg-[#1a1a1a] border border-[#2a2a2a] flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Wallet className="h-4 w-4 text-emerald-400" />
+                      <span className="text-xs text-[#aaa]">CineCash</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-mono font-bold text-emerald-400">
+                        ${walletBalance.toFixed(2)}
+                      </span>
+                      <Link
+                        href="/wallet"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="text-[10px] font-bold text-purple-400 hover:text-purple-300 underline"
+                      >
+                        Top Up
+                      </Link>
+                    </div>
+                  </div>
+                )}
+                {/* Navigation Links */}
+                <div className="space-y-1 text-xs">
                   <Link
-                    href="/wallet"
+                    href="/profile"
                     onClick={() => setIsMenuOpen(false)}
-                    className="text-[10px] font-bold text-purple-400 hover:text-purple-300 underline"
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
                   >
-                    Top Up
+                    <User className="h-4 w-4 text-purple-400" />
+                    <span>Account & Profile</span>
+                  </Link>
+                  {currentUser?.role !== 'AUDITORIUM_USHER' && (
+                    <>
+                      <Link
+                        href="/wallet"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
+                      >
+                        <Wallet className="h-4 w-4 text-emerald-400" />
+                        <span>CineCash Digital Wallet</span>
+                      </Link>
+                      <Link
+                        href="/split"
+                        onClick={() => setIsMenuOpen(false)}
+                        className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
+                      >
+                        <Users className="h-4 w-4 text-sky-400" />
+                        <span>SplitMoney Squads</span>
+                      </Link>
+                    </>
+                  )}
+                  <Link
+                    href="/tickets"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
+                  >
+                    <Ticket className="h-4 w-4 text-amber-400" />
+                    <span>My Passes & QR Gate</span>
+                  </Link>
+                  <Link
+                    href="/login"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
+                  >
+                    <Key className="h-4 w-4 text-indigo-400" />
+                    <span>Switch Account / Persona</span>
+                  </Link>
+                </div>
+
+                {/* Sign Out Action */}
+                <div className="pt-2 mt-2 border-t border-[#222]">
+                  <Link
+                    href="/logout"
+                    onClick={() => setIsMenuOpen(false)}
+                    className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-xs font-semibold"
+                  >
+                    <LogOut className="h-4 w-4" />
+                    <span>Sign Out</span>
                   </Link>
                 </div>
               </div>
-
-              {/* Navigation Links */}
-              <div className="space-y-1 text-xs">
-                <Link
-                  href="/profile"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
-                >
-                  <User className="h-4 w-4 text-purple-400" />
-                  <span>Account & Profile</span>
-                </Link>
-                <Link
-                  href="/wallet"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
-                >
-                  <Wallet className="h-4 w-4 text-emerald-400" />
-                  <span>CineCash Digital Wallet</span>
-                </Link>
-                <Link
-                  href="/split"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
-                >
-                  <Users className="h-4 w-4 text-sky-400" />
-                  <span>SplitMoney Squads</span>
-                </Link>
-                <Link
-                  href="/tickets"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
-                >
-                  <Ticket className="h-4 w-4 text-amber-400" />
-                  <span>My Passes & QR Gate</span>
-                </Link>
-                <Link
-                  href="/login"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 px-3 py-2 rounded-xl text-[#ccc] hover:bg-[#1e1e1e] hover:text-white transition"
-                >
-                  <Key className="h-4 w-4 text-indigo-400" />
-                  <span>Switch Account / Persona</span>
-                </Link>
-              </div>
-
-              {/* Sign Out Action */}
-              <div className="pt-2 mt-2 border-t border-[#222]">
-                <Link
-                  href="/logout"
-                  onClick={() => setIsMenuOpen(false)}
-                  className="flex items-center gap-2.5 w-full px-3 py-2 rounded-xl text-rose-400 hover:bg-rose-950/30 hover:text-rose-300 transition text-xs font-semibold"
-                >
-                  <LogOut className="h-4 w-4" />
-                  <span>Sign Out</span>
-                </Link>
-              </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
+        ) : (
+          <Link
+            href="/login"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-xs font-bold text-white shadow-lg shadow-purple-600/30 transition"
+          >
+            <Key className="h-3.5 w-3.5" />
+            <span>Sign In</span>
+          </Link>
+        )}
       </div>
     </header>
   )

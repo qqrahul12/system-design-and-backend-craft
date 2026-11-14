@@ -78,10 +78,19 @@ export default function AuthPage() {
 
       if (res.ok) {
         const user = await res.json()
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('cinemind-auth-changed'))
+        }
         setStatusMsg(`Authenticated as ${user.fullName} (${user.roleDisplayName})`)
         setTimeout(() => {
-          router.push('/profile')
-        }, 1000)
+          if (user.role === 'EXECUTIVE_ADMIN') {
+            router.push('/admin')
+          } else if (user.role === 'AUDITORIUM_USHER') {
+            router.push('/tickets')
+          } else {
+            router.push('/booking')
+          }
+        }, 800)
       } else {
         setStatusMsg('Login failed. Please verify credentials.')
       }
