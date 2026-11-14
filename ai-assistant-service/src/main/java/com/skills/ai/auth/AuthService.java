@@ -113,4 +113,10 @@ public class AuthService {
         }
         return getCurrentUser();
     }
+
+    public UserProfile logout() {
+        this.currentRole = UserRole.STANDARD_GUEST;
+        log.info("🚪 User logged out. Session transitioned to STANDARD_GUEST");
+        return getCurrentUser();
+    }
 }

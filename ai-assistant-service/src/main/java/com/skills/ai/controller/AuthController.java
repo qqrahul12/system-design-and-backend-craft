@@ -50,4 +50,14 @@ public class AuthController {
                 : AuthService.UserRole.VIP_PATRON;
         return ResponseEntity.ok(authService.switchRole(role));
     }
+
+    @PostMapping("/logout")
+    public ResponseEntity<Map<String, Object>> logout() {
+        AuthService.UserProfile guest = authService.logout();
+        return ResponseEntity.ok(Map.of(
+                "status", "LOGGED_OUT",
+                "message", "Successfully signed out of CineMind session",
+                "user", guest
+        ));
+    }
 }

@@ -44,7 +44,7 @@ async function runTestSuite() {
 
   // 1. Frontend Route Tests
   console.log('--- 1. Frontend Route Availability (Port 3000) ---');
-  for (const path of ['/admin', '/booking', '/concessions', '/tickets', '/documents', '/agent', '/tracing', '/analytics', '/chat']) {
+  for (const path of ['/admin', '/booking', '/concessions', '/tickets', '/documents', '/agent', '/tracing', '/analytics', '/chat', '/wallet', '/split', '/profile', '/login', '/logout']) {
     await test(`GET http://127.0.0.1:3000${path}`, async () => {
       const res = await request({
         hostname: '127.0.0.1',
@@ -732,6 +732,27 @@ async function runTestSuite() {
 
     // 3. Switch back to VIP_PATRON
     const revertPayload = JSON.stringify({ role: 'VIP_PATRON' });
+    await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/switch-role',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(revertPayload) },
+    }, revertPayload);
+
+    // 4. Test Logout
+    const logoutRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/logout',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+    });
+    if (logoutRes.statusCode !== 200) throw new Error(`Logout failed: ${logoutRes.statusCode}`);
+    const logoutData = JSON.parse(logoutRes.body);
+    if (logoutData.status !== 'LOGGED_OUT') throw new Error('Expected status LOGGED_OUT');
+
+    // 5. Restore to VIP_PATRON for subsequent tests
     await request({
       hostname: '127.0.0.1',
       port: 8080,

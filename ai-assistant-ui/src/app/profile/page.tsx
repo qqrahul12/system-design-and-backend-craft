@@ -149,11 +149,18 @@ export default function ProfilePage() {
             Sync Session
           </button>
           <Link
-            href="/auth"
+            href="/login"
             className="flex items-center gap-2 rounded-xl bg-purple-600 hover:bg-purple-500 px-4 py-2 text-xs font-semibold text-white shadow-lg shadow-purple-600/20 transition"
           >
             <Key className="h-3.5 w-3.5" />
-            Auth Portal
+            Switch Account
+          </Link>
+          <Link
+            href="/logout"
+            className="flex items-center gap-2 rounded-xl bg-rose-500/15 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 px-3.5 py-2 text-xs font-semibold transition"
+          >
+            <LogOut className="h-3.5 w-3.5" />
+            Sign Out
           </Link>
         </div>
       </div>
