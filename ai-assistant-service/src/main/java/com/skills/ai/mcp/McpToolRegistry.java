@@ -8,6 +8,8 @@ import com.skills.ai.movie.Movie;
 import com.skills.ai.movie.MovieCatalogService;
 import com.skills.ai.rag.InMemoryVectorStore;
 import com.skills.ai.rag.RagService;
+import com.skills.ai.split.SplitExpense;
+import com.skills.ai.split.SplitMoneyService;
 import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
 import com.skills.ai.wallet.WalletService;
@@ -36,6 +38,7 @@ public class McpToolRegistry {
     private final TicketService ticketService;
     private final WalletService walletService;
     private final AuthService authService;
+    private final SplitMoneyService splitMoneyService;
 
     private final Map<String, McpToolDefinition> toolDefinitions = new HashMap<>();
     private final Map<String, Function<Map<String, Object>, McpToolDefinition.CallResult>> toolExecutors = new HashMap<>();
@@ -429,6 +432,34 @@ public class McpToolRegistry {
                 args -> {
                     Map<String, Object> insights = fetchPublicCinemaInsights();
                     return McpToolDefinition.CallResult.text(formatPublicInsightsAsText(insights));
+                }
+        );
+
+        // 15. Split Movie & Concessions Bill Tool (SplitMoney Integration)
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("split_movie_bill")
+                        .description("Splits a movie ticket or concessions order bill among friends in a CineMind movie squad using the SplitMoney engine.")
+                        .inputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "billName", Map.of("type", "string", "description", "Description of bill e.g. 'Dune 2 IMAX Tickets'"),
+                                        "totalAmount", Map.of("type", "number", "description", "Total amount in USD to split"),
+                                        "payerUserId", Map.of("type", "string", "description", "ID of the user who paid initially"),
+                                        "memberCount", Map.of("type", "number", "description", "Number of friends sharing the bill")
+                                ),
+                                "required", List.of("billName", "totalAmount")
+                        ))
+                        .build(),
+                args -> {
+                    String name = (String) args.getOrDefault("billName", "Movie Outing Bill");
+                    Number amtNum = (Number) args.getOrDefault("totalAmount", 40.0);
+                    String payer = (String) args.getOrDefault("payerUserId", "usr-marcus");
+                    SplitExpense expense = splitMoneyService.splitBill(name, amtNum.doubleValue(), payer, null, "MCP_SPLIT", "REF-" + System.currentTimeMillis());
+                    return McpToolDefinition.CallResult.text(String.format(
+                            "✅ SplitMoney Expense Created! ID: %s | Bill: '%s' | Total: $%.2f | Payer: %s | Individual Share: $%.2f each across %d squad members. Status: Active in Squad Ledger.",
+                            expense.id(), expense.name(), expense.totalAmount(), expense.paidByUserName(), expense.shares().get(0).shareAmount(), expense.shares().size()
+                    ));
                 }
         );
     }

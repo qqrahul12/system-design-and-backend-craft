@@ -29,6 +29,8 @@ import {
   AlertCircle,
   Calendar,
   RefreshCw,
+  Users,
+  Wallet,
 } from 'lucide-react'
 
 const API_BASE =
@@ -270,6 +272,64 @@ export default function BookingPage() {
   const [liveBroadcastToast, setLiveBroadcastToast] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
   const [walletBalance, setWalletBalance] = useState<number>(175.0)
+
+  // SplitMoney Integration State
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false)
+  const [splitExpenseData, setSplitExpenseData] = useState<any>(null)
+  const [isSettlingShare, setIsSettlingShare] = useState(false)
+
+  const handleOpenSplitModal = async (confirmation: any) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/split/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `${confirmation.movie} Passes (${confirmation.seats.join(', ')})`,
+          totalAmount: confirmation.totalPrice,
+          paidByUserId: 'usr-marcus',
+          referenceType: 'MOVIE_TICKET',
+          referenceId: confirmation.ticketId,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSplitExpenseData(data)
+        setIsSplitModalOpen(true)
+      }
+    } catch (err) {
+      console.warn('Failed to split bill via SplitMoney:', err)
+    }
+  }
+
+  const handleSettleShare = async (expenseId: string, debtorUserId: string, method: string) => {
+    setIsSettlingShare(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/split/settle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expenseId,
+          debtorUserId,
+          paymentMethod: method,
+        }),
+      })
+      if (res.ok) {
+        // Refresh expense data
+        const expRes = await fetch(`${API_BASE}/api/v1/split/expenses`)
+        if (expRes.ok) {
+          const list = await expRes.json()
+          const updated = list.find((e: any) => e.id === expenseId)
+          if (updated) setSplitExpenseData(updated)
+        }
+        setLiveBroadcastToast(`🎉 Friend's share settled via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
+        setTimeout(() => setLiveBroadcastToast(null), 4000)
+      }
+    } catch (err) {
+      console.warn('Failed to settle share:', err)
+    } finally {
+      setIsSettlingShare(false)
+    }
+  }
 
   useEffect(() => {
     fetch(`${API_BASE}/api/v1/wallet`)
@@ -1708,6 +1768,15 @@ REASON: <1 sentence why it matches>`
                 <UtensilsCrossed className="h-4 w-4 text-amber-400" />
                 Order Gourmet F&B ({bookingConfirmation.seats.length > 1 ? `Seats ${bookingConfirmation.seats.join(', ')}` : `Seat ${bookingConfirmation.seats[0]}`})
               </Link>
+
+              <button
+                type="button"
+                onClick={() => handleOpenSplitModal(bookingConfirmation)}
+                className="flex items-center justify-center gap-2 rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-5 py-3 text-xs font-bold text-indigo-300 hover:bg-indigo-500/20 transition active:scale-95"
+              >
+                <Users className="h-4 w-4 text-indigo-400" />
+                Split Bill with Squad (SplitMoney)
+              </button>
             </div>
           </div>
         )}
@@ -1873,6 +1942,135 @@ REASON: <1 sentence why it matches>`
               >
                 <Ticket className="h-4 w-4" />
                 Select Movie & Choose Seats
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* SplitMoney Squad Bill Splitting Modal */}
+      {isSplitModalOpen && splitExpenseData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-indigo-500/30 bg-[#121214] p-6 shadow-2xl space-y-5 my-8">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white tracking-tight">
+                    Split with CineMind Squad
+                  </h3>
+                  <span className="rounded bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-500/30">
+                    SplitMoney Domain
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {splitExpenseData.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsSplitModalOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Total & Summary Banner */}
+            <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                  Total Bill
+                </span>
+                <p className="text-2xl font-black text-white">
+                  ${splitExpenseData.totalAmount?.toFixed(2)}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+                  Paid By (Full)
+                </span>
+                <p className="text-sm font-semibold text-zinc-200">
+                  {splitExpenseData.paidByUserName} (You)
+                </p>
+              </div>
+            </div>
+
+            {/* Squad Members Breakdown */}
+            <div className="space-y-2.5">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block">
+                Squad Shares ({splitExpenseData.shares?.length ?? 0} members)
+              </span>
+              <div className="space-y-2">
+                {splitExpenseData.shares?.map((share: any) => {
+                  const isPayer = share.userId === splitExpenseData.paidByUserId
+                  return (
+                    <div
+                      key={share.userId}
+                      className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow">
+                          {share.userName?.charAt(0) ?? 'U'}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white">
+                            {share.userName} {isPayer ? '(You)' : ''}
+                          </p>
+                          <p className="text-[11px] font-mono text-zinc-400">
+                            ${share.shareAmount?.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        {isPayer ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 rounded-lg">
+                            <CheckCircle2 className="h-3 w-3" /> Payer (Settled)
+                          </span>
+                        ) : share.isPaid ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 rounded-lg">
+                            <CheckCircle2 className="h-3 w-3" /> Paid ({share.paymentMethod})
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleSettleShare(splitExpenseData.id, share.userId, 'WALLET')}
+                              disabled={isSettlingShare}
+                              className="flex items-center gap-1 rounded-lg bg-emerald-600/20 border border-emerald-500/30 px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-600/30 transition disabled:opacity-50"
+                              title="Settle using CineCash Wallet"
+                            >
+                              <Wallet className="h-2.5 w-2.5" /> Wallet
+                            </button>
+                            <button
+                              onClick={() => handleSettleShare(splitExpenseData.id, share.userId, 'STRIPE_CARD')}
+                              disabled={isSettlingShare}
+                              className="flex items-center gap-1 rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-2 py-1 text-[10px] font-bold text-indigo-300 hover:bg-indigo-600/30 transition disabled:opacity-50"
+                              title="Settle using Stripe Card Gateway"
+                            >
+                              <CreditCard className="h-2.5 w-2.5" /> Card
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+              <span className="text-[11px] text-zinc-500">
+                Balances reflect instantaneously across CineMind & SplitMoney.
+              </span>
+              <button
+                onClick={() => setIsSplitModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition"
+              >
+                Done
               </button>
             </div>
           </div>

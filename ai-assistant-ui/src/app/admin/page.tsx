@@ -265,6 +265,13 @@ export default function AdminPage() {
   const [isSurgeActive, setIsSurgeActive] = useState<boolean>(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [isSwitchingPersona, setIsSwitchingPersona] = useState<boolean>(false)
+  const [circuitBreakerData, setCircuitBreakerData] = useState<{
+    circuitBreaker: string
+    state: string
+    provider: string
+    simulateFailure: boolean
+  } | null>(null)
+  const [isTogglingCircuitFailure, setIsTogglingCircuitFailure] = useState(false)
   const [liveTelemetryConnected, setLiveTelemetryConnected] = useState<boolean>(false)
   const [liveEvents, setLiveEvents] = useState<Array<{ id: string; time: string; text: string; type: 'TICKET' | 'LOCK' | 'FNB' }>>([
     {
@@ -359,8 +366,37 @@ export default function AdminPage() {
     }
   }
 
+  const fetchCircuitBreakerStatus = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/circuit-breaker/status`)
+      if (res.ok) {
+        const data = await res.json()
+        setCircuitBreakerData(data)
+      }
+    } catch (e) {
+      console.warn('Failed to fetch circuit breaker status:', e)
+    }
+  }
+
+  const handleToggleCircuitFailure = async () => {
+    setIsTogglingCircuitFailure(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/admin/circuit-breaker/toggle-stripe-failure`, {
+        method: 'POST',
+      })
+      if (res.ok) {
+        await fetchCircuitBreakerStatus()
+      }
+    } catch (e) {
+      console.warn('Failed to toggle stripe failure:', e)
+    } finally {
+      setIsTogglingCircuitFailure(false)
+    }
+  }
+
   useEffect(() => {
     fetchData()
+    fetchCircuitBreakerStatus()
 
     let seatSource: EventSource | null = null
     let orderSource: EventSource | null = null
@@ -1136,6 +1172,83 @@ export default function AdminPage() {
                 <span>$16.2K Rev</span>
               </div>
               <div className="mt-2 h-2 w-full rounded-full bg-amber-500" style={{ width: '91%' }} />
+            </div>
+          </div>
+
+          {/* Resilience4j Circuit Breaker & Stripe Gateway Telemetry Card */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+              <div className="flex items-center gap-3">
+                <div className={`p-2.5 rounded-xl border ${
+                  circuitBreakerData?.simulateFailure
+                    ? 'bg-rose-500/10 border-rose-500/30 text-rose-400'
+                    : 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                }`}>
+                  <Zap className="h-5 w-5" />
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-sm font-bold text-white">
+                      Resilience4j Circuit Breaker & Stripe Gateway Telemetry
+                    </h3>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase border ${
+                      circuitBreakerData?.state === 'OPEN'
+                        ? 'bg-rose-950/60 text-rose-300 border-rose-600/40'
+                        : circuitBreakerData?.state === 'HALF_OPEN'
+                        ? 'bg-amber-950/60 text-amber-300 border-amber-600/40'
+                        : 'bg-emerald-950/60 text-emerald-300 border-emerald-600/40'
+                    }`}>
+                      State: {circuitBreakerData?.state ?? 'CLOSED'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-zinc-400">
+                    Adapting <span className="font-mono text-zinc-300">{circuitBreakerData?.provider ?? 'STRIPE (payment-service)'}</span> via Adapter & Circuit Breaker patterns.
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={fetchCircuitBreakerStatus}
+                  className="p-2 rounded-xl bg-zinc-800 text-zinc-400 hover:text-white transition"
+                  title="Refresh Circuit Breaker Metrics"
+                >
+                  <RefreshCw className="h-4 w-4" />
+                </button>
+                <button
+                  onClick={handleToggleCircuitFailure}
+                  disabled={isTogglingCircuitFailure}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition active:scale-95 border ${
+                    circuitBreakerData?.simulateFailure
+                      ? 'bg-rose-600 hover:bg-rose-500 text-white border-rose-500 shadow-lg shadow-rose-600/30'
+                      : 'bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border-zinc-700'
+                  }`}
+                >
+                  <Zap className={`h-3.5 w-3.5 ${circuitBreakerData?.simulateFailure ? 'animate-pulse text-amber-300' : 'text-zinc-400'}`} />
+                  {circuitBreakerData?.simulateFailure
+                    ? 'Failure Active (Click to Heal)'
+                    : 'Simulate Stripe 504 Timeout'}
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2 text-xs">
+              <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Gateway Target</span>
+                <p className="font-mono text-zinc-200 mt-1">com.payment.StripePaymentGatewayClient</p>
+              </div>
+              <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Fallback Routine</span>
+                <p className="font-mono text-zinc-200 mt-1">stripePaymentFallback() 15-Min Hold</p>
+              </div>
+              <div className="p-3 rounded-xl bg-zinc-950/60 border border-zinc-800/80">
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">Health Status</span>
+                <p className={`font-mono mt-1 font-semibold ${
+                  circuitBreakerData?.simulateFailure ? 'text-rose-400' : 'text-emerald-400'
+                }`}>
+                  {circuitBreakerData?.simulateFailure ? '⚠️ INJECTING LATENCY / TIMEOUT' : '✓ HEALTHY (AUTO-RECOVERY ARMED)'}
+                </p>
+              </div>
             </div>
           </div>
         </div>

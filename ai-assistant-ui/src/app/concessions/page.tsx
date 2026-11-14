@@ -26,6 +26,7 @@ import {
   CheckCircle2,
   ChefHat,
   Truck,
+  Users,
 } from 'lucide-react'
 
 const API_BASE =
@@ -112,6 +113,63 @@ function ConcessionsContent() {
   const [isAdvancingStatus, setIsAdvancingStatus] = useState<boolean>(false)
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
   const [walletBalance, setWalletBalance] = useState<number>(175.00)
+
+  // SplitMoney Integration State
+  const [isSplitModalOpen, setIsSplitModalOpen] = useState(false)
+  const [splitExpenseData, setSplitExpenseData] = useState<any>(null)
+  const [isSettlingShare, setIsSettlingShare] = useState(false)
+
+  const handleOpenSplitModal = async (order: any) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/split/create`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: `Gourmet F&B Order (${order.orderId} - Seat ${order.seat})`,
+          totalAmount: order.totalPrice,
+          paidByUserId: 'usr-marcus',
+          referenceType: 'CONCESSION_ORDER',
+          referenceId: order.orderId,
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        setSplitExpenseData(data)
+        setIsSplitModalOpen(true)
+      }
+    } catch (err) {
+      console.warn('Failed to split F&B bill via SplitMoney:', err)
+    }
+  }
+
+  const handleSettleShare = async (expenseId: string, debtorUserId: string, method: string) => {
+    setIsSettlingShare(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/split/settle`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          expenseId,
+          debtorUserId,
+          paymentMethod: method,
+        }),
+      })
+      if (res.ok) {
+        const expRes = await fetch(`${API_BASE}/api/v1/split/expenses`)
+        if (expRes.ok) {
+          const list = await expRes.json()
+          const updated = list.find((e: any) => e.id === expenseId)
+          if (updated) setSplitExpenseData(updated)
+        }
+        setAddedNotice(`🎉 Squad member settled their F&B share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
+        setTimeout(() => setAddedNotice(null), 4000)
+      }
+    } catch (err) {
+      console.warn('Failed to settle F&B share:', err)
+    } finally {
+      setIsSettlingShare(false)
+    }
+  }
 
   const playKitchenChime = (kind: 'order' | 'plated' | 'delivered') => {
     if (typeof window === 'undefined') return
@@ -645,6 +703,14 @@ function ConcessionsContent() {
               >
                 <Ticket className="h-3.5 w-3.5" /> View Pass Wallet
               </Link>
+
+              <button
+                type="button"
+                onClick={() => handleOpenSplitModal(activeOrder)}
+                className="flex items-center gap-1.5 rounded-xl bg-indigo-600/30 border border-indigo-500/40 px-3 py-1 text-xs font-semibold text-indigo-300 hover:bg-indigo-600/40 transition active:scale-95"
+              >
+                <Users className="h-3.5 w-3.5 text-indigo-400" /> Split F&B Bill (SplitMoney)
+              </button>
             </div>
           </div>
 
@@ -1212,6 +1278,135 @@ function ConcessionsContent() {
                 <p className="text-xs">Your tray is currently empty.</p>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* SplitMoney Squad Bill Splitting Modal */}
+      {isSplitModalOpen && splitExpenseData && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/85 backdrop-blur-md animate-fade-in overflow-y-auto">
+          <div className="relative w-full max-w-lg rounded-2xl border border-indigo-500/30 bg-[#121214] p-6 shadow-2xl space-y-5 my-8">
+            {/* Header */}
+            <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-indigo-600/20 text-indigo-400 border border-indigo-500/30">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <h3 className="text-lg font-bold text-white tracking-tight">
+                    Split F&B Bill with Squad
+                  </h3>
+                  <span className="rounded bg-indigo-500/20 px-2 py-0.5 text-[10px] font-bold text-indigo-300 border border-indigo-500/30">
+                    SplitMoney Domain
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-zinc-400">
+                  {splitExpenseData.name}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsSplitModalOpen(false)}
+                className="rounded-lg p-1.5 text-zinc-400 hover:text-white hover:bg-zinc-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            {/* Total & Summary Banner */}
+            <div className="flex items-center justify-between p-4 rounded-xl bg-zinc-900 border border-zinc-800">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                  Total Gourmet Bill
+                </span>
+                <p className="text-2xl font-black text-white">
+                  ${splitExpenseData.totalAmount?.toFixed(2)}
+                </p>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-emerald-400 tracking-wider">
+                  Covered By
+                </span>
+                <p className="text-sm font-semibold text-zinc-200">
+                  {splitExpenseData.paidByUserName} (You)
+                </p>
+              </div>
+            </div>
+
+            {/* Squad Members Breakdown */}
+            <div className="space-y-2.5">
+              <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider block">
+                Squad Shares ({splitExpenseData.shares?.length ?? 0} members)
+              </span>
+              <div className="space-y-2">
+                {splitExpenseData.shares?.map((share: any) => {
+                  const isPayer = share.userId === splitExpenseData.paidByUserId
+                  return (
+                    <div
+                      key={share.userId}
+                      className="flex items-center justify-between p-3 rounded-xl bg-zinc-900/60 border border-zinc-800/80 hover:border-zinc-700 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-bold text-white shadow">
+                          {share.userName?.charAt(0) ?? 'U'}
+                        </div>
+                        <div>
+                          <p className="text-xs font-bold text-white">
+                            {share.userName} {isPayer ? '(You)' : ''}
+                          </p>
+                          <p className="text-[11px] font-mono text-zinc-400">
+                            ${share.shareAmount?.toFixed(2)}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div>
+                        {isPayer ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 rounded-lg">
+                            <CheckCircle2 className="h-3 w-3" /> Payer (Settled)
+                          </span>
+                        ) : share.isPaid ? (
+                          <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-400 bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 rounded-lg">
+                            <CheckCircle2 className="h-3 w-3" /> Paid ({share.paymentMethod})
+                          </span>
+                        ) : (
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => handleSettleShare(splitExpenseData.id, share.userId, 'WALLET')}
+                              disabled={isSettlingShare}
+                              className="flex items-center gap-1 rounded-lg bg-emerald-600/20 border border-emerald-500/30 px-2 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-600/30 transition disabled:opacity-50"
+                              title="Settle using CineCash Wallet"
+                            >
+                              <Wallet className="h-2.5 w-2.5" /> Wallet
+                            </button>
+                            <button
+                              onClick={() => handleSettleShare(splitExpenseData.id, share.userId, 'STRIPE_CARD')}
+                              disabled={isSettlingShare}
+                              className="flex items-center gap-1 rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-2 py-1 text-[10px] font-bold text-indigo-300 hover:bg-indigo-600/30 transition disabled:opacity-50"
+                              title="Settle using Stripe Card Gateway"
+                            >
+                              <CreditCard className="h-2.5 w-2.5" /> Card
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="flex items-center justify-between pt-3 border-t border-zinc-800">
+              <span className="text-[11px] text-zinc-500">
+                Split equal among squad. 1-click settlements update ledger.
+              </span>
+              <button
+                onClick={() => setIsSplitModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-xs font-semibold text-zinc-300 hover:text-white bg-zinc-800 hover:bg-zinc-700 transition"
+              >
+                Done
+              </button>
+            </div>
           </div>
         </div>
       )}

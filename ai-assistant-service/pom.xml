@@ -90,6 +90,13 @@
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Sibling Module: payment-service with Resilience4j Circuit Breakers -->
+        <dependency>
+            <groupId>com.payment</groupId>
+            <artifactId>payment-service</artifactId>
+            <version>1.0-SNAPSHOT</version>
+        </dependency>
     </dependencies>
 
     <build>

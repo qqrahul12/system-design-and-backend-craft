@@ -764,6 +764,169 @@ async function runTestSuite() {
     }
   });
 
+  // 11. Resilience4j Circuit Breaker & SplitMoney Domain Integration
+  console.log('\n--- 11. Resilience4j Circuit Breaker & SplitMoney Domain Integration ---');
+  await test('Resilience4j Circuit Breaker Status & Simulation Toggle Flow', async () => {
+    // 1. Get Circuit Breaker status
+    const statusRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/circuit-breaker/status',
+      method: 'GET',
+    });
+    if (statusRes.statusCode !== 200) throw new Error(`Expected 200, got ${statusRes.statusCode}`);
+    const statusData = JSON.parse(statusRes.body);
+    if (statusData.circuitBreaker !== 'stripePaymentService' || statusData.state !== 'CLOSED') {
+      throw new Error(`Unexpected circuit breaker state: ${JSON.stringify(statusData)}`);
+    }
+
+    // 2. Toggle Stripe Failure Simulation ON
+    const toggleOnPayload = JSON.stringify({ simulateFailure: true });
+    const toggleOnRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/circuit-breaker/toggle-stripe-failure',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(toggleOnPayload) },
+    }, toggleOnPayload);
+    if (toggleOnRes.statusCode !== 200) throw new Error(`Toggle failed: ${toggleOnRes.statusCode}`);
+    const onData = JSON.parse(toggleOnRes.body);
+    if (!onData.simulateFailure) throw new Error('Expected simulateFailure to be true');
+
+    // 3. Toggle Stripe Failure Simulation OFF (Restore healthy state)
+    const toggleOffPayload = JSON.stringify({ simulateFailure: false });
+    const toggleOffRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/circuit-breaker/toggle-stripe-failure',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(toggleOffPayload) },
+    }, toggleOffPayload);
+    if (toggleOffRes.statusCode !== 200) throw new Error(`Toggle off failed: ${toggleOffRes.statusCode}`);
+    const offData = JSON.parse(toggleOffRes.body);
+    if (offData.simulateFailure) throw new Error('Expected simulateFailure to be false');
+  });
+
+  await test('SplitMoney Squad Users & Groups Discovery (/api/v1/split)', async () => {
+    // 1. Users list
+    const usersRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/split/users',
+      method: 'GET',
+    });
+    if (usersRes.statusCode !== 200) throw new Error(`Users failed: ${usersRes.statusCode}`);
+    const users = JSON.parse(usersRes.body);
+    if (!Array.isArray(users) || users.length < 4) throw new Error(`Expected at least 4 users, got ${users.length}`);
+
+    // 2. Groups list
+    const groupsRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/split/groups',
+      method: 'GET',
+    });
+    if (groupsRes.statusCode !== 200) throw new Error(`Groups failed: ${groupsRes.statusCode}`);
+    const groups = JSON.parse(groupsRes.body);
+    if (!Array.isArray(groups) || groups.length === 0) throw new Error('Expected at least 1 group');
+  });
+
+  let createdExpenseId = null;
+
+  await test('SplitMoney Group Bill Splitting & Share Calculation (/api/v1/split/create)', async () => {
+    const payload = JSON.stringify({
+      name: 'Interstellar VIP Passes Split',
+      totalAmount: 80.0,
+      paidByUserId: 'usr-marcus',
+      referenceType: 'MOVIE_TICKET',
+      referenceId: 'TKT-TEST-SPLIT-01',
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/split/create',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Split create failed: ${res.statusCode}`);
+    const expense = JSON.parse(res.body);
+    if (!expense.id || expense.totalAmount !== 80.0) throw new Error('Invalid expense returned');
+    if (!Array.isArray(expense.shares) || expense.shares.length < 4) {
+      throw new Error(`Expected shares across 4 squad members, got ${expense.shares?.length}`);
+    }
+    // Each share of 80 / 4 = 20.0
+    if (expense.shares[0].shareAmount !== 20.0) {
+      throw new Error(`Expected $20.00 per share, got ${expense.shares[0].shareAmount}`);
+    }
+    createdExpenseId = expense.id;
+  });
+
+  await test('SplitMoney 1-Click Share Settlement with CineCash Wallet (/api/v1/split/settle)', async () => {
+    if (!createdExpenseId) throw new Error('No expense to settle');
+    const payload = JSON.stringify({
+      expenseId: createdExpenseId,
+      debtorUserId: 'usr-alex',
+      paymentMethod: 'WALLET',
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/split/settle',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Settle failed: ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (data.status !== 'SETTLED' || data.paymentMethod !== 'WALLET') {
+      throw new Error(`Settlement incomplete: ${JSON.stringify(data)}`);
+    }
+  });
+
+  await test('SplitMoney Squad Balance Summary Ledger (/api/v1/split/balances)', async () => {
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/split/balances?userId=usr-marcus',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Balances failed: ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (data.userId !== 'usr-marcus' || typeof data.netBalance !== 'number') {
+      throw new Error(`Invalid balance summary: ${JSON.stringify(data)}`);
+    }
+  });
+
+  await test('MCP tools/call execution (split_movie_bill)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 15,
+      method: 'tools/call',
+      params: {
+        name: 'split_movie_bill',
+        arguments: {
+          billName: 'The Batman Part II IMAX Tickets',
+          totalAmount: 76.0,
+          payerUserId: 'usr-marcus',
+          memberCount: 4,
+        },
+      },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`MCP failed: ${res.statusCode}`);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error(`MCP tool error: ${JSON.stringify(json)}`);
+    const content = json.result?.content?.[0]?.text;
+    if (!content || !content.includes('SplitMoney') || !content.includes('$76.00') || !content.includes('$19.00')) {
+      throw new Error(`Unexpected MCP output: ${content}`);
+    }
+  });
+
   console.log('\n====================================================');
   console.log(`🎯 Test Results: ${passed}/${total} Passed (${Math.round((passed / total) * 100)}%)`);
   console.log('====================================================');
