@@ -129,6 +129,27 @@ async function runTestSuite() {
     }
   });
 
+  await test('MCP tools/call execution (ingest_current_year_movies)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 4,
+      method: 'tools/call',
+      params: { name: 'ingest_current_year_movies', arguments: { year: 2026 } },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error('Tool returned error');
+    if (!json.result?.content?.[0]?.text?.includes('Project Hail Mary') || !json.result?.content?.[0]?.text?.includes('Avengers: Doomsday')) {
+      throw new Error('Tool output did not contain ingested current year releases');
+    }
+  });
+
   // 4. RAG Pipeline Tests
   console.log('\n--- 4. RAG Ingestion & Vector Retrieval Pipeline ---');
   await test('RAG Document Ingestion & Chunking', async () => {

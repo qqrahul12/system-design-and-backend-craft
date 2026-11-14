@@ -81,4 +81,11 @@ public class MovieController {
         Movie drafted = movieCatalogService.aiDraftMovie(title, genreHint);
         return ResponseEntity.ok(drafted);
     }
+
+    @PostMapping("/ingest-current-year")
+    public ResponseEntity<List<Movie>> ingestCurrentYear(@RequestBody(required = false) Map<String, Object> req) {
+        int year = (req != null && req.containsKey("year")) ? ((Number) req.get("year")).intValue() : 2026;
+        List<Movie> ingested = movieCatalogService.ingestCurrentYearMovies(year);
+        return ResponseEntity.ok(ingested);
+    }
 }

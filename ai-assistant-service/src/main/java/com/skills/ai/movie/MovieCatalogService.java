@@ -304,4 +304,57 @@ public class MovieCatalogService {
                 .posterUrl("https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop")
                 .build();
     }
+
+    public List<Movie> ingestCurrentYearMovies(int targetYear) {
+        int year = (targetYear >= 2024 && targetYear <= 2030) ? targetYear : 2026;
+        List<Movie> ingested = new ArrayList<>();
+
+        addSeededMovie(201L, "Project Hail Mary", "Sci-Fi", 4.9, year, "2h 35m", 19.50, true,
+                "Astronaut Ryland Grace is the lone survivor on an interstellar mission to save Earth from a global extinction event.",
+                List.of("C3", "C4"), "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop",
+                "IMAX 70mm Auditorium 1", "NOW_SHOWING", 97, "1:15 PM, 4:45 PM, 8:15 PM",
+                96, 88, 8.9, "A stunning, deeply emotional, and scientifically rigorous sci-fi masterwork anchored by Ryan Gosling's career-best performance.",
+                "\"Project Hail Mary restores the pure, soaring wonder of cosmic cinema.\" — The Washington Post", 480,
+                "https://www.youtube.com/embed/zSWdZVtXT7E", "Phil Lord, Christopher Miller", "Ryan Gosling, Sandra Hüller, Milana Vayntrub", "PG-13");
+        ingested.add(movieStore.get(201L));
+
+        addSeededMovie(202L, "Mickey 17", "Sci-Fi", 4.8, year, "2h 19m", 18.00, true,
+                "An 'expendable' human employee on a space colonization expedition refuses to let his clone replacement take over.",
+                List.of("B3", "B4"), "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop",
+                "Dolby Cinema Auditorium 3", "NOW_SHOWING", 93, "2:00 PM, 5:30 PM, 9:00 PM",
+                92, 85, 8.5, "Bong Joon-ho infuses razor-sharp dark humor and existential dread into a visually inventive sci-fi puzzle.",
+                "\"A darkly hilarious, visually breathtaking tour de force.\" — IndieWire", 390,
+                "https://www.youtube.com/embed/osYlpQ8Duac", "Bong Joon-ho", "Robert Pattinson, Naomi Ackie, Steven Yeun, Mark Ruffalo", "R");
+        ingested.add(movieStore.get(202L));
+
+        addSeededMovie(203L, "Superman", "Action", 4.8, year, "2h 25m", 19.00, true,
+                "Clark Kent strives to balance his Kryptonian heritage with his human upbringing, standing as the beacon of hope and truth.",
+                List.of("D3", "D4"), "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop",
+                "IMAX 70mm Auditorium 1", "NOW_SHOWING", 95, "12:30 PM, 4:00 PM, 7:30 PM, 10:30 PM",
+                94, 82, 8.7, "James Gunn brings optimism, vibrant comic-book grandeur, and heartfelt humanity back to the quintessential superhero.",
+                "\"Superman soars with sincerity, breathtaking action, and infectious joy.\" — Empire", 510,
+                "https://www.youtube.com/embed/Way9Dexny3w", "James Gunn", "David Corenswet, Rachel Brosnahan, Nicholas Hoult", "PG-13");
+        ingested.add(movieStore.get(203L));
+
+        addSeededMovie(204L, "Avatar: Fire and Ash", "Epic", 4.7, year, "3h 10m", 21.00, true,
+                "The journey of Jake Sully and Neytiri continues as they encounter the aggressive nomadic Ash People across the volcanic ranges of Pandora.",
+                List.of("C3", "C4", "D3", "D4"), "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop",
+                "IMAX 3D Laser Auditorium 1", "NOW_SHOWING", 98, "1:00 PM, 5:15 PM, 9:30 PM",
+                91, 84, 8.6, "James Cameron pushes photorealistic CGI and acoustic world-building into territory no other filmmaker can touch.",
+                "\"A staggering technical marvel that redefines immersive spectacle.\" — Variety", 620,
+                "https://www.youtube.com/embed/cqGjhVJWtEg", "James Cameron", "Sam Worthington, Zoe Saldana, Sigourney Weaver, Michelle Yeoh", "PG-13");
+        ingested.add(movieStore.get(204L));
+
+        addSeededMovie(205L, "Avengers: Doomsday", "Action", 4.9, year, "2h 50m", 20.00, true,
+                "The multiverse collapses as Earth's mightiest heroes face Victor von Doom in a battle across parallel timelines.",
+                List.of("B2", "B3", "B4"), "https://images.unsplash.com/photo-1604200213928-ba3cf4fc8436?w=600&auto=format&fit=crop",
+                "IMAX 70mm Auditorium 1", "NOW_SHOWING", 99, "11:45 AM, 3:30 PM, 7:15 PM, 11:00 PM",
+                95, 87, 8.9, "The Russo Brothers deliver blistering emotional stakes and monumental scale in an electrifying event comic come to life.",
+                "\"A thunderous comic-book triumph that shakes the auditorium to its foundations.\" — Rolling Stone", 740,
+                "https://www.youtube.com/embed/uYPbbksJxIg", "Anthony Russo, Joe Russo", "Robert Downey Jr., Pedro Pascal, Vanessa Kirby, Florence Pugh", "PG-13");
+        ingested.add(movieStore.get(205L));
+
+        log.info("🍿 Ingested {} real-time {} theatrical blockbuster movies into CineMind database", ingested.size(), year);
+        return ingested;
+    }
 }

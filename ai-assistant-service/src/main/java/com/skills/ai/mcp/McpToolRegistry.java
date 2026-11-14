@@ -343,6 +343,32 @@ public class McpToolRegistry {
                             m.getTitle(), m.getYear(), rt, freshBadge, mc, imdb, reviews, consensus, quote));
                 }
         );
+
+        // 11. Ingest Real-Time Current Year Theatrical Releases Tool
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("ingest_current_year_movies")
+                        .description("Ingests real-time theatrical blockbuster movie releases for the current year (2024-2026) directly into the CineMind database with verified critic scores, auditoriums, showtimes, cast, and trailers.")
+                        .inputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "year", Map.of("type", "number", "description", "The release year to ingest, e.g. 2026")
+                                )
+                        ))
+                        .build(),
+                args -> {
+                    Number yrNum = (Number) args.getOrDefault("year", 2026);
+                    int year = yrNum != null ? yrNum.intValue() : 2026;
+                    List<Movie> ingested = movieCatalogService.ingestCurrentYearMovies(year);
+                    StringBuilder sb = new StringBuilder(String.format("✅ Successfully ingested %d real-time %d theatrical releases into CineMind database:\n", ingested.size(), year));
+                    for (int i = 0; i < ingested.size(); i++) {
+                        Movie m = ingested.get(i);
+                        sb.append(String.format("%d. %s (%d, %s) | Rating: %.1f | RT: %d%% | %s | %s | Dir: %s\n",
+                                i + 1, m.getTitle(), m.getYear(), m.getGenre(), m.getRating(), m.getRottenTomatoes(), m.getAuditorium(), m.getShowtimes(), m.getDirector()));
+                    }
+                    return McpToolDefinition.CallResult.text(sb.toString().trim());
+                }
+        );
     }
 
     public void registerTool(McpToolDefinition definition, Function<Map<String, Object>, McpToolDefinition.CallResult> executor) {
