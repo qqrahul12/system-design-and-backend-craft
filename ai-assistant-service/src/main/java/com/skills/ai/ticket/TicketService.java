@@ -1,6 +1,7 @@
 package com.skills.ai.ticket;
 
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
@@ -8,19 +9,22 @@ import reactor.core.publisher.Sinks;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import java.nio.charset.StandardCharsets;
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Service generating and validating cryptographically-signed digital tickets.
+ * Service generating, persisting, and validating cryptographically-signed digital tickets in H2 DB.
  */
 @Slf4j
 @Service
 public class TicketService {
 
     private static final String HMAC_SECRET = "cinemind-enterprise-gate-secret-key-2026";
-    private final Map<String, DigitalTicket> tickets = new ConcurrentHashMap<>();
+    private final JdbcTemplate jdbcTemplate;
     private final Map<String, SeatLock> activeLocks = new ConcurrentHashMap<>();
 
     private final Sinks.Many<Map<String, Object>> seatEventSink =
@@ -32,8 +36,8 @@ public class TicketService {
 
     public record SeatLock(String lockToken, String movieTitle, String showTime, List<String> seats, Instant expiresAt) {}
 
-    public TicketService() {
-        seedSampleTicket();
+    public TicketService(JdbcTemplate jdbcTemplate) {
+        this.jdbcTemplate = jdbcTemplate;
     }
 
     public SeatLock acquireSeatLock(String movieTitle, String showTime, List<String> seats) {
@@ -47,7 +51,7 @@ public class TicketService {
         SeatLock lock = new SeatLock(lockToken, movieTitle, showTime != null ? showTime : "7:30 PM", seats, expiresAt);
         activeLocks.put(lockToken, lock);
         log.info("🔒 Acquired 10-minute distributed seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
-        
+
         seatEventSink.tryEmitNext(Map.of(
                 "event", "LOCK_ACQUIRED",
                 "movieTitle", movieTitle != null ? movieTitle : "",
@@ -80,9 +84,9 @@ public class TicketService {
         Instant now = Instant.now();
         activeLocks.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(now));
 
-        // Get booked seats from active tickets
+        // Get booked seats from active tickets in DB
         Set<String> bookedSeats = new HashSet<>();
-        for (DigitalTicket t : tickets.values()) {
+        for (DigitalTicket t : listTickets()) {
             if (movieTitle == null || t.movieTitle().equalsIgnoreCase(movieTitle)) {
                 if (t.seats() != null) {
                     bookedSeats.addAll(t.seats());
@@ -147,55 +151,87 @@ public class TicketService {
     }
 
     public DigitalTicket issueTicket(String movieTitle, String showTime, String format, String auditorium, List<String> seats, double totalPaid) {
-        String ticketId = "TKT-" + movieTitle.replaceAll("[^a-zA-Z]", "").toUpperCase()
-                .substring(0, Math.min(5, movieTitle.length())) + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+        return issueTicket(movieTitle, showTime, format, auditorium, seats, totalPaid, Instant.now());
+    }
 
-        String rawPayload = String.format("%s:%s:%s:%s", ticketId, movieTitle, String.join(",", seats), totalPaid);
+    public DigitalTicket issueTicket(
+            String movieTitle,
+            String showTime,
+            String format,
+            String auditorium,
+            List<String> seats,
+            double totalPaid,
+            Instant issuedAt
+    ) {
+        String safeTitle = (movieTitle != null && !movieTitle.isBlank()) ? movieTitle : "MOVIE";
+        String cleanTitle = safeTitle.replaceAll("[^a-zA-Z]", "").toUpperCase();
+        String prefix = cleanTitle.substring(0, Math.min(5, cleanTitle.length()));
+        String ticketId = "TKT-" + prefix + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+
+        List<String> safeSeats = (seats != null && !seats.isEmpty()) ? seats : List.of("C3");
+        String rawPayload = String.format("%s:%s:%s:%s", ticketId, safeTitle, String.join(",", safeSeats), totalPaid);
         String signature = computeHmacSha256(rawPayload);
+        Instant issueTime = (issuedAt != null) ? issuedAt : Instant.now();
+        String formatVal = (format != null) ? format : "IMAX 70mm";
+        String audVal = (auditorium != null) ? auditorium : "Auditorium 1";
+        String showTimeVal = (showTime != null) ? showTime : "7:30 PM";
 
         DigitalTicket ticket = new DigitalTicket(
                 ticketId,
-                movieTitle,
-                showTime,
-                format != null ? format : "IMAX 70mm",
-                auditorium != null ? auditorium : "Auditorium 4 (Dolby Atmos)",
-                seats,
+                safeTitle,
+                showTimeVal,
+                formatVal,
+                audVal,
+                safeSeats,
                 totalPaid,
                 rawPayload + ":" + signature.substring(0, 8),
                 signature,
                 "ISSUED",
-                Instant.now(),
+                issueTime,
                 null
         );
 
-        tickets.put(ticketId, ticket);
-        log.info("Issued digital ticket: id={}, movie={}, seats={}", ticketId, movieTitle, seats);
+        jdbcTemplate.update(
+                "INSERT INTO tickets (ticket_id, movie_title, show_time, format, auditorium, seats_csv, total_paid, qr_payload, signature, status, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                ticketId, safeTitle, showTimeVal, formatVal, audVal, String.join(",", safeSeats), totalPaid, ticket.qrPayload(), signature, "ISSUED", Timestamp.from(issueTime)
+        );
+
+        log.info("Issued digital ticket in DB: id={}, movie={}, seats={}", ticketId, safeTitle, safeSeats);
 
         seatEventSink.tryEmitNext(Map.of(
                 "event", "TICKET_ISSUED",
-                "movieTitle", movieTitle != null ? movieTitle : "",
-                "showTime", showTime != null ? showTime : "",
-                "seats", seats != null ? seats : List.of(),
+                "movieTitle", safeTitle,
+                "showTime", showTimeVal,
+                "seats", safeSeats,
                 "ticketId", ticketId,
-                "timestamp", Instant.now().toString()
+                "timestamp", issueTime.toString()
         ));
         return ticket;
     }
 
     public Optional<DigitalTicket> getTicket(String ticketId) {
-        return Optional.ofNullable(tickets.get(ticketId));
+        List<DigitalTicket> results = jdbcTemplate.query(
+                "SELECT ticket_id, movie_title, show_time, format, auditorium, seats_csv, total_paid, qr_payload, signature, status, issued_at FROM tickets WHERE ticket_id = ?",
+                this::mapRowToTicket,
+                ticketId
+        );
+        return results.isEmpty() ? Optional.empty() : Optional.of(results.get(0));
     }
 
     public List<DigitalTicket> listTickets() {
-        return new ArrayList<>(tickets.values());
+        return jdbcTemplate.query(
+                "SELECT ticket_id, movie_title, show_time, format, auditorium, seats_csv, total_paid, qr_payload, signature, status, issued_at FROM tickets ORDER BY issued_at DESC",
+                this::mapRowToTicket
+        );
     }
 
     public ValidationResult validateGatePass(String ticketId, String qrToken) {
-        DigitalTicket existing = tickets.get(ticketId);
-        if (existing == null) {
+        Optional<DigitalTicket> opt = getTicket(ticketId);
+        if (opt.isEmpty()) {
             return new ValidationResult(false, "INVALID_TICKET", "Ticket ID not found in CineMind database.", null);
         }
 
+        DigitalTicket existing = opt.get();
         if ("CHECKED_IN".equals(existing.status())) {
             return new ValidationResult(false, "ALREADY_CHECKED_IN", "Gate fraud alert: ticket was already checked in at " + existing.checkedInAt(), existing);
         }
@@ -208,7 +244,11 @@ public class TicketService {
             return new ValidationResult(false, "SIGNATURE_TAMPERED", "Cryptographic signature mismatch! Ticket is counterfeit.", existing);
         }
 
-        // Mark ticket checked-in
+        jdbcTemplate.update(
+                "UPDATE tickets SET status = 'CHECKED_IN' WHERE ticket_id = ?",
+                ticketId
+        );
+
         DigitalTicket checkedIn = new DigitalTicket(
                 existing.ticketId(),
                 existing.movieTitle(),
@@ -223,16 +263,15 @@ public class TicketService {
                 existing.issuedAt(),
                 Instant.now()
         );
-        tickets.put(ticketId, checkedIn);
 
-        log.info("Ticket successfully checked in at auditorium gate: id={}", ticketId);
+        log.info("Ticket successfully checked in at auditorium gate in DB: id={}", ticketId);
         return new ValidationResult(true, "ACCESS_GRANTED", "Welcome to " + checkedIn.auditorium() + "! Enjoy " + checkedIn.movieTitle() + ".", checkedIn);
     }
 
     public boolean deleteTicket(String ticketId) {
-        DigitalTicket removed = tickets.remove(ticketId);
-        if (removed != null) {
-            log.info("Cancelled/refunded ticket: id={}", ticketId);
+        int rows = jdbcTemplate.update("DELETE FROM tickets WHERE ticket_id = ?", ticketId);
+        if (rows > 0) {
+            log.info("Cancelled/refunded ticket in DB: id={}", ticketId);
             return true;
         }
         return false;
@@ -250,81 +289,28 @@ public class TicketService {
         }
     }
 
-    public DigitalTicket issueHistoricalTicket(
-            String movieTitle,
-            String showTime,
-            String format,
-            String auditorium,
-            List<String> seats,
-            double totalPaid,
-            Instant issuedAt
-    ) {
-        String cleanTitle = movieTitle.replaceAll("[^a-zA-Z]", "").toUpperCase();
-        String prefix = cleanTitle.substring(0, Math.min(5, cleanTitle.length()));
-        String ticketId = "TKT-" + prefix + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
+    private DigitalTicket mapRowToTicket(ResultSet rs, int rowNum) throws SQLException {
+        String seatsCsv = rs.getString("seats_csv");
+        List<String> seats = (seatsCsv != null && !seatsCsv.isBlank())
+                ? Arrays.asList(seatsCsv.split(","))
+                : List.of();
+        Timestamp ts = rs.getTimestamp("issued_at");
+        Instant issuedAt = (ts != null) ? ts.toInstant() : Instant.now();
 
-        String rawPayload = String.format("%s:%s:%s:%s", ticketId, movieTitle, String.join(",", seats), totalPaid);
-        String signature = computeHmacSha256(rawPayload);
-
-        DigitalTicket ticket = new DigitalTicket(
-                ticketId,
-                movieTitle,
-                showTime,
-                format != null ? format : "IMAX 70mm",
-                auditorium != null ? auditorium : "Auditorium 1",
+        return new DigitalTicket(
+                rs.getString("ticket_id"),
+                rs.getString("movie_title"),
+                rs.getString("show_time"),
+                rs.getString("format"),
+                rs.getString("auditorium"),
                 seats,
-                totalPaid,
-                rawPayload + ":" + signature.substring(0, 8),
-                signature,
-                "ISSUED",
-                issuedAt != null ? issuedAt : Instant.now(),
+                rs.getDouble("total_paid"),
+                rs.getString("qr_payload"),
+                rs.getString("signature"),
+                rs.getString("status"),
+                issuedAt,
                 null
         );
-
-        tickets.put(ticketId, ticket);
-        return ticket;
-    }
-
-    private void seedSampleTicket() {
-        // Trailing 7-day realistic ticketing DB ledger across auditoriums
-        Instant now = Instant.now();
-        java.time.temporal.ChronoUnit days = java.time.temporal.ChronoUnit.DAYS;
-
-        // Monday (6 days ago)
-        issueHistoricalTicket("Interstellar", "7:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("A1", "A2", "A3", "A4"), 72.00, now.minus(6, days));
-        issueHistoricalTicket("Dune: Part Two", "8:30 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("C3", "C4"), 38.00, now.minus(6, days));
-        issueHistoricalTicket("Oppenheimer", "9:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("B1", "B2"), 36.00, now.minus(6, days));
-
-        // Tuesday (5 days ago)
-        issueHistoricalTicket("Tron: Ares", "6:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B3", "B4"), 39.00, now.minus(5, days));
-        issueHistoricalTicket("Gladiator II", "8:00 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("C1", "C2", "C3"), 57.00, now.minus(5, days));
-        issueHistoricalTicket("Inception", "9:30 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("D4", "D5"), 34.00, now.minus(5, days));
-
-        // Wednesday (4 days ago)
-        issueHistoricalTicket("Dune: Part Two", "7:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B1", "B2", "B3", "B4"), 78.00, now.minus(4, days));
-        issueHistoricalTicket("Interstellar", "8:15 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C3", "C4"), 39.00, now.minus(4, days));
-        issueHistoricalTicket("Blade Runner 2049", "9:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("A5", "A6"), 34.00, now.minus(4, days));
-
-        // Thursday (3 days ago)
-        issueHistoricalTicket("Oppenheimer", "6:00 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("C2", "C3", "C4"), 54.00, now.minus(3, days));
-        issueHistoricalTicket("Tron: Ares", "7:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("D1", "D2", "D3"), 58.50, now.minus(3, days));
-        issueHistoricalTicket("Gladiator II", "9:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("B2", "B3"), 38.00, now.minus(3, days));
-
-        // Friday (2 days ago - High Traffic)
-        issueHistoricalTicket("Dune: Part Two", "6:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B1", "B2", "B3", "B4", "B5"), 97.50, now.minus(2, days));
-        issueHistoricalTicket("Interstellar", "8:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C1", "C2", "C3", "C4"), 78.00, now.minus(2, days));
-        issueHistoricalTicket("Tron: Ares", "9:45 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("A1", "A2", "A3"), 55.50, now.minus(2, days));
-        issueHistoricalTicket("Oppenheimer", "10:00 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("C5", "C6"), 36.00, now.minus(2, days));
-
-        // Saturday (1 day ago - Peak Weekend)
-        issueHistoricalTicket("Interstellar", "2:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B2", "B3", "B4"), 58.50, now.minus(1, days));
-        issueHistoricalTicket("Dune: Part Two", "5:00 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C1", "C2", "C3", "C4", "C5"), 97.50, now.minus(1, days));
-        issueHistoricalTicket("Gladiator II", "7:30 PM", "70mm Large Format", "70mm Large Format Screen 2", List.of("A3", "A4", "A5"), 57.00, now.minus(1, days));
-        issueHistoricalTicket("Tron: Ares", "8:45 PM", "Dolby Cinema", "Dolby Cinema Auditorium 3", List.of("D2", "D3"), 39.00, now.minus(1, days));
-
-        // Sunday / Today
-        issueTicket("Inception", "9:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("B3", "B4"), 38.00);
-        issueTicket("Dune: Part Two", "7:30 PM", "IMAX 70mm", "IMAX 70mm Auditorium 1", List.of("C3", "C4"), 39.00);
     }
 
     public record ValidationResult(boolean valid, String code, String message, DigitalTicket ticket) {}

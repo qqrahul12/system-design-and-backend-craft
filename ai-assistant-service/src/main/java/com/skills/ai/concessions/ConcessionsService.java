@@ -1,23 +1,40 @@
 package com.skills.ai.concessions;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.util.*;
 
 /**
  * Service managing CineMind Gourmet Concessions, dietary validation,
- * and AI-driven sensory genre pairings.
+ * AI-driven sensory genre pairings, and persistence in relational H2 DB.
  */
 @Slf4j
 @Service
 public class ConcessionsService {
 
+    private final JdbcTemplate jdbcTemplate;
+    private final ObjectMapper objectMapper;
     private final List<ConcessionItem> menu = new ArrayList<>();
+    private final Sinks.Many<ConcessionOrder> orderEventSink =
+            Sinks.many().multicast().onBackpressureBuffer();
 
-    public ConcessionsService() {
+    public Flux<ConcessionOrder> getOrderEvents() {
+        return orderEventSink.asFlux();
+    }
+
+    public ConcessionsService(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+        this.jdbcTemplate = jdbcTemplate;
+        this.objectMapper = objectMapper;
         seedMenu();
     }
 
@@ -159,97 +176,57 @@ public class ConcessionsService {
                 List.of("Sci-Fi", "Drama"),
                 "Nitrogen-infused single-origin Ethiopian cold brew with subtle Madagascar vanilla."
         ));
-
-        // Seed historical concessions orders in DB across trailing week
-        seedHistoricalOrders();
-    }
-
-    private void seedHistoricalOrders() {
-        java.time.Instant now = java.time.Instant.now();
-        java.time.temporal.ChronoUnit days = java.time.temporal.ChronoUnit.DAYS;
-
-        // Monday
-        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 1, "price", 11.0)), "IMAX 70mm Auditorium 1, Seat A1", 11.00, now.minus(6, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Wild Blackberry Craft Soda", "qty", 2, "price", 6.0)), "70mm Large Format Screen 2, Seat C3", 12.00, now.minus(6, days));
-
-        // Tuesday
-        placeHistoricalOrder(List.of(Map.of("name", "Chipotle Queso Loaded Nachos", "qty", 1, "price", 10.5)), "70mm Large Format Screen 2, Seat C1", 10.50, now.minus(5, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 2, "price", 7.0)), "IMAX 70mm Auditorium 1, Seat B3", 14.00, now.minus(5, days));
-
-        // Wednesday
-        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 2, "price", 11.0)), "IMAX 70mm Auditorium 1, Seat B2", 22.00, now.minus(4, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Dark Chocolate Sea Salt Pretzel Bites", "qty", 1, "price", 7.5)), "Dolby Cinema Auditorium 3, Seat A5", 7.50, now.minus(4, days));
-
-        // Thursday
-        placeHistoricalOrder(List.of(Map.of("name", "Chipotle Queso Loaded Nachos", "qty", 2, "price", 10.5)), "70mm Large Format Screen 2, Seat C2", 21.00, now.minus(3, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Wild Blackberry Craft Soda", "qty", 1, "price", 6.0)), "IMAX 70mm Auditorium 1, Seat D1", 6.00, now.minus(3, days));
-
-        // Friday (High Traffic)
-        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 3, "price", 11.0)), "IMAX 70mm Auditorium 1, Seat B1", 33.00, now.minus(2, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 2, "price", 7.0)), "IMAX 70mm Auditorium 1, Seat C2", 14.00, now.minus(2, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Chipotle Queso Loaded Nachos", "qty", 2, "price", 10.5)), "70mm Large Format Screen 2, Seat A2", 21.00, now.minus(2, days));
-
-        // Saturday (Peak Weekend)
-        placeHistoricalOrder(List.of(Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 2, "price", 11.0), Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 2, "price", 7.0)), "IMAX 70mm Auditorium 1, Seat C2", 36.00, now.minus(1, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Dark Chocolate Sea Salt Pretzel Bites", "qty", 2, "price", 7.5)), "70mm Large Format Screen 2, Seat A4", 15.00, now.minus(1, days));
-        placeHistoricalOrder(List.of(Map.of("name", "Wild Blackberry Craft Soda", "qty", 3, "price", 6.0)), "Dolby Cinema Auditorium 3, Seat D2", 18.00, now.minus(1, days));
-
-        // Today
-        placeOrder(
-                List.of(
-                        Map.of("name", "Black Truffle & Rosemary Popcorn", "qty", 1, "price", 11.00),
-                        Map.of("name", "Nitro Vanilla Sky Cold Brew", "qty", 1, "price", 7.00)
-                ),
-                "IMAX 70mm Auditorium 1, Seat B3",
-                18.00
-        );
-    }
-
-    public ConcessionOrder placeHistoricalOrder(List<Map<String, Object>> items, String deliverySeat, double total, java.time.Instant createdAt) {
-        String orderId = "FB-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
-        ConcessionOrder order = ConcessionOrder.builder()
-                .orderId(orderId)
-                .items(items != null ? items : List.of())
-                .totalAmount(total > 0 ? total : 18.50)
-                .deliverySeat(deliverySeat != null && !deliverySeat.isBlank() ? deliverySeat : "Express VIP Pickup Counter")
-                .status("DELIVERED")
-                .estimatedMinutes(0)
-                .createdAt(createdAt != null ? createdAt : java.time.Instant.now())
-                .build();
-        orders.put(orderId, order);
-        return order;
-    }
-
-    private final Map<String, ConcessionOrder> orders = new java.util.concurrent.ConcurrentHashMap<>();
-    private final Sinks.Many<ConcessionOrder> orderEventSink =
-            Sinks.many().multicast().onBackpressureBuffer();
-
-    public Flux<ConcessionOrder> getOrderEvents() {
-        return orderEventSink.asFlux();
     }
 
     public ConcessionOrder placeOrder(List<Map<String, Object>> items, String deliverySeat, double total) {
+        return placeOrder(items, deliverySeat, total, Instant.now());
+    }
+
+    public ConcessionOrder placeOrder(List<Map<String, Object>> items, String deliverySeat, double total, Instant createdAt) {
         String orderId = "FB-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
+        Instant orderTime = (createdAt != null) ? createdAt : Instant.now();
+        List<Map<String, Object>> orderItems = (items != null) ? items : List.of();
+        double orderTotal = (total > 0) ? total : 18.50;
+        String seat = (deliverySeat != null && !deliverySeat.isBlank()) ? deliverySeat : "Express VIP Pickup Counter";
+
+        String itemsJson;
+        try {
+            itemsJson = objectMapper.writeValueAsString(orderItems);
+        } catch (Exception e) {
+            log.error("Failed to serialize items to JSON: {}", e.getMessage());
+            itemsJson = "[]";
+        }
+
+        jdbcTemplate.update(
+                "INSERT INTO concession_orders (order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                orderId, itemsJson, seat, orderTotal, "PREPARING", 8, Timestamp.from(orderTime)
+        );
+
         ConcessionOrder order = ConcessionOrder.builder()
                 .orderId(orderId)
-                .items(items != null ? items : List.of())
-                .totalAmount(total > 0 ? total : 18.50)
-                .deliverySeat(deliverySeat != null && !deliverySeat.isBlank() ? deliverySeat : "Express VIP Pickup Counter")
+                .items(orderItems)
+                .totalAmount(orderTotal)
+                .deliverySeat(seat)
                 .status("PREPARING")
                 .estimatedMinutes(8)
-                .createdAt(java.time.Instant.now())
+                .createdAt(orderTime)
                 .build();
-        orders.put(orderId, order);
+
         orderEventSink.tryEmitNext(order);
-        log.info("🍿 Placed concessions order: id={}, total={}, deliverySeat={}", orderId, total, deliverySeat);
+        log.info("🍿 Placed concessions order in DB: id={}, total={}, deliverySeat={}", orderId, orderTotal, seat);
         return order;
     }
 
     public Optional<ConcessionOrder> updateOrderStatus(String orderId, String newStatus) {
-        ConcessionOrder existing = orders.get(orderId);
-        if (existing == null) {
+        List<ConcessionOrder> matches = jdbcTemplate.query(
+                "SELECT order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at FROM concession_orders WHERE order_id = ?",
+                this::mapRowToOrder,
+                orderId
+        );
+        if (matches.isEmpty()) {
             return Optional.empty();
         }
+        ConcessionOrder existing = matches.get(0);
         String cleanStatus = (newStatus != null && !newStatus.isBlank()) ? newStatus.toUpperCase().trim() : "PLATED";
         int newEst = switch (cleanStatus) {
             case "PLATED", "READY" -> 3;
@@ -257,6 +234,12 @@ public class ConcessionsService {
             case "DELIVERED" -> 0;
             default -> Math.max(1, existing.estimatedMinutes() - 2);
         };
+
+        jdbcTemplate.update(
+                "UPDATE concession_orders SET status = ?, estimated_minutes = ? WHERE order_id = ?",
+                cleanStatus, newEst, orderId
+        );
+
         ConcessionOrder updated = ConcessionOrder.builder()
                 .orderId(existing.orderId())
                 .items(existing.items())
@@ -266,13 +249,40 @@ public class ConcessionsService {
                 .estimatedMinutes(newEst)
                 .createdAt(existing.createdAt())
                 .build();
-        orders.put(orderId, updated);
+
         orderEventSink.tryEmitNext(updated);
-        log.info("🍽️ Order status advanced: orderId={}, status={}, remainingMinutes={}", orderId, cleanStatus, newEst);
+        log.info("🍽️ Order status advanced in DB: orderId={}, status={}, remainingMinutes={}", orderId, cleanStatus, newEst);
         return Optional.of(updated);
     }
 
     public List<ConcessionOrder> listOrders() {
-        return new ArrayList<>(orders.values());
+        return jdbcTemplate.query(
+                "SELECT order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at FROM concession_orders ORDER BY created_at DESC",
+                this::mapRowToOrder
+        );
+    }
+
+    private ConcessionOrder mapRowToOrder(ResultSet rs, int rowNum) throws SQLException {
+        String itemsJson = rs.getString("items_json");
+        List<Map<String, Object>> items = List.of();
+        if (itemsJson != null && !itemsJson.isBlank()) {
+            try {
+                items = objectMapper.readValue(itemsJson, new TypeReference<List<Map<String, Object>>>() {});
+            } catch (Exception e) {
+                log.warn("Could not deserialize concession order items JSON: {}", e.getMessage());
+            }
+        }
+        Timestamp ts = rs.getTimestamp("created_at");
+        Instant createdAt = (ts != null) ? ts.toInstant() : Instant.now();
+
+        return ConcessionOrder.builder()
+                .orderId(rs.getString("order_id"))
+                .items(items)
+                .totalAmount(rs.getDouble("total_amount"))
+                .deliverySeat(rs.getString("delivery_seat"))
+                .status(rs.getString("status"))
+                .estimatedMinutes(rs.getInt("estimated_minutes"))
+                .createdAt(createdAt)
+                .build();
     }
 }

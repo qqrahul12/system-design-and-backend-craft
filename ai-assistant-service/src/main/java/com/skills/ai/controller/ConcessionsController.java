@@ -44,8 +44,14 @@ public class ConcessionsController {
         List<Map<String, Object>> items = (List<Map<String, Object>>) req.getOrDefault("items", List.of());
         String deliverySeat = (String) req.getOrDefault("deliverySeat", "Express VIP Counter");
         double total = req.containsKey("total") ? ((Number) req.get("total")).doubleValue() : 18.50;
+        java.time.Instant createdAt = null;
+        if (req.containsKey("createdAt") && req.get("createdAt") != null) {
+            try {
+                createdAt = java.time.Instant.parse(req.get("createdAt").toString());
+            } catch (Exception ignored) {}
+        }
 
-        ConcessionOrder order = concessionsService.placeOrder(items, deliverySeat, total);
+        ConcessionOrder order = concessionsService.placeOrder(items, deliverySeat, total, createdAt);
         return ResponseEntity.status(HttpStatus.CREATED).body(order);
     }
 

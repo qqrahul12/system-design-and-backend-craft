@@ -648,7 +648,7 @@ async function runTestSuite() {
     });
     if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
     const data = JSON.parse(res.body);
-    if (!data.kpis?.totalGrossRevenue || !data.dailyRevenue || !data.genreTrends || !data.aiRecommendations || !data.publicInsights) {
+    if (data.kpis?.totalGrossRevenue === undefined || !data.dailyRevenue || !data.genreTrends || !data.aiRecommendations || !data.publicInsights) {
       throw new Error('Analytics payload missing required sections or publicInsights');
     }
   });

@@ -77,8 +77,14 @@ public class TicketController {
         String auditorium = (String) req.getOrDefault("auditorium", "Auditorium 1 (Dolby)");
         List<String> seats = req.containsKey("seats") ? (List<String>) req.get("seats") : List.of("B3", "B4");
         double amount = req.containsKey("totalPaid") ? ((Number) req.get("totalPaid")).doubleValue() : 24.00;
+        java.time.Instant issuedAt = null;
+        if (req.containsKey("issuedAt") && req.get("issuedAt") != null) {
+            try {
+                issuedAt = java.time.Instant.parse(req.get("issuedAt").toString());
+            } catch (Exception ignored) {}
+        }
 
-        return ticketService.issueTicket(movie, showTime, format, auditorium, seats, amount);
+        return ticketService.issueTicket(movie, showTime, format, auditorium, seats, amount, issuedAt);
     }
 
     @PostMapping("/validate")
