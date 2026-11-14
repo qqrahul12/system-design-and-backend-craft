@@ -852,7 +852,7 @@ export default function AdminPage() {
                 </span>
               </div>
               <p className="text-[11px] text-zinc-400 font-mono">
-                Circuit Occupancy: 88.4% • Peak Demand Pacing: 96%
+                Circuit Occupancy: {analytics?.kpis?.circuitOccupancyRate ? `${analytics.kpis.circuitOccupancyRate.toFixed(1)}%` : 'Active'} • Topline: {analytics?.kpis?.totalGrossRevenue ? `$${analytics.kpis.totalGrossRevenue.toLocaleString()}` : '$0'}
               </p>
             </div>
           </div>
@@ -862,16 +862,19 @@ export default function AdminPage() {
             <div className="text-right">
               <p className="text-xs font-bold text-white">Dynamic Yield Surge (+ $2.50)</p>
               <p className="text-[10px] text-amber-400 font-mono">
-                {isSurgeActive ? '⚡ Active (+$3,450 Projected Lift)' : 'Muted (Standard Rates)'}
+                {isSurgeActive 
+                  ? `⚡ Active (+${(analytics?.kpis?.totalGrossRevenue ? Math.round(analytics.kpis.totalGrossRevenue * 0.12) : 3450).toLocaleString()} Projected Lift)` 
+                  : 'Muted (Standard Rates)'}
               </p>
             </div>
             <button
               onClick={() => {
                 const next = !isSurgeActive
                 setIsSurgeActive(next)
+                const lift = analytics?.kpis?.totalGrossRevenue ? Math.round(analytics.kpis.totalGrossRevenue * 0.12) : 3450
                 showNotice(
                   next
-                    ? '⚡ AI Dynamic Surge (+ $2.50) activated on Screen 1 & Screen 4 peak slots! (+$3,450 lift)'
+                    ? `⚡ AI Dynamic Surge (+ $2.50) activated on Screen 1 & Screen 4 peak slots! (+$${lift.toLocaleString()} lift)`
                     : 'Standard pricing restored across all screens.'
                 )
                 playChime()

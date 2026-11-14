@@ -65,81 +65,6 @@ interface Movie {
   ageRating?: string
 }
 
-const INITIAL_MOVIES: Movie[] = [
-  {
-    id: 1,
-    title: 'Interstellar',
-    genre: 'Sci-Fi',
-    rating: 4.8,
-    year: 2014,
-    duration: '2h 49m',
-    price: 15,
-    aiPick: true,
-    synopsis: 'A team of explorers travel through a wormhole in space to ensure humanity’s survival.',
-    suggestedSeats: ['B3', 'B4'],
-  },
-  {
-    id: 2,
-    title: 'Dune: Part Two',
-    genre: 'Epic',
-    rating: 4.7,
-    year: 2024,
-    duration: '2h 46m',
-    price: 16,
-    aiPick: true,
-    synopsis: 'Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators.',
-    suggestedSeats: ['C3', 'C4'],
-  },
-  {
-    id: 3,
-    title: 'Oppenheimer',
-    genre: 'Drama',
-    rating: 4.9,
-    year: 2023,
-    duration: '3h 00m',
-    price: 14,
-    aiPick: false,
-    synopsis: 'The story of American scientist J. Robert Oppenheimer and his role in the Manhattan Project.',
-    suggestedSeats: ['B2', 'B3'],
-  },
-  {
-    id: 4,
-    title: 'Spider-Man: Across the Spider-Verse',
-    genre: 'Action',
-    rating: 4.8,
-    year: 2023,
-    duration: '2h 20m',
-    price: 13,
-    aiPick: false,
-    synopsis: 'Miles Morales catapults across the Multiverse, where he encounters a team of Spider-People.',
-    suggestedSeats: ['A3', 'A4'],
-  },
-  {
-    id: 5,
-    title: 'Past Lives',
-    genre: 'Romance',
-    rating: 4.6,
-    year: 2023,
-    duration: '1h 45m',
-    price: 12,
-    aiPick: false,
-    synopsis: 'Nora and Hae Sung, two deeply connected childhood friends, are reunited for one fateful week.',
-    suggestedSeats: ['C2', 'C3'],
-  },
-  {
-    id: 6,
-    title: 'Blade Runner 2049',
-    genre: 'Sci-Fi',
-    rating: 4.7,
-    year: 2017,
-    duration: '2h 44m',
-    price: 15,
-    aiPick: false,
-    synopsis: 'A young blade runner unearths a long-buried secret that leads him to track down Rick Deckard.',
-    suggestedSeats: ['B4', 'B5'],
-  },
-]
-
 const GENRES = ['All', 'Sci-Fi', 'Epic', 'Drama', 'Action', 'Romance']
 const SCREENING_DATES = [
   { id: 'today', label: 'Today', date: 'Nov 14', dayName: 'Thursday' },
@@ -212,7 +137,7 @@ function getFormatMultiplier(fmt: string): number {
 }
 
 export default function BookingPage() {
-  const [movies, setMovies] = useState<Movie[]>(INITIAL_MOVIES)
+  const [movies, setMovies] = useState<Movie[]>([])
 
   useEffect(() => {
     const API_BASE =
@@ -424,82 +349,20 @@ export default function BookingPage() {
 
     const queryLower = query.toLowerCase()
 
-    // Smart semantic keyword mapping
+    // Dynamic semantic keyword matching from actual catalog
     const findBestMatchLocally = () => {
-      // Space / Nolan / Wormhole
-      if (queryLower.includes('space') || queryLower.includes('wormhole') || queryLower.includes('nolan') || queryLower.includes('father') || queryLower.includes('time')) {
-        return {
-          movie: movies[0] || INITIAL_MOVIES[0], // Interstellar
-          reason: 'Interstellar is Christopher Nolan’s definitive masterpiece on space, love across dimensions, and relativity.'
-        }
-      }
-      // Epic / Desert / Sci-fi battle
-      if (queryLower.includes('desert') || queryLower.includes('epic') || queryLower.includes('war') || queryLower.includes('chani') || queryLower.includes('dune')) {
-        return {
-          movie: movies[1] || INITIAL_MOVIES[1], // Dune 2
-          reason: 'Dune: Part Two delivers unmatched scale, desert warfare cinematography, and Hans Zimmer’s thunderous sound design.'
-        }
-      }
-      // Historical / Physics / Drama
-      if (queryLower.includes('history') || queryLower.includes('bomb') || queryLower.includes('physics') || queryLower.includes('drama') || queryLower.includes('oppenheimer')) {
-        return {
-          movie: movies[2] || INITIAL_MOVIES[2], // Oppenheimer
-          reason: 'Oppenheimer offers a gripping character study of historical brilliance and atomic tension.'
-        }
-      }
-      // Animation / Multiverse / Action
-      if (queryLower.includes('superhero') || queryLower.includes('spiderman') || queryLower.includes('spider') || queryLower.includes('multiverse') || queryLower.includes('action') || queryLower.includes('animation')) {
-        return {
-          movie: movies[3] || INITIAL_MOVIES[3], // Spider-Man
-          reason: 'Across the Spider-Verse features groundbreaking animation styles and a thrilling high-velocity multiverse story.'
-        }
-      }
-      // Romance / Emotional / Quiet
-      if (queryLower.includes('love') || queryLower.includes('romance') || queryLower.includes('emotional') || queryLower.includes('relationship') || queryLower.includes('gentle')) {
-        return {
-          movie: movies[4] || INITIAL_MOVIES[4], // Past Lives
-          reason: 'Past Lives is an intimate, poignant meditation on destiny, lost love, and parallel paths.'
-        }
-      }
-      // Cyberpunk / Detective / Mystery
-      if (queryLower.includes('cyberpunk') || queryLower.includes('future') || queryLower.includes('detective') || queryLower.includes('ai') || queryLower.includes('blade')) {
-        return {
-          movie: movies[5] || INITIAL_MOVIES[5], // Blade Runner
-          reason: 'Blade Runner 2049 is the gold standard for atmospheric neo-noir sci-fi and existential questions.'
-        }
-      }
-      // Batman / Gotham / Crime / Mystery / Noir
-      if (queryLower.includes('batman') || queryLower.includes('gotham') || queryLower.includes('dark') || queryLower.includes('crime') || queryLower.includes('detective') || queryLower.includes('mystery')) {
-        const bm = movies.find(m => m.title.toLowerCase().includes('batman'))
-        if (bm) {
-          return {
-            movie: bm,
-            reason: 'The Batman Part II delivers a dark neo-noir detective thriller in rainy, corrupt Gotham City.'
-          }
-        }
-      }
-      // Dream / Heist / Inception
-      if (queryLower.includes('dream') || queryLower.includes('heist') || queryLower.includes('mind') || queryLower.includes('subconscious')) {
-        const inc = movies.find(m => m.title.toLowerCase().includes('inception'))
-        if (inc) {
-          return {
-            movie: inc,
-            reason: 'Inception is a mind-bending architectural dream heist with gravity-defying action.'
-          }
-        }
-      }
+      if (movies.length === 0) return null
 
-      // Default highest rated AI pick
-      const textMatch = movies.find(m => m.title.toLowerCase().includes(queryLower) || m.synopsis.toLowerCase().includes(queryLower))
-      if (textMatch) {
-        return {
-          movie: textMatch,
-          reason: `Matched "${query}" with ${textMatch.title} based on genre and thematic synopsis.`
-        }
-      }
+      // Keyword match across title, genre, synopsis
+      const textMatch = movies.find(m => {
+        const fullText = `${m.title} ${m.genre ?? ''} ${m.synopsis ?? ''}`.toLowerCase()
+        return queryLower.split(' ').some(word => word.length > 2 && fullText.includes(word))
+      })
+
+      const target = textMatch || movies[0]
       return {
-        movie: movies[0] || INITIAL_MOVIES[0],
-        reason: `Matched "${query}" with our highest-rated IMAX feature.`
+        movie: target,
+        reason: `Matched "${query}" with ${target.title} based on catalog metadata and genre preference.`
       }
     }
 
@@ -555,11 +418,13 @@ REASON: <1 sentence why it matches>`
 
     // Instant seamless execution
     const fallback = findBestMatchLocally()
-    setAiRecommendation({
-      suggestedMovieTitle: fallback.movie.title,
-      reasoning: fallback.reason,
-    })
-    handleSelectMovie(fallback.movie)
+    if (fallback) {
+      setAiRecommendation({
+        suggestedMovieTitle: fallback.movie.title,
+        reasoning: fallback.reason,
+      })
+      handleSelectMovie(fallback.movie)
+    }
     setIsAiSearching(false)
   }
 

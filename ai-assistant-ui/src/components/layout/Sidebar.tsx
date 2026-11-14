@@ -157,6 +157,7 @@ export default function Sidebar() {
   const [isModalOpen, setIsModalOpen] = useState<boolean>(false)
   const [isTopUpLoading, setIsTopUpLoading] = useState<boolean>(false)
   const [notice, setNotice] = useState<string | null>(null)
+  const [circuitOccupancy, setCircuitOccupancy] = useState<number | null>(null)
 
   const fetchAuthAndWallet = async () => {
     try {
@@ -174,6 +175,13 @@ export default function Sidebar() {
       if (walletRes.ok) {
         const w = await walletRes.json()
         setWalletBalance(w.balance)
+      }
+      const analyticsRes = await fetch(`${API_BASE}/api/v1/admin/analytics/dashboard`)
+      if (analyticsRes.ok) {
+        const a = await analyticsRes.json()
+        if (a?.kpis?.circuitOccupancyRate) {
+          setCircuitOccupancy(a.kpis.circuitOccupancyRate)
+        }
       }
     } catch {}
   }
@@ -434,7 +442,9 @@ export default function Sidebar() {
               <p className="text-[10px] font-semibold text-gray-200 truncate">Circuit Mesh Active</p>
               <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
             </div>
-            <p className="text-[10px] text-[#666] truncate font-mono">88.4% Occupancy • SSE</p>
+            <p className="text-[10px] text-[#666] truncate font-mono">
+              {circuitOccupancy !== null ? `${circuitOccupancy.toFixed(1)}% Occupancy • SSE` : 'Circuit Live • SSE'}
+            </p>
           </div>
         </div>
       </div>

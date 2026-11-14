@@ -94,15 +94,6 @@ public class TicketService {
             }
         }
 
-        // Realistic deterministic occupied seats for cinema realism based on movie title
-        int seedOffset = Math.abs((movieTitle != null ? movieTitle : "default").hashCode()) % 3;
-        List<String> simulatedOccupied = switch (seedOffset) {
-            case 0 -> List.of("A3", "B2", "C1", "D5", "D6", "E3");
-            case 1 -> List.of("A4", "B1", "B6", "C5", "D1", "E4");
-            default -> List.of("A2", "B5", "C6", "D2", "E2", "E5");
-        };
-        bookedSeats.addAll(simulatedOccupied);
-
         // Get locked seats from active locks
         Set<String> lockedSeats = new HashSet<>();
         for (SeatLock lock : activeLocks.values()) {

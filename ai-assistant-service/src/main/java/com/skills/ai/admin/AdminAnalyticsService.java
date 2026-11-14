@@ -168,13 +168,26 @@ public class AdminAnalyticsService {
         Map<String, Object> publicInsights = mcpToolRegistry.fetchPublicCinemaInsights();
 
         // 4. Predictive AI Recommendations (Cross-referencing DB metrics against MCP benchmarks)
+        double dynamicSurgeLift = Math.max(500.0, Math.round(totalGrossRevenue * 0.12));
+        String projectedSurge = String.format("+$%,.0f incremental gross", dynamicSurgeLift);
+
+        double dynamicScreenLift = Math.max(300.0, Math.round(totalGrossRevenue * 0.065));
+        String projectedScreen = String.format("+$%,.0f box office lift", dynamicScreenLift);
+
+        List<Movie> catalogMovies = movieCatalogService.getAllMovies(null, null, null);
+        List<Movie> topSelling = catalogMovies.stream()
+                .sorted((a, b) -> Integer.compare(b.getOccupancyRate() != null ? b.getOccupancyRate() : 0, a.getOccupancyRate() != null ? a.getOccupancyRate() : 0))
+                .limit(2)
+                .toList();
+        String catalogTopTitles = topSelling.stream().map(Movie::getTitle).collect(Collectors.joining(" and "));
+
         List<Map<String, Object>> aiRecommendations = List.of(
                 Map.of(
                         "id", "rec-surge-01",
                         "type", "DYNAMIC_PRICING",
                         "title", "Prime-Time Surge Pricing Trigger",
                         "severity", "HIGH",
-                        "projectedLift", "+$3,450 incremental gross",
+                        "projectedLift", projectedSurge,
                         "description", "IMAX and 70mm evening screenings are pacing at " + Math.round(avgOccupancy) + "% circuit occupancy. Applying dynamic surge captures yield without dampening attendance.",
                         "recommendedAction", "Apply +$2.50 Surge"
                 ),
@@ -184,7 +197,7 @@ public class AdminAnalyticsService {
                         "title", "Gourmet Concessions Restock Warning",
                         "severity", "MEDIUM",
                         "projectedLift", "Zero stock-out risk",
-                        "description", "Weekend screenings correlate with high attach rate (" + Math.round(fnbAttachRate) + "%). Restock Black Truffle Popcorn and Nitro Cold Brew inventory.",
+                        "description", "Weekend screenings correlate with high attach rate (" + Math.round(fnbAttachRate) + "%). Restock gourmet concessions inventory to sustain attachment pacing.",
                         "recommendedAction", "Auto-Generate Supplier PO"
                 ),
                 Map.of(
@@ -192,8 +205,8 @@ public class AdminAnalyticsService {
                         "type", "PROGRAMMING_OPTIMIZATION",
                         "title", "Auditorium Yield Rebalance",
                         "severity", "MEDIUM",
-                        "projectedLift", "+$1,850 box office lift",
-                        "description", "Rebalance lower-occupancy auditoriums to Nolan 70mm revivals and Denis Villeneuve sci-fi marathons.",
+                        "projectedLift", projectedScreen,
+                        "description", "Rebalance lower-occupancy auditoriums to " + (catalogTopTitles.isBlank() ? "top catalog features" : catalogTopTitles) + " high-demand screenings.",
                         "recommendedAction", "Reallocate Screen 3"
                 ),
                 Map.of(
@@ -201,7 +214,7 @@ public class AdminAnalyticsService {
                         "type", "AUDIENCE_RETARGETING",
                         "title", "VIP Member Re-engagement Campaign",
                         "severity", "LOW",
-                        "projectedLift", "1,200 returning patrons",
+                        "projectedLift", "High retention multiplier",
                         "description", "Trigger personalized AI discount invitations to CineMind loyalty members for upcoming advance screenings.",
                         "recommendedAction", "Launch Retargeting Push"
                 )
@@ -268,13 +281,16 @@ public class AdminAnalyticsService {
             log.info("Executive briefing fast fallback activated: {}", e.getMessage());
         }
 
+        double surgeLift = Math.max(450.0, Math.round(gross * 0.12));
+        String surgeLiftStr = String.format("+$%,.0f", surgeLift);
+
         return String.format(
                 "### 📊 CineMind Executive Operations Briefing\n\n" +
-                "- **Strong Topline Acceleration**: Weekly gross reached **$%,.0f** with circuit-wide occupancy at **%.1f%%**, propelled by continuous sold-out screenings of *%s*.\n" +
-                "- **Gourmet F&B Outperformance**: The sensory concessions studio generated **$%,.0f** with a **%.1f%% attach rate**, driven by Black Truffle Popcorn and craft beverage combos.\n" +
-                "- **Capacity Constraint & Dynamic Yield**: Peak Friday/Saturday shows are pacing at 96%% sellout 48h out. Activating the AI dynamic surge (+ $2.50) is projected to capture **+$3,450** without dampening demand.\n\n" +
-                "> **Strategic Takeaway**: Reallocate Screen 3 late-night slots to *Inception* encores and restock organic popcorn kernel reserves before Friday matinee.",
-                gross, occ, topTitles, fnbGross, attach
+                "- **Topline Acceleration**: Weekly gross reached **$%,.0f** with circuit-wide occupancy at **%.1f%%**, propelled by continuous screenings of *%s*.\n" +
+                "- **Sensory F&B Studio**: Concessions generated **$%,.0f** with a **%.1f%% attach rate**, driven by culinary pairings.\n" +
+                "- **Dynamic Yield Optimization**: High-demand screenings allow dynamic yield adjustment (+ $2.50), capturing an estimated **%s** incremental lift.\n\n" +
+                "> **Strategic Takeaway**: Optimize auditorium scheduling for *%s* and maintain adequate concessions inventory before peak weekend showtimes.",
+                gross, occ, topTitles, fnbGross, attach, surgeLiftStr, topTitles
         );
     }
 
@@ -299,13 +315,17 @@ public class AdminAnalyticsService {
                 .toList();
         String topTitles = topMovies.stream().map(Movie::getTitle).collect(Collectors.joining(" and "));
 
+        double surgeLift = Math.max(450.0, Math.round(gross * 0.12));
+        String surgeBadge = String.format("+$%,.0f Projected Lift", surgeLift);
+        String pacingMetric = String.format("%.0f%% Sellout Pacing", Math.min(99.0, Math.max(70.0, occ * 1.1)));
+
         List<Map<String, String>> highlights = List.of(
                 Map.of(
                         "category", "Topline Revenue",
                         "headline", "Strong Topline Acceleration",
                         "metric", String.format("$%,.0f", gross),
                         "badge", String.format("%.1f%% Occupancy", occ),
-                        "detail", "Propelled by continuous sold-out screenings of " + topTitles + " across premium auditoriums.",
+                        "detail", "Propelled by continuous screenings of " + topTitles + " across premium auditoriums.",
                         "trend", "positive"
                 ),
                 Map.of(
@@ -313,20 +333,25 @@ public class AdminAnalyticsService {
                         "headline", "Gourmet F&B Outperformance",
                         "metric", String.format("$%,.0f Gross", fnbGross),
                         "badge", String.format("%.1f%% Attach Rate", attach),
-                        "detail", "Driven by Black Truffle Popcorn and craft beverage sensory combos, setting an all-time circuit record.",
+                        "detail", "Driven by craft concessions and culinary beverage pairings across screenings.",
                         "trend", "positive"
                 ),
                 Map.of(
                         "category", "Yield Optimization",
                         "headline", "Capacity Constraint & Dynamic Yield",
-                        "metric", "96% Sellout Pacing",
-                        "badge", "+$3,450 Projected Lift",
-                        "detail", "Peak Friday/Saturday shows are pacing at 96% sellout 48h out. Activating the AI dynamic surge (+ $2.50) captures yield without dampening demand.",
+                        "metric", pacingMetric,
+                        "badge", surgeBadge,
+                        "detail", "Peak shows are pacing at " + pacingMetric + ". Activating the AI dynamic surge (+ $2.50) captures yield without dampening demand.",
                         "trend", "action"
                 )
         );
 
-        String strategicTakeaway = "Reallocate Screen 3 late-night slots to Inception encores and restock organic popcorn kernel reserves before Friday matinee.";
+        String strategicTakeaway = String.format(
+                "Prioritize prime-time auditorium allocation for %s (%.0f%% occupancy) and maintain adequate concession reserves to sustain %.1f%% attach rate.",
+                topTitles != null && !topTitles.isBlank() ? topTitles : "top titles",
+                occ,
+                attach
+        );
 
         return Map.of(
                 "title", "CineMind Executive Operations Briefing",
