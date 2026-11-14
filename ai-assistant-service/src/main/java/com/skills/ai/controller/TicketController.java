@@ -1,5 +1,6 @@
 package com.skills.ai.controller;
 
+import com.skills.ai.auth.AuthService;
 import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ import java.util.Map;
 public class TicketController {
 
     private final TicketService ticketService;
+    private final AuthService authService;
 
     @GetMapping
     public List<DigitalTicket> listTickets() {
@@ -89,6 +91,7 @@ public class TicketController {
 
     @PostMapping("/validate")
     public ResponseEntity<TicketService.ValidationResult> validateGatePass(@RequestBody Map<String, String> req) {
+        authService.requirePermission("SCAN_GATE_PASS");
         String ticketId = req.get("ticketId");
         String qrToken = req.get("qrToken");
         TicketService.ValidationResult result = ticketService.validateGatePass(ticketId, qrToken);

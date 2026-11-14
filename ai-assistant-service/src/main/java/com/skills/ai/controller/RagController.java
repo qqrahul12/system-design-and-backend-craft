@@ -1,5 +1,6 @@
 package com.skills.ai.controller;
 
+import com.skills.ai.auth.AuthService;
 import com.skills.ai.rag.RagService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -10,6 +11,7 @@ import java.util.Map;
 
 /**
  * REST controller exposing Document Ingestion & RAG Query endpoints.
+ * Ingestion is restricted to patrons with RAG_INGESTION clearance.
  */
 @Slf4j
 @RestController
@@ -18,6 +20,7 @@ import java.util.Map;
 public class RagController {
 
     private final RagService ragService;
+    private final AuthService authService;
 
     public record IngestRequest(String title, String content, int chunkSize) {}
     public record QueryRequest(String question, int topK) {}
@@ -28,6 +31,7 @@ public class RagController {
      */
     @PostMapping("/ingest")
     public ResponseEntity<Map<String, Object>> ingest(@RequestBody IngestRequest request) {
+        authService.requirePermission("RAG_INGESTION");
         log.info("REST request to ingest document: title={}", request.title());
         int chunksIndexed = ragService.ingestDocument(request.title(), request.content(), request.chunkSize());
         return ResponseEntity.ok(Map.of(

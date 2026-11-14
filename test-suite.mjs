@@ -1,8 +1,12 @@
 import http from 'http';
 
 function request(options, body = null) {
+  const headers = { ...options.headers };
+  if (options.port === 8080 && !headers['X-Role'] && !headers['x-role'] && !headers['Authorization'] && !headers['authorization']) {
+    headers['X-Role'] = 'EXECUTIVE_ADMIN';
+  }
   return new Promise((resolve, reject) => {
-    const req = http.request({ ...options, timeout: 15000 }, (res) => {
+    const req = http.request({ ...options, headers, timeout: 15000 }, (res) => {
       let data = '';
       res.on('data', (chunk) => (data += chunk));
       res.on('end', () => {
@@ -760,6 +764,69 @@ async function runTestSuite() {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(revertPayload) },
     }, revertPayload);
+  });
+
+  await test('RBAC Security Gates: Verify operation-level role and permission enforcement', async () => {
+    // A. Unauthenticated / ANONYMOUS rejected from admin endpoints (401)
+    const anonAdmin = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/analytics',
+      method: 'GET',
+      headers: { 'X-Role': 'ANONYMOUS' },
+    });
+    if (anonAdmin.statusCode !== 401) {
+      throw new Error(`Expected 401 for anonymous /admin/analytics, got ${anonAdmin.statusCode}`);
+    }
+
+    // B. STANDARD_GUEST rejected from admin analytics (403)
+    const guestAdmin = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/analytics',
+      method: 'GET',
+      headers: { 'X-Role': 'STANDARD_GUEST' },
+    });
+    if (guestAdmin.statusCode !== 403) {
+      throw new Error(`Expected 403 for STANDARD_GUEST on /admin/analytics, got ${guestAdmin.statusCode}`);
+    }
+
+    // C. VIP_PATRON rejected from APM telemetry traces (403)
+    const vipTraces = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/telemetry/traces',
+      method: 'GET',
+      headers: { 'X-Role': 'VIP_PATRON' },
+    });
+    if (vipTraces.statusCode !== 403) {
+      throw new Error(`Expected 403 for VIP_PATRON on /telemetry/traces, got ${vipTraces.statusCode}`);
+    }
+
+    // D. STANDARD_GUEST rejected from RAG knowledge ingestion (403)
+    const hackPayload = JSON.stringify({ title: 'Adversarial', content: 'test', chunkSize: 50 });
+    const guestIngest = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/rag/ingest',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(hackPayload), 'X-Role': 'STANDARD_GUEST' },
+    }, hackPayload);
+    if (guestIngest.statusCode !== 403) {
+      throw new Error(`Expected 403 for STANDARD_GUEST on /rag/ingest, got ${guestIngest.statusCode}`);
+    }
+
+    // E. EXECUTIVE_ADMIN successfully authorized for admin analytics (200)
+    const adminSuccess = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/admin/analytics',
+      method: 'GET',
+      headers: { 'X-Role': 'EXECUTIVE_ADMIN' },
+    });
+    if (adminSuccess.statusCode !== 200) {
+      throw new Error(`Expected 200 for EXECUTIVE_ADMIN on /admin/analytics, got ${adminSuccess.statusCode}`);
+    }
   });
 
   await test('Multi-Agent Autonomous Concierge Wallet Auto-Pay Execution', async () => {

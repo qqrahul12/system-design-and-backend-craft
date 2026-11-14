@@ -1,5 +1,6 @@
 package com.skills.ai.admin;
 
+import com.skills.ai.auth.AuthService;
 import com.skills.ai.patterns.adapter.ResilientCardPaymentAdapter;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerRegistry;
 import lombok.RequiredArgsConstructor;
@@ -12,6 +13,7 @@ import java.util.Map;
 
 /**
  * REST Controller exposing cinema analytics, market trends, and predictive AI recommendations.
+ * Guarded strictly for EXECUTIVE_ADMIN role via AuthService RBAC.
  */
 @Slf4j
 @RestController
@@ -20,6 +22,7 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminAnalyticsService adminAnalyticsService;
+    private final AuthService authService;
     @Autowired(required = false)
     private ResilientCardPaymentAdapter cardPaymentAdapter;
     @Autowired(required = false)
@@ -27,16 +30,19 @@ public class AdminController {
 
     @GetMapping("/analytics")
     public ResponseEntity<Map<String, Object>> getAnalytics() {
+        authService.requireRole(AuthService.UserRole.EXECUTIVE_ADMIN);
         return ResponseEntity.ok(adminAnalyticsService.getDashboardAnalytics());
     }
 
     @PostMapping("/briefing")
     public ResponseEntity<Map<String, Object>> generateBriefing() {
+        authService.requireRole(AuthService.UserRole.EXECUTIVE_ADMIN);
         return ResponseEntity.ok(adminAnalyticsService.getStructuredExecutiveBriefing());
     }
 
     @PostMapping("/circuit-breaker/toggle-stripe-failure")
     public ResponseEntity<Map<String, Object>> toggleStripeFailure(@RequestBody(required = false) Map<String, Object> req) {
+        authService.requireRole(AuthService.UserRole.EXECUTIVE_ADMIN);
         boolean simulate;
         if (req != null && req.containsKey("simulateFailure")) {
             simulate = Boolean.TRUE.equals(req.get("simulateFailure"));
@@ -54,6 +60,7 @@ public class AdminController {
 
     @GetMapping("/circuit-breaker/status")
     public ResponseEntity<Map<String, Object>> getCircuitBreakerStatus() {
+        authService.requireRole(AuthService.UserRole.EXECUTIVE_ADMIN);
         String state = "CLOSED";
         if (circuitBreakerRegistry != null) {
             var cb = circuitBreakerRegistry.find("stripePaymentService");

@@ -5,6 +5,7 @@ import com.skills.ai.agent.AgentPersona;
 import com.skills.ai.agent.MultiAgentOrchestratorService;
 import com.skills.ai.agent.OrchestrationRequest;
 import com.skills.ai.agent.OrchestrationResponse;
+import com.skills.ai.auth.AuthService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -17,6 +18,7 @@ import java.util.List;
 
 /**
  * REST Controller exposing Multi-Agent Swarm Orchestration and Roster APIs.
+ * Orchestration execution requires AGENT_ORCHESTRATE clearance.
  */
 @Slf4j
 @RestController
@@ -26,6 +28,7 @@ import java.util.List;
 public class AgentController {
 
     private final MultiAgentOrchestratorService orchestratorService;
+    private final AuthService authService;
 
     @GetMapping("/roster")
     public List<AgentPersona> getRoster() {
@@ -34,6 +37,7 @@ public class AgentController {
 
     @PostMapping("/orchestrate")
     public OrchestrationResponse orchestrate(@RequestBody OrchestrationRequest request) {
+        authService.requirePermission("AGENT_ORCHESTRATE");
         log.info("Received Multi-Agent Orchestration request for objective: {}", request.objective());
         return orchestratorService.orchestrate(request);
     }
@@ -43,6 +47,7 @@ public class AgentController {
             @RequestParam(defaultValue = "Book 2 premier seats for Inception tonight with promo CINE20") String objective,
             @RequestParam(defaultValue = "gemini") String model) {
 
+        authService.requirePermission("AGENT_ORCHESTRATE");
         log.info("Streaming Multi-Agent Orchestration for objective: {}", objective);
         OrchestrationResponse response = orchestratorService.orchestrate(new OrchestrationRequest(objective, model, "SUPERVISOR_DAG"));
         List<AgentExecutionStep> steps = response.steps();

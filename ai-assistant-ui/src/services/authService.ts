@@ -12,16 +12,37 @@ export interface UserPersona {
 }
 
 export const authService = {
-  getCurrentUser: (): Promise<UserPersona> => apiClient.get<UserPersona>('/api/v1/auth/me'),
+  getCurrentUser: async (): Promise<UserPersona> => {
+    const user = await apiClient.get<UserPersona>('/api/v1/auth/me');
+    if (typeof window !== 'undefined' && user?.role) {
+      localStorage.setItem('cinemind_role', user.role);
+    }
+    return user;
+  },
 
   getPersonas: (): Promise<UserPersona[]> => apiClient.get<UserPersona[]>('/api/v1/auth/personas'),
 
-  login: (role: string, email: string, name: string): Promise<UserPersona> =>
-    apiClient.post<UserPersona>('/api/v1/auth/login', { role, email, name }),
+  login: async (role: string, email: string, name: string): Promise<UserPersona> => {
+    const user = await apiClient.post<UserPersona>('/api/v1/auth/login', { role, email, name });
+    if (typeof window !== 'undefined' && user?.role) {
+      localStorage.setItem('cinemind_role', user.role);
+    }
+    return user;
+  },
 
-  logout: (): Promise<{ message: string; currentUser: UserPersona }> =>
-    apiClient.post<{ message: string; currentUser: UserPersona }>('/api/v1/auth/logout'),
+  logout: async (): Promise<{ message: string; currentUser: UserPersona }> => {
+    const res = await apiClient.post<{ message: string; currentUser: UserPersona }>('/api/v1/auth/logout');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('cinemind_role', 'ANONYMOUS');
+    }
+    return res;
+  },
 
-  switchRole: (role: string): Promise<UserPersona> =>
-    apiClient.post<UserPersona>('/api/v1/auth/switch-role', { role }),
+  switchRole: async (role: string): Promise<UserPersona> => {
+    const user = await apiClient.post<UserPersona>('/api/v1/auth/switch-role', { role });
+    if (typeof window !== 'undefined' && user?.role) {
+      localStorage.setItem('cinemind_role', user.role);
+    }
+    return user;
+  },
 };

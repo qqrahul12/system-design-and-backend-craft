@@ -28,6 +28,13 @@ async function request<T>(endpoint: string, init?: RequestInit): Promise<T> {
     headers.set('Content-Type', 'application/json');
   }
 
+  if (!headers.has('X-Role') && typeof window !== 'undefined') {
+    const role = localStorage.getItem('cinemind_role');
+    if (role) {
+      headers.set('X-Role', role);
+    }
+  }
+
   const response = await fetch(url, {
     ...init,
     headers,

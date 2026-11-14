@@ -1,5 +1,6 @@
 package com.skills.ai.controller;
 
+import com.skills.ai.auth.AuthService;
 import com.skills.ai.telemetry.TraceCollectorService;
 import com.skills.ai.telemetry.TraceRecord;
 import lombok.RequiredArgsConstructor;
@@ -11,6 +12,7 @@ import java.util.List;
 
 /**
  * REST Controller exposing OpenTelemetry-compatible traces and waterfall span trees.
+ * Guarded strictly for patrons with APM_TRACES permission (EXECUTIVE_ADMIN).
  */
 @Slf4j
 @RestController
@@ -20,14 +22,17 @@ import java.util.List;
 public class TelemetryController {
 
     private final TraceCollectorService traceCollector;
+    private final AuthService authService;
 
     @GetMapping("/traces")
     public List<TraceRecord> listTraces() {
+        authService.requirePermission("APM_TRACES");
         return traceCollector.listTraces();
     }
 
     @GetMapping("/traces/{id}")
     public ResponseEntity<TraceRecord> getTrace(@PathVariable String id) {
+        authService.requirePermission("APM_TRACES");
         return traceCollector.getTrace(id)
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
