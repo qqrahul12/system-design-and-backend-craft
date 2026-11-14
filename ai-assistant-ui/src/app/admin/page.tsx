@@ -205,37 +205,8 @@ function parseBriefingPayload(data: any): ExecutiveBriefing {
     }
   }
 
-  if (highlights.length === 0) {
-    highlights.push(
-      {
-        category: 'Topline Revenue',
-        headline: 'Strong Topline Acceleration',
-        metric: '$148,250 (+14.8%)',
-        badge: '88.4% Occupancy',
-        detail: 'Propelled by continuous sold-out IMAX 70mm screenings of Dune: Part Two and Interstellar revival sessions.',
-        trend: 'positive',
-      },
-      {
-        category: 'Sensory F&B Studio',
-        headline: 'Gourmet F&B Outperformance',
-        metric: '$56,400 Gross',
-        badge: '38.1% Attach Rate',
-        detail: 'Driven by Black Truffle Popcorn and craft beverage combos, setting an all-time circuit record.',
-        trend: 'positive',
-      },
-      {
-        category: 'Yield & Operations',
-        headline: 'Capacity Constraint & Dynamic Yield',
-        metric: '96% Sellout Pacing',
-        badge: '+$3,450 Projected Lift',
-        detail: 'Peak Friday/Saturday shows are pacing at 96% sellout 48h out. Activating AI dynamic surge captures peak yield.',
-        trend: 'action',
-      }
-    )
-  }
-
   if (!strategicTakeaway) {
-    strategicTakeaway = 'Reallocate Screen 3 late-night slots to Inception encores and restock organic popcorn kernel reserves before Friday matinee.'
+    strategicTakeaway = lines.length > 0 ? lines[lines.length - 1] : ''
   }
 
   return {
@@ -995,9 +966,9 @@ export default function AdminPage() {
               <span className="text-zinc-400">Box office revenue, admissions, and F&B attach rate are calculated dynamically from CineMind DB transaction tables.</span>
             </div>
             <div className="flex items-center gap-2 text-[11px] font-mono text-zinc-400">
-              <span>Catalog: {analytics?.kpis.totalCatalogCount ?? 12} Movies</span>
+              <span>Catalog: {analytics?.kpis.totalCatalogCount ?? movies.length} Movies</span>
               <span>•</span>
-              <span>Now Showing: {analytics?.kpis.nowShowingCount ?? 8}</span>
+              <span>Now Showing: {analytics?.kpis.nowShowingCount ?? movies.filter(m => m.status === 'NOW_SHOWING').length}</span>
             </div>
           </div>
 
@@ -1010,10 +981,10 @@ export default function AdminPage() {
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-white">
-                  ${analytics?.kpis.totalGrossRevenue.toLocaleString() ?? '148,250'}
+                  ${(analytics?.kpis?.totalGrossRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs font-semibold text-emerald-400 flex items-center">
-                  <ArrowUpRight className="h-3 w-3" /> +{analytics?.kpis.grossChangePct ?? 14.8}%
+                  <ArrowUpRight className="h-3 w-3" /> +{analytics?.kpis?.grossChangePct ?? 0}%
                 </span>
               </div>
               <p className="mt-1 text-xs text-zinc-500">Trailing 7-day circuit revenue</p>
@@ -1026,13 +997,13 @@ export default function AdminPage() {
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-white">
-                  {analytics?.kpis.totalTicketsSold.toLocaleString() ?? '9,640'}
+                  {(analytics?.kpis?.totalTicketsSold ?? 0).toLocaleString()}
                 </span>
                 <span className="text-xs font-semibold text-emerald-400 flex items-center">
-                  <ArrowUpRight className="h-3 w-3" /> +{analytics?.kpis.ticketsChangePct ?? 11.2}%
+                  <ArrowUpRight className="h-3 w-3" /> +{analytics?.kpis?.ticketsChangePct ?? 0}%
                 </span>
               </div>
-              <p className="mt-1 text-xs text-zinc-500">Avg ticket price: ${analytics?.kpis.avgTicketPrice ?? '15.38'}</p>
+              <p className="mt-1 text-xs text-zinc-500">Avg ticket price: ${(analytics?.kpis?.avgTicketPrice ?? 0).toFixed(2)}</p>
             </div>
 
             <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
@@ -1042,14 +1013,14 @@ export default function AdminPage() {
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-white">
-                  {analytics?.kpis.circuitOccupancyRate ?? 88.4}%
+                  {analytics?.kpis?.circuitOccupancyRate ?? 0}%
                 </span>
-                <span className="text-xs font-semibold text-amber-400">High Capacity</span>
+                <span className="text-xs font-semibold text-amber-400">Capacity Rate</span>
               </div>
               <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-zinc-800">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-amber-500 to-emerald-400"
-                  style={{ width: `${analytics?.kpis.circuitOccupancyRate ?? 88.4}%` }}
+                  style={{ width: `${Math.min(100, analytics?.kpis?.circuitOccupancyRate ?? 0)}%` }}
                 />
               </div>
             </div>
@@ -1061,13 +1032,13 @@ export default function AdminPage() {
               </div>
               <div className="mt-4 flex items-baseline gap-2">
                 <span className="text-3xl font-extrabold text-white">
-                  ${analytics?.kpis.concessionsRevenue.toLocaleString() ?? '56,400'}
+                  ${(analytics?.kpis?.concessionsRevenue ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
                 <span className="text-xs font-semibold text-purple-400">
-                  {analytics?.kpis.fnbAttachRate ?? 38.1}% attach
+                  {analytics?.kpis?.fnbAttachRate ?? 0}% attach
                 </span>
               </div>
-              <p className="mt-1 text-xs text-zinc-500">Truffle popcorn & craft soda leaders</p>
+              <p className="mt-1 text-xs text-zinc-500">Concessions sales from database</p>
             </div>
           </div>
 
@@ -1091,88 +1062,89 @@ export default function AdminPage() {
             </div>
 
             <div className="mt-8 grid grid-cols-7 gap-4 items-end h-56 pt-6 border-b border-zinc-800">
-              {(analytics?.dailyRevenue ?? [
-                { day: 'Mon', revenue: 14200, concessions: 4800 },
-                { day: 'Tue', revenue: 15800, concessions: 5200 },
-                { day: 'Wed', revenue: 17900, concessions: 6400 },
-                { day: 'Thu', revenue: 19400, concessions: 7100 },
-                { day: 'Fri', revenue: 28600, concessions: 11200 },
-                { day: 'Sat', revenue: 32150, concessions: 13500 },
-                { day: 'Sun', revenue: 20200, concessions: 8200 },
-              ]).map((bar) => {
-                const maxVal = 35000
-                const ticketHeight = (bar.revenue / maxVal) * 100
-                const fnbHeight = (bar.concessions / maxVal) * 100
-                return (
-                  <div key={bar.day} className="flex flex-col items-center gap-2 h-full justify-end group">
-                    <div className="w-full max-w-[42px] flex items-end justify-center gap-1.5 h-full">
-                      {/* Ticket bar */}
-                      <div
-                        className="w-1/2 rounded-t-md bg-purple-500/80 transition-all group-hover:bg-purple-400"
-                        style={{ height: `${ticketHeight}%` }}
-                        title={`Tickets: $${bar.revenue}`}
-                      />
-                      {/* F&B bar */}
-                      <div
-                        className="w-1/2 rounded-t-md bg-amber-500/80 transition-all group-hover:bg-amber-400"
-                        style={{ height: `${fnbHeight}%` }}
-                        title={`Concessions: $${bar.concessions}`}
-                      />
+              {(() => {
+                const daily = analytics?.dailyRevenue ?? []
+                const maxVal = Math.max(100, ...daily.map((b) => (b.revenue || 0) + (b.concessions || 0)))
+                if (daily.length === 0) {
+                  return (
+                    <div className="col-span-7 flex h-full items-center justify-center text-xs text-zinc-500">
+                      No daily revenue timeline records yet in database
                     </div>
-                    <span className="text-xs font-semibold text-zinc-400 group-hover:text-white">
-                      {bar.day}
-                    </span>
-                  </div>
-                )
-              })}
+                  )
+                }
+                return daily.map((bar) => {
+                  const ticketHeight = Math.min(100, ((bar.revenue || 0) / maxVal) * 100)
+                  const fnbHeight = Math.min(100, ((bar.concessions || 0) / maxVal) * 100)
+                  return (
+                    <div key={bar.day} className="flex flex-col items-center gap-2 h-full justify-end group">
+                      <div className="w-full max-w-[42px] flex items-end justify-center gap-1.5 h-full">
+                        {/* Ticket bar */}
+                        <div
+                          className="w-1/2 rounded-t-md bg-purple-500/80 transition-all group-hover:bg-purple-400"
+                          style={{ height: `${ticketHeight}%` }}
+                          title={`Tickets: $${bar.revenue}`}
+                        />
+                        {/* F&B bar */}
+                        <div
+                          className="w-1/2 rounded-t-md bg-amber-500/80 transition-all group-hover:bg-amber-400"
+                          style={{ height: `${fnbHeight}%` }}
+                          title={`Concessions: $${bar.concessions}`}
+                        />
+                      </div>
+                      <span className="text-xs font-semibold text-zinc-400 group-hover:text-white">
+                        {bar.day}
+                      </span>
+                    </div>
+                  )
+                })
+              })()}
             </div>
           </div>
 
           {/* Auditorium Utilization Matrix */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-purple-400 uppercase">Screen 1</span>
-                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">96% PEAK</span>
-              </div>
-              <h4 className="mt-2 text-base font-bold text-white">IMAX 70mm Auditorium</h4>
-              <p className="text-xs text-zinc-400 mt-1">Showing: Dune: Part Two, Interstellar</p>
-              <div className="mt-4 flex items-center justify-between text-xs text-zinc-300">
-                <span>Seats Sold: 384 / 400</span>
-                <span>$28.5K Rev</span>
-              </div>
-              <div className="mt-2 h-2 w-full rounded-full bg-zinc-800">
-                <div className="h-full rounded-full bg-emerald-500" style={{ width: '96%' }} />
-              </div>
-            </div>
+            {[
+              { id: 'screen-1', name: 'Screen 1', format: 'IMAX 70mm Auditorium', keyword: 'Auditorium 1' },
+              { id: 'screen-2', name: 'Screen 2', format: '70mm Large Format', keyword: 'Screen 2' },
+              { id: 'screen-3', name: 'Screen 3', format: 'Dolby Cinema Atmos', keyword: 'Auditorium 3' },
+            ].map((scr, idx) => {
+              const matchingMovies = movies.filter(
+                (m) =>
+                  m.auditorium?.toLowerCase().includes(scr.keyword.toLowerCase()) ||
+                  m.auditorium?.toLowerCase().includes(scr.format.toLowerCase())
+              )
+              const titles = matchingMovies.map((m) => m.title).slice(0, 2).join(', ') || 'No current screenings'
+              const avgOcc =
+                matchingMovies.length > 0
+                  ? Math.round(
+                      matchingMovies.reduce((acc, m) => acc + (m.occupancyRate ?? 80), 0) /
+                        matchingMovies.length
+                    )
+                  : (analytics?.kpis?.circuitOccupancyRate ?? 0)
 
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-indigo-400 uppercase">Screen 2</span>
-                <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">89% PEAK</span>
-              </div>
-              <h4 className="mt-2 text-base font-bold text-white">70mm Large Format</h4>
-              <p className="text-xs text-zinc-400 mt-1">Showing: Oppenheimer, Furiosa</p>
-              <div className="mt-4 flex items-center justify-between text-xs text-zinc-300">
-                <span>Seats Sold: 267 / 300</span>
-                <span>$18.9K Rev</span>
-              </div>
-              <div className="mt-2 h-2 w-full rounded-full bg-indigo-500" style={{ width: '89%' }} />
-            </div>
-
-            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-semibold text-amber-400 uppercase">Screen 3</span>
-                <span className="rounded bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-400">91% PEAK</span>
-              </div>
-              <h4 className="mt-2 text-base font-bold text-white">Dolby Cinema Atmos</h4>
-              <p className="text-xs text-zinc-400 mt-1">Showing: Blade Runner 2049, Inception</p>
-              <div className="mt-4 flex items-center justify-between text-xs text-zinc-300">
-                <span>Seats Sold: 227 / 250</span>
-                <span>$16.2K Rev</span>
-              </div>
-              <div className="mt-2 h-2 w-full rounded-full bg-amber-500" style={{ width: '91%' }} />
-            </div>
+              return (
+                <div key={scr.id} className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold text-purple-400 uppercase">{scr.name}</span>
+                    <span className="rounded bg-emerald-500/10 px-2 py-0.5 text-xs font-bold text-emerald-400">
+                      {avgOcc}% PEAK
+                    </span>
+                  </div>
+                  <h4 className="mt-2 text-base font-bold text-white">{scr.format}</h4>
+                  <p className="mt-1 truncate text-xs text-zinc-400">Showing: {titles}</p>
+                  <div className="mt-4 flex items-center justify-between text-xs text-zinc-300">
+                    <span>Auditorium Status</span>
+                    <span>{avgOcc}% Occupancy</span>
+                  </div>
+                  <div className="mt-2 h-2 w-full rounded-full bg-zinc-800">
+                    <div
+                      className="h-full rounded-full bg-emerald-500"
+                      style={{ width: `${Math.min(100, avgOcc)}%` }}
+                    />
+                  </div>
+                </div>
+              )
+            })}
           </div>
 
           {/* Resilience4j Circuit Breaker & Stripe Gateway Telemetry Card */}
@@ -1427,23 +1399,31 @@ export default function AdminPage() {
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-1">
               <span className="text-xs text-zinc-400">National Industry Avg Ticket</span>
               <div className="text-2xl font-black text-white">
-                ${analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalAvgTicketPrice?.toFixed(2) ?? '11.20'}
+                {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalAvgTicketPrice != null
+                  ? `$${analytics.publicInsights.nationalIndustryBenchmarks.nationalAvgTicketPrice.toFixed(2)}`
+                  : '—'}
               </div>
-              <p className="text-[10px] text-zinc-500">CineMind Premium Avg: ${analytics?.kpis.avgTicketPrice ?? '15.38'}</p>
+              <p className="text-[10px] text-zinc-500">
+                CineMind Premium Avg: ${(analytics?.kpis?.avgTicketPrice ?? 0).toFixed(2)}
+              </p>
             </div>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-1">
               <span className="text-xs text-zinc-400">National Concession Attach</span>
               <div className="text-2xl font-black text-amber-400">
-                {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalConcessionAttachRate ?? 28.5}%
+                {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalConcessionAttachRate != null
+                  ? `${analytics.publicInsights.nationalIndustryBenchmarks.nationalConcessionAttachRate}%`
+                  : '—'}
               </div>
-              <p className="text-[10px] text-zinc-500">CineMind Attach: {analytics?.kpis.fnbAttachRate ?? 38.1}% (+9.6% delta)</p>
+              <p className="text-[10px] text-zinc-500">
+                CineMind Attach: {analytics?.kpis?.fnbAttachRate ?? 0}%
+              </p>
             </div>
 
             <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-1">
               <span className="text-xs text-zinc-400">National YoY Box Office Lift</span>
               <div className="text-2xl font-black text-emerald-400">
-                {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalYoYBoxOfficeGrowth ?? '+8.4%'}
+                {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalYoYBoxOfficeGrowth ?? '—'}
               </div>
               <p className="text-[10px] text-zinc-500">Trailing cinema circuit benchmark</p>
             </div>
@@ -1463,29 +1443,30 @@ export default function AdminPage() {
               </div>
 
               <div className="mt-6 space-y-4">
-                {(analytics?.publicInsights?.publicGenreTrends ?? analytics?.genreTrends ?? [
-                  { genre: 'Sci-Fi & Cyberpunk', share: 42, growth: '+18%', sentiment: 9.4 },
-                  { genre: 'Action & Historical Epic', share: 31, growth: '+12%', sentiment: 8.9 },
-                  { genre: 'Psychological Drama', share: 15, growth: '-3%', sentiment: 8.7 },
-                  { genre: 'Sci-Fi Horror', share: 12, growth: '+24%', sentiment: 8.8 },
-                ]).map((gt) => (
-                  <div key={gt.genre} className="space-y-1.5">
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="font-semibold text-zinc-200">{gt.genre}</span>
-                      <div className="flex items-center gap-3">
-                        <span className="font-bold text-purple-400">{gt.share}% share</span>
-                        <span className="text-emerald-400 font-semibold">{gt.growth}</span>
-                        <span className="text-amber-400">★ {gt.sentiment} buzz</span>
+                {(analytics?.publicInsights?.publicGenreTrends ?? analytics?.genreTrends ?? []).length > 0 ? (
+                  (analytics?.publicInsights?.publicGenreTrends ?? analytics?.genreTrends ?? []).map((gt) => (
+                    <div key={gt.genre} className="space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <span className="font-semibold text-zinc-200">{gt.genre}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="font-bold text-purple-400">{gt.share}% share</span>
+                          <span className="text-emerald-400 font-semibold">{gt.growth}</span>
+                          <span className="text-amber-400">★ {gt.sentiment} buzz</span>
+                        </div>
+                      </div>
+                      <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-gradient-to-r from-purple-600 to-indigo-400"
+                          style={{ width: `${gt.share * 2}%` }}
+                        />
                       </div>
                     </div>
-                    <div className="h-2 w-full rounded-full bg-zinc-800 overflow-hidden">
-                      <div
-                        className="h-full rounded-full bg-gradient-to-r from-purple-600 to-indigo-400"
-                        style={{ width: `${gt.share * 2}%` }}
-                      />
-                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center text-xs text-zinc-500">
+                    No genre trend telemetry available yet.
                   </div>
-                ))}
+                )}
               </div>
             </div>
 
@@ -1504,18 +1485,20 @@ export default function AdminPage() {
               <div className="grid grid-cols-2 gap-4 pt-2">
                 <div className="rounded-xl border border-purple-500/20 bg-purple-950/20 p-4">
                   <span className="text-2xl font-extrabold text-white">
-                    {analytics?.publicInsights?.nationalIndustryBenchmarks?.premiumLargeFormatShare ?? 72.4}%
+                    {analytics?.publicInsights?.nationalIndustryBenchmarks?.premiumLargeFormatShare != null
+                      ? `${analytics.publicInsights.nationalIndustryBenchmarks.premiumLargeFormatShare}%`
+                      : '—'}
                   </span>
                   <span className="text-xs text-purple-300 block font-semibold mt-1">Premium Large Format</span>
-                  <p className="text-[11px] text-zinc-400 mt-1">IMAX 70mm and Dolby Cinema drive the bulk of revenue</p>
+                  <p className="text-[11px] text-zinc-400 mt-1">IMAX 70mm and Dolby Cinema share</p>
                 </div>
 
                 <div className="rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-4">
                   <span className="text-2xl font-extrabold text-white">
-                    {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalRepeatViewingFactor ?? '2.8x'}
+                    {analytics?.publicInsights?.nationalIndustryBenchmarks?.nationalRepeatViewingFactor ?? '—'}
                   </span>
                   <span className="text-xs text-indigo-300 block font-semibold mt-1">Repeat Viewing Factor</span>
-                  <p className="text-[11px] text-zinc-400 mt-1">Sci-Fi enthusiasts return for alternate seat angles</p>
+                  <p className="text-[11px] text-zinc-400 mt-1">Sci-Fi enthusiasts viewing multiplier</p>
                 </div>
               </div>
 
@@ -1525,8 +1508,8 @@ export default function AdminPage() {
                   Key Audience Takeaway (MCP Synthesized)
                 </div>
                 <p className="leading-relaxed text-zinc-400">
-                  {analytics?.publicInsights?.macroAudienceSentiment?.keyAudienceTakeaway ??
-                    'Audiences are demonstrating inelastic price sensitivity for IMAX 70mm screenings of prestige directors (Nolan, Villeneuve). Dynamic prime-time pricing can be safely tested without impacting attendance.'}
+                  {analytics?.publicInsights?.macroAudienceSentiment?.keyAudienceTakeaway ||
+                    'Audience takeaway will be synthesized live when MCP public cinema insights are loaded.'}
                 </p>
               </div>
             </div>
@@ -1543,84 +1526,53 @@ export default function AdminPage() {
               <p className="text-xs text-zinc-400">Machine learning models forecasting yield, restock, and auditorium yield</p>
             </div>
             <span className="rounded-full border border-amber-500/30 bg-amber-500/10 px-3 py-1 text-xs font-semibold text-amber-400">
-              4 Active Recommendations
+              {analytics?.aiRecommendations?.length ?? 0} Active Recommendations
             </span>
           </div>
 
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
-            {(analytics?.aiRecommendations ?? [
-              {
-                id: 'rec-surge-01',
-                type: 'DYNAMIC_PRICING',
-                title: 'Prime-Time Surge Pricing Trigger',
-                severity: 'HIGH',
-                projectedLift: '+$3,450 incremental gross',
-                description: 'Dune: Part Two and Interstellar Friday 8:00 PM IMAX shows are pacing at 96% sell-out probability 48h in advance. Recommend applying dynamic prime-time surge +$2.50.',
-                recommendedAction: 'Apply +$2.50 Surge',
-              },
-              {
-                id: 'rec-fnb-02',
-                type: 'SUPPLY_CHAIN_FORECAST',
-                title: 'Gourmet Concessions Restock Warning',
-                severity: 'MEDIUM',
-                projectedLift: 'Zero stock-out risk',
-                description: 'Weekend high-occupancy sci-fi screenings correlate with 450+ units of Black Truffle Popcorn and Nitro Cold Brew. Kernel & truffle oil stock currently at 32% safety threshold.',
-                recommendedAction: 'Auto-Generate Supplier PO',
-              },
-              {
-                id: 'rec-screen-03',
-                type: 'PROGRAMMING_OPTIMIZATION',
-                title: 'Auditorium Yield Rebalance',
-                severity: 'MEDIUM',
-                projectedLift: '+$1,850 box office lift',
-                description: "Screen 3 (Standard, 150 seats) running 'Past Lives' at 48% occupancy. Switch Saturday late-night 10:30 PM slot to 'Inception (Dolby Cinema)' encore.",
-                recommendedAction: 'Reallocate Screen 3',
-              },
-              {
-                id: 'rec-churn-04',
-                type: 'AUDIENCE_RETARGETING',
-                title: 'VIP Member Re-engagement Campaign',
-                severity: 'LOW',
-                projectedLift: '1,200 returning patrons',
-                description: '5,200 loyalty members have not booked since Oppenheimer. Trigger personalized AI discount invitation for the 70mm Nolan revival week.',
-                recommendedAction: 'Launch Retargeting Push',
-              },
-            ]).map((rec) => (
-              <div
-                key={rec.id}
-                className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 flex flex-col justify-between hover:border-zinc-700 transition"
-              >
-                <div>
-                  <div className="flex items-center justify-between">
-                    <span
-                      className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
-                        rec.severity === 'HIGH'
-                          ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
-                          : rec.severity === 'MEDIUM'
-                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
-                          : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
-                      }`}
-                    >
-                      {rec.severity} PRIORITY
-                    </span>
-                    <span className="text-xs font-bold text-emerald-400">{rec.projectedLift}</span>
+            {(analytics?.aiRecommendations && analytics.aiRecommendations.length > 0) ? (
+              analytics.aiRecommendations.map((rec) => (
+                <div
+                  key={rec.id}
+                  className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-6 flex flex-col justify-between hover:border-zinc-700 transition"
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`rounded px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${
+                          rec.severity === 'HIGH'
+                            ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                            : rec.severity === 'MEDIUM'
+                            ? 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
+                            : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
+                        }`}
+                      >
+                        {rec.severity} PRIORITY
+                      </span>
+                      <span className="text-xs font-bold text-emerald-400">{rec.projectedLift}</span>
+                    </div>
+
+                    <h4 className="mt-3 text-base font-bold text-white">{rec.title}</h4>
+                    <p className="mt-2 text-xs text-zinc-400 leading-relaxed">{rec.description}</p>
                   </div>
 
-                  <h4 className="mt-3 text-base font-bold text-white">{rec.title}</h4>
-                  <p className="mt-2 text-xs text-zinc-400 leading-relaxed">{rec.description}</p>
+                  <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-end">
+                    <button
+                      onClick={() => showNotice(`⚡ Action triggered: "${rec.recommendedAction}" executed successfully!`)}
+                      className="flex items-center gap-1.5 rounded-xl bg-purple-600/20 border border-purple-500/40 px-4 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-600/30 transition active:scale-95"
+                    >
+                      <Zap className="h-3.5 w-3.5 text-purple-400" />
+                      {rec.recommendedAction}
+                    </button>
+                  </div>
                 </div>
-
-                <div className="mt-6 pt-4 border-t border-zinc-800 flex items-center justify-end">
-                  <button
-                    onClick={() => showNotice(`⚡ Action triggered: "${rec.recommendedAction}" executed successfully!`)}
-                    className="flex items-center gap-1.5 rounded-xl bg-purple-600/20 border border-purple-500/40 px-4 py-2 text-xs font-semibold text-purple-300 hover:bg-purple-600/30 transition active:scale-95"
-                  >
-                    <Zap className="h-3.5 w-3.5 text-purple-400" />
-                    {rec.recommendedAction}
-                  </button>
-                </div>
+              ))
+            ) : (
+              <div className="col-span-2 rounded-2xl border border-dashed border-zinc-800 p-8 text-center text-xs text-zinc-500">
+                No active operational directives currently generated. Recommendations populate dynamically from live DB analytics.
               </div>
-            ))}
+            )}
           </div>
         </div>
       )}
