@@ -32,6 +32,7 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
+import { splitService } from '@/services/splitService'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -216,22 +217,25 @@ export default function BookingPage() {
 
   const handleOpenSplitModal = async (confirmation: any) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/split/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `${confirmation.movie} Passes (${confirmation.seats.join(', ')})`,
-          totalAmount: confirmation.totalPrice,
-          paidByUserId: 'usr-marcus',
-          referenceType: 'MOVIE_TICKET',
-          referenceId: confirmation.ticketId,
-        }),
+      const squadUsers = await splitService.getUsers().catch(() => [])
+      const matchedUser = squadUsers.find(
+        (u) =>
+          u.email?.toLowerCase() === currentUser?.email?.toLowerCase() ||
+          u.name?.toLowerCase() === currentUser?.name?.toLowerCase()
+      )
+      const payerId = matchedUser?.id || squadUsers[0]?.id || ''
+      const memberIds = squadUsers.length > 0 ? squadUsers.map((u) => u.id) : (payerId ? [payerId] : [])
+
+      const data = await splitService.createSplit({
+        name: `${confirmation.movie} Passes (${confirmation.seats.join(', ')})`,
+        totalAmount: confirmation.totalPrice,
+        paidByUserId: payerId,
+        memberUserIds: memberIds,
+        referenceType: 'MOVIE_TICKET',
+        referenceId: confirmation.ticketId,
       })
-      if (res.ok) {
-        const data = await res.json()
-        setSplitExpenseData(data)
-        setIsSplitModalOpen(true)
-      }
+      setSplitExpenseData(data)
+      setIsSplitModalOpen(true)
     } catch (err) {
       console.warn('Failed to split bill via SplitMoney:', err)
     }
@@ -240,26 +244,16 @@ export default function BookingPage() {
   const handleSettleShare = async (expenseId: string, debtorUserId: string, method: string) => {
     setIsSettlingShare(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/split/settle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expenseId,
-          debtorUserId,
-          paymentMethod: method,
-        }),
+      await splitService.settleShare({
+        expenseId,
+        debtorUserId,
+        paymentMethod: method,
       })
-      if (res.ok) {
-        // Refresh expense data
-        const expRes = await fetch(`${API_BASE}/api/v1/split/expenses`)
-        if (expRes.ok) {
-          const list = await expRes.json()
-          const updated = list.find((e: any) => e.id === expenseId)
-          if (updated) setSplitExpenseData(updated)
-        }
-        setLiveBroadcastToast(`🎉 Friend's share settled via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
-        setTimeout(() => setLiveBroadcastToast(null), 4000)
-      }
+      const list = await splitService.getExpenses().catch(() => [])
+      const updated = list.find((e: any) => e.id === expenseId)
+      if (updated) setSplitExpenseData(updated)
+      setLiveBroadcastToast(`🎉 Friend's share settled via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
+      setTimeout(() => setLiveBroadcastToast(null), 4000)
     } catch (err) {
       console.warn('Failed to settle share:', err)
     } finally {

@@ -37,45 +37,7 @@ import {
   SplitExpense,
   SplitBalanceSummary,
 } from '@/services/splitService'
-
-const DEFAULT_SQUAD_USERS: SplitUser[] = [
-  {
-    id: 'usr-marcus',
-    name: 'Marcus Kane',
-    fullName: 'Marcus Kane',
-    firstName: 'Marcus',
-    lastName: 'Kane',
-    email: 'marcus.kane@cinemind.io',
-    avatarUrl: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
-  },
-  {
-    id: 'usr-alex',
-    name: 'Alex Mercer',
-    fullName: 'Alex Mercer',
-    firstName: 'Alex',
-    lastName: 'Mercer',
-    email: 'alex.mercer@cinemind.io',
-    avatarUrl: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
-  },
-  {
-    id: 'usr-elena',
-    name: 'Elena Rostova',
-    fullName: 'Elena Rostova',
-    firstName: 'Elena',
-    lastName: 'Rostova',
-    email: 'elena.rostova@cinemind.io',
-    avatarUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150',
-  },
-  {
-    id: 'usr-chloe',
-    name: 'Chloe Bennett',
-    fullName: 'Chloe Bennett',
-    firstName: 'Chloe',
-    lastName: 'Bennett',
-    email: 'chloe.bennett@cinemind.io',
-    avatarUrl: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150',
-  },
-]
+import { authService, UserPersona } from '@/services/authService'
 
 const QUICK_PRESETS = [
   { label: '🎟️ 4x IMAX 70mm Passes', name: 'Dune: Part Two IMAX 70mm (4 Passes)', amount: '78.00', icon: Film },
@@ -90,8 +52,9 @@ const getUserDisplayName = (u: SplitUser) =>
 const isSharePaid = (s: { paid?: boolean; isPaid?: boolean }) => Boolean(s.paid || s.isPaid)
 
 export default function SplitPage() {
+  const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
   const [groups, setGroups] = useState<SplitGroup[]>([])
-  const [users, setUsers] = useState<SplitUser[]>(DEFAULT_SQUAD_USERS)
+  const [users, setUsers] = useState<SplitUser[]>([])
   const [expenses, setExpenses] = useState<SplitExpense[]>([])
   const [balanceSummary, setBalanceSummary] = useState<SplitBalanceSummary | null>(null)
   const [selectedGroup, setSelectedGroup] = useState<string>('ALL')
@@ -107,24 +70,14 @@ export default function SplitPage() {
   // New expense form state
   const [expenseName, setExpenseName] = useState('')
   const [expenseTotal, setExpenseTotal] = useState('')
-  const [selectedPayerId, setSelectedPayerId] = useState('usr-marcus')
-  const [selectedMembers, setSelectedMembers] = useState<string[]>([
-    'usr-marcus',
-    'usr-alex',
-    'usr-elena',
-    'usr-chloe',
-  ])
+  const [selectedPayerId, setSelectedPayerId] = useState('')
+  const [selectedMembers, setSelectedMembers] = useState<string[]>([])
   const [isCreatingExpense, setIsCreatingExpense] = useState(false)
 
   // New squad group form state
   const [groupName, setGroupName] = useState('')
   const [groupDesc, setGroupDesc] = useState('')
-  const [groupMembers, setGroupMembers] = useState<string[]>([
-    'usr-marcus',
-    'usr-alex',
-    'usr-elena',
-    'usr-chloe',
-  ])
+  const [groupMembers, setGroupMembers] = useState<string[]>([])
   const [isCreatingGroup, setIsCreatingGroup] = useState(false)
 
   const showNotification = (msg: string) => {
@@ -135,19 +88,45 @@ export default function SplitPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [fetchedUsers, fetchedGroups, fetchedExpenses, fetchedBalances] = await Promise.all([
-        splitService.getUsers().catch(() => null),
-        splitService.getGroups().catch(() => null),
-        splitService.getExpenses().catch(() => null),
-        splitService.getBalances('usr-marcus').catch(() => null),
+      const [fetchedUser, fetchedUsers, fetchedGroups, fetchedExpenses] = await Promise.all([
+        authService.getCurrentUser().catch(() => null),
+        splitService.getUsers().catch(() => []),
+        splitService.getGroups().catch(() => []),
+        splitService.getExpenses().catch(() => []),
       ])
 
-      if (fetchedUsers && fetchedUsers.length > 0) {
-        setUsers(fetchedUsers)
+      if (fetchedUser) {
+        setCurrentUser(fetchedUser)
       }
+
+      const userList = fetchedUsers || []
+      setUsers(userList)
+
       if (fetchedGroups) setGroups(fetchedGroups)
       if (fetchedExpenses) setExpenses(fetchedExpenses)
-      if (fetchedBalances) setBalanceSummary(fetchedBalances)
+
+      // Find the active patron in the SplitUser registry by email or name
+      const activePatron = userList.find(
+        (u) =>
+          u.email?.toLowerCase() === fetchedUser?.email?.toLowerCase() ||
+          u.name?.toLowerCase() === fetchedUser?.name?.toLowerCase() ||
+          u.fullName?.toLowerCase() === fetchedUser?.name?.toLowerCase()
+      ) || userList[0]
+
+      const activePatronId = activePatron?.id
+
+      if (activePatronId) {
+        setSelectedPayerId((prev) => (prev ? prev : activePatronId))
+        const fetchedBalances = await splitService.getBalances(activePatronId).catch(() => null)
+        if (fetchedBalances) {
+          setBalanceSummary(fetchedBalances)
+        }
+      }
+
+      // Initialize selected members from dynamic user list if not already configured
+      const allUserIds = userList.map((u) => u.id)
+      setSelectedMembers((prev) => (prev.length > 0 ? prev : allUserIds))
+      setGroupMembers((prev) => (prev.length > 0 ? prev : allUserIds))
     } catch (err) {
       console.warn('Failed to load SplitMoney squad data:', err)
     } finally {
@@ -301,14 +280,20 @@ export default function SplitPage() {
     })
   }, [expenses, selectedGroup, statusFilter, searchQuery])
 
-  const netBalance = balanceSummary?.netBalance ?? 24.5
-  const totalPaidForOthers = balanceSummary?.totalPaidForOthers ?? 58.5
-  const totalOwedToOthers = balanceSummary?.totalOwedToOthers ?? 34.0
-  const balancesWithFriends = balanceSummary?.balancesWithFriends ?? {
-    'Alex Mercer': 19.5,
-    'Elena Rostova': 19.5,
-    'Chloe Bennett': -14.5,
-  }
+  const netBalance = balanceSummary?.netBalance ?? 0
+  const totalPaidForOthers = balanceSummary?.totalPaidForOthers ?? 0
+  const totalOwedToOthers = balanceSummary?.totalOwedToOthers ?? 0
+  const balancesWithFriends = balanceSummary?.balancesWithFriends ?? {}
+
+  const activePatronId = useMemo(() => {
+    const activePatron = users.find(
+      (u) =>
+        u.email?.toLowerCase() === currentUser?.email?.toLowerCase() ||
+        u.name?.toLowerCase() === currentUser?.name?.toLowerCase() ||
+        u.fullName?.toLowerCase() === currentUser?.name?.toLowerCase()
+    ) || users[0]
+    return activePatron?.id || ''
+  }, [currentUser, users])
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 animate-fade-in pb-16">
@@ -413,11 +398,11 @@ export default function SplitPage() {
               </span>
               <Users className="h-4 w-4 text-purple-400" />
             </div>
-            <div className="text-3xl font-extrabold text-white mt-2">{groups.length || 1}</div>
+            <div className="text-3xl font-extrabold text-white mt-2">{groups.length}</div>
           </div>
           <div className="mt-4 text-[11px] text-zinc-400 flex items-center justify-between">
             <span className="truncate">
-              {groups.map((g) => g.name).join(' • ') || 'CineMind IMAX VIP Squad'}
+              {groups.length > 0 ? groups.map((g) => g.name).join(' • ') : 'No active squads'}
             </span>
             <button
               onClick={() => setIsCreateGroupModalOpen(true)}
@@ -468,77 +453,83 @@ export default function SplitPage() {
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {users
-            .filter((u) => u.id !== 'usr-marcus')
-            .map((u) => {
-              const displayName = getUserDisplayName(u)
-              const balance = balancesWithFriends[displayName] ?? 0
-              const owesYou = balance > 0
-              const youOwe = balance < 0
-              const settled = balance === 0
+          {users.filter((u) => u.id !== activePatronId).length === 0 ? (
+            <div className="col-span-full py-8 text-center text-xs text-zinc-500 bg-zinc-950/40 rounded-2xl border border-dashed border-zinc-800">
+              No other squad members registered. Create a new movie squad or invite friends to begin splitting bills.
+            </div>
+          ) : (
+            users
+              .filter((u) => u.id !== activePatronId)
+              .map((u) => {
+                const displayName = getUserDisplayName(u)
+                const balance = balancesWithFriends[displayName] ?? 0
+                const owesYou = balance > 0
+                const youOwe = balance < 0
+                const settled = balance === 0
 
-              return (
-                <div
-                  key={u.id}
-                  className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 flex flex-col justify-between gap-3 hover:border-zinc-700 transition"
-                >
-                  <div className="flex items-center gap-3">
-                    {u.avatarUrl ? (
-                      <img
-                        src={u.avatarUrl}
-                        alt={displayName}
-                        className="h-10 w-10 rounded-full object-cover border border-zinc-700 shrink-0"
-                      />
-                    ) : (
-                      <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
-                        {displayName.charAt(0)}
+                return (
+                  <div
+                    key={u.id}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-950/70 p-4 flex flex-col justify-between gap-3 hover:border-zinc-700 transition"
+                  >
+                    <div className="flex items-center gap-3">
+                      {u.avatarUrl ? (
+                        <img
+                          src={u.avatarUrl}
+                          alt={displayName}
+                          className="h-10 w-10 rounded-full object-cover border border-zinc-700 shrink-0"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 flex items-center justify-center text-xs font-bold text-white shrink-0">
+                          {displayName.charAt(0)}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-white truncate">{displayName}</p>
+                        <p className="text-[10px] text-zinc-500 truncate">{u.email}</p>
                       </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate">{displayName}</p>
-                      <p className="text-[10px] text-zinc-500 truncate">{u.email}</p>
-                    </div>
-                  </div>
-
-                  <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] text-zinc-400 block">
-                        {owesYou ? 'Owes you' : youOwe ? 'You owe' : 'Status'}
-                      </span>
-                      <span
-                        className={`text-sm font-bold font-mono ${
-                          owesYou
-                            ? 'text-emerald-400'
-                            : youOwe
-                            ? 'text-amber-400'
-                            : 'text-zinc-500'
-                        }`}
-                      >
-                        {settled ? 'Settled' : `$${Math.abs(balance).toFixed(2)}`}
-                      </span>
                     </div>
 
-                    {!settled && (
-                      <button
-                        onClick={() => {
-                          const matchingExp = expenses.find((exp) =>
-                            exp.shares.some((s) => s.userId === u.id && !isSharePaid(s))
-                          )
-                          if (matchingExp) {
-                            handleSettle(matchingExp.id, u.id, 'WALLET')
-                          } else {
-                            showNotification(`All pending direct tickets for ${displayName} are squared up.`)
-                          }
-                        }}
-                        className="rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-2.5 py-1 text-[10px] font-bold text-indigo-300 hover:bg-indigo-600/30 transition"
-                      >
-                        {owesYou ? 'Request' : 'Settle'}
-                      </button>
-                    )}
+                    <div className="pt-2 border-t border-zinc-800/80 flex items-center justify-between">
+                      <div>
+                        <span className="text-[10px] text-zinc-400 block">
+                          {owesYou ? 'Owes you' : youOwe ? 'You owe' : 'Status'}
+                        </span>
+                        <span
+                          className={`text-sm font-bold font-mono ${
+                            owesYou
+                              ? 'text-emerald-400'
+                              : youOwe
+                              ? 'text-amber-400'
+                              : 'text-zinc-500'
+                          }`}
+                        >
+                          {settled ? 'Settled' : `$${Math.abs(balance).toFixed(2)}`}
+                        </span>
+                      </div>
+
+                      {!settled && (
+                        <button
+                          onClick={() => {
+                            const matchingExp = expenses.find((exp) =>
+                              exp.shares.some((s) => s.userId === u.id && !isSharePaid(s))
+                            )
+                            if (matchingExp) {
+                              handleSettle(matchingExp.id, u.id, 'WALLET')
+                            } else {
+                              showNotification(`All pending direct tickets for ${displayName} are squared up.`)
+                            }
+                          }}
+                          className="rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-2.5 py-1 text-[10px] font-bold text-indigo-300 hover:bg-indigo-600/30 transition"
+                        >
+                          {owesYou ? 'Request' : 'Settle'}
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })
+          )}
         </div>
       </div>
 

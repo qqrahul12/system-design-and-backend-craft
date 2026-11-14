@@ -61,8 +61,8 @@ export const splitService = {
 
   getExpenses: (): Promise<SplitExpense[]> => apiClient.get<SplitExpense[]>('/api/v1/split/expenses'),
 
-  getBalances: (userId = 'usr-marcus'): Promise<SplitBalanceSummary> =>
-    apiClient.get<SplitBalanceSummary>(`/api/v1/split/balances?userId=${encodeURIComponent(userId)}`),
+  getBalances: (userId?: string): Promise<SplitBalanceSummary> =>
+    apiClient.get<SplitBalanceSummary>(userId ? `/api/v1/split/balances?userId=${encodeURIComponent(userId)}` : '/api/v1/split/balances'),
 
   createSplit: (payload: {
     name: string;

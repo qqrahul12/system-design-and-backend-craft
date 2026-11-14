@@ -961,6 +961,10 @@ async function runTestSuite() {
   console.log('\n====================================================');
   console.log(`🎯 Test Results: ${passed}/${total} Passed (${Math.round((passed / total) * 100)}%)`);
   console.log('====================================================');
+
+  if (passed < total) {
+    process.exit(1);
+  }
 }
 
 runTestSuite();

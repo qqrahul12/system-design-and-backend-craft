@@ -28,6 +28,8 @@ import {
   Truck,
   Users,
 } from 'lucide-react'
+import { splitService } from '@/services/splitService'
+import { authService } from '@/services/authService'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -122,22 +124,28 @@ function ConcessionsContent() {
 
   const handleOpenSplitModal = async (order: any) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/split/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: `Gourmet F&B Order (${order.orderId} - Seat ${order.seat})`,
-          totalAmount: order.totalPrice,
-          paidByUserId: 'usr-marcus',
-          referenceType: 'CONCESSION_ORDER',
-          referenceId: order.orderId,
-        }),
+      const [currentUser, squadUsers] = await Promise.all([
+        authService.getCurrentUser().catch(() => null),
+        splitService.getUsers().catch(() => []),
+      ])
+      const matchedUser = squadUsers.find(
+        (u) =>
+          u.email?.toLowerCase() === currentUser?.email?.toLowerCase() ||
+          u.name?.toLowerCase() === currentUser?.name?.toLowerCase()
+      )
+      const payerId = matchedUser?.id || squadUsers[0]?.id || ''
+      const memberIds = squadUsers.length > 0 ? squadUsers.map((u) => u.id) : (payerId ? [payerId] : [])
+
+      const data = await splitService.createSplit({
+        name: `Gourmet F&B Order (${order.orderId} - Seat ${order.seat})`,
+        totalAmount: order.totalPrice,
+        paidByUserId: payerId,
+        memberUserIds: memberIds,
+        referenceType: 'CONCESSION_ORDER',
+        referenceId: order.orderId,
       })
-      if (res.ok) {
-        const data = await res.json()
-        setSplitExpenseData(data)
-        setIsSplitModalOpen(true)
-      }
+      setSplitExpenseData(data)
+      setIsSplitModalOpen(true)
     } catch (err) {
       console.warn('Failed to split F&B bill via SplitMoney:', err)
     }
@@ -146,25 +154,16 @@ function ConcessionsContent() {
   const handleSettleShare = async (expenseId: string, debtorUserId: string, method: string) => {
     setIsSettlingShare(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/split/settle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expenseId,
-          debtorUserId,
-          paymentMethod: method,
-        }),
+      await splitService.settleShare({
+        expenseId,
+        debtorUserId,
+        paymentMethod: method,
       })
-      if (res.ok) {
-        const expRes = await fetch(`${API_BASE}/api/v1/split/expenses`)
-        if (expRes.ok) {
-          const list = await expRes.json()
-          const updated = list.find((e: any) => e.id === expenseId)
-          if (updated) setSplitExpenseData(updated)
-        }
-        setAddedNotice(`🎉 Squad member settled their F&B share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
-        setTimeout(() => setAddedNotice(null), 4000)
-      }
+      const list = await splitService.getExpenses().catch(() => [])
+      const updated = list.find((e: any) => e.id === expenseId)
+      if (updated) setSplitExpenseData(updated)
+      setAddedNotice(`🎉 Squad member settled their F&B share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
+      setTimeout(() => setAddedNotice(null), 4000)
     } catch (err) {
       console.warn('Failed to settle F&B share:', err)
     } finally {
