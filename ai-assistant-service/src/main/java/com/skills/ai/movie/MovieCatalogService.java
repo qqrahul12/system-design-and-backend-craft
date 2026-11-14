@@ -33,7 +33,7 @@ public class MovieCatalogService {
     }
 
     private void seedInitialCatalog() {
-        addSeededMovie(1L, "Interstellar", "Sci-Fi", 4.8, 2014, "2h 49m", 18.00, true,
+        addSeededMovie(1L, "Interstellar", "Sci-Fi", 4.8, 2014, "2014-11-07", "2h 49m", 18.00, true,
                 "A team of explorers travel through a wormhole in space to ensure humanity's survival across uncharted galaxies.",
                 List.of("B3", "B4"), "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 94, "1:30 PM, 5:00 PM, 8:45 PM",
@@ -41,7 +41,7 @@ public class MovieCatalogService {
                 "\"Interstellar is a staggering cinematic achievement that demands to be experienced in 70mm IMAX.\" — Chicago Tribune", 412,
                 "https://www.youtube.com/embed/zSWdZVtXT7E", "Christopher Nolan", "Matthew McConaughey, Anne Hathaway, Jessica Chastain", "PG-13");
 
-        addSeededMovie(2L, "Dune: Part Two", "Epic", 4.7, 2024, "2h 46m", 19.50, true,
+        addSeededMovie(2L, "Dune: Part Two", "Epic", 4.7, 2024, "2024-03-01", "2h 46m", 19.50, true,
                 "Paul Atreides unites with Chani and the Fremen while seeking revenge against the conspirators who destroyed his family.",
                 List.of("C3", "C4"), "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 96, "12:00 PM, 3:45 PM, 7:30 PM, 10:45 PM",
@@ -49,7 +49,7 @@ public class MovieCatalogService {
                 "\"One of the greatest sci-fi spectacles of the 21st century.\" — The Hollywood Reporter", 489,
                 "https://www.youtube.com/embed/Way9Dexny3w", "Denis Villeneuve", "Timothée Chalamet, Zendaya, Rebecca Ferguson, Javier Bardem", "PG-13");
 
-        addSeededMovie(3L, "Oppenheimer", "Drama", 4.9, 2023, "3h 00m", 17.00, false,
+        addSeededMovie(3L, "Oppenheimer", "Drama", 4.9, 2023, "2023-07-21", "3h 00m", 17.00, false,
                 "The story of American scientist J. Robert Oppenheimer and his role in the Manhattan Project that ushered in the nuclear age.",
                 List.of("B2", "B3"), "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&auto=format&fit=crop",
                 "70mm Large Format Screen 2", "NOW_SHOWING", 89, "2:00 PM, 6:15 PM, 9:45 PM",
@@ -57,7 +57,7 @@ public class MovieCatalogService {
                 "\"A triumph of cinema that probes deep into moral consequence.\" — The New York Times", 512,
                 "https://www.youtube.com/embed/uYPbbksJxIg", "Christopher Nolan", "Cillian Murphy, Emily Blunt, Matt Damon, Robert Downey Jr.", "R");
 
-        addSeededMovie(4L, "Spider-Man: Across the Spider-Verse", "Action", 4.8, 2023, "2h 20m", 15.50, false,
+        addSeededMovie(4L, "Spider-Man: Across the Spider-Verse", "Action", 4.8, 2023, "2023-06-02", "2h 20m", 15.50, false,
                 "Miles Morales catapults across the Multiverse, where he encounters a team of Spider-People charged with protecting its existence.",
                 List.of("A3", "A4"), "https://images.unsplash.com/photo-1604200213928-ba3cf4fc8436?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 92, "11:30 AM, 2:45 PM, 6:00 PM",
@@ -65,7 +65,7 @@ public class MovieCatalogService {
                 "\"A visual masterwork that pushes the art form of animation into uncharted genius.\" — Empire", 398,
                 "https://www.youtube.com/embed/cqGjhVJWtEg", "Joaquim Dos Santos, Kemp Powers", "Shameik Moore, Hailee Steinfeld, Oscar Isaac", "PG");
 
-        addSeededMovie(5L, "Past Lives", "Romance", 4.6, 2023, "1h 45m", 13.00, false,
+        addSeededMovie(5L, "Past Lives", "Romance", 4.6, 2023, "2023-06-02", "1h 45m", 13.00, false,
                 "Nora and Hae Sung, two deeply connected childhood friends, are reunited for one fateful week as they confront destiny and choices.",
                 List.of("C2", "C3"), "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=600&auto=format&fit=crop",
                 "Indie Studio 4", "NOW_SHOWING", 76, "4:15 PM, 7:15 PM",
@@ -73,7 +73,7 @@ public class MovieCatalogService {
                 "\"An aching, transcendent romance destined to become a modern classic.\" — Rolling Stone", 320,
                 "https://www.youtube.com/embed/kA244xewjcI", "Celine Song", "Greta Lee, Teo Yoo, John Magaro", "PG-13");
 
-        addSeededMovie(6L, "Blade Runner 2049", "Sci-Fi", 4.7, 2017, "2h 44m", 16.50, false,
+        addSeededMovie(6L, "Blade Runner 2049", "Sci-Fi", 4.7, 2017, "2017-10-06", "2h 44m", 16.50, false,
                 "A young blade runner's discovery of a long-buried secret leads him to track down former blade runner Rick Deckard.",
                 List.of("B4", "B5"), "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 85, "5:30 PM, 9:00 PM",
@@ -81,7 +81,7 @@ public class MovieCatalogService {
                 "\"A masterpiece of atmospheric science fiction.\" — Los Angeles Times", 445,
                 "https://www.youtube.com/embed/gCcx85zbxz4", "Denis Villeneuve", "Ryan Gosling, Harrison Ford, Ana de Armas", "R");
 
-        addSeededMovie(7L, "Gladiator II", "Action", 4.8, 2024, "2h 28m", 18.50, true,
+        addSeededMovie(7L, "Gladiator II", "Action", 4.8, 2024, "2024-11-22", "2h 28m", 18.50, true,
                 "Years after witnessing the death of Maximus, Lucius enters the Colosseum after his home is conquered by tyrannical emperors.",
                 List.of("D3", "D4"), "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 91, "1:00 PM, 4:30 PM, 8:00 PM",
@@ -89,7 +89,7 @@ public class MovieCatalogService {
                 "\"Spectacular Roman brutality that reminds us why big-screen cinema exists.\" — Guardian", 285,
                 "https://www.youtube.com/embed/4rgYUipGJNo", "Ridley Scott", "Paul Mescal, Pedro Pascal, Denzel Washington", "R");
 
-        addSeededMovie(8L, "Tron: Ares", "Sci-Fi", 4.6, 2025, "2h 15m", 17.50, false,
+        addSeededMovie(8L, "Tron: Ares", "Sci-Fi", 4.6, 2025, "2025-10-10", "2h 15m", 17.50, false,
                 "A sophisticated Program named Ares is sent from the digital world into the real world on a dangerous assignment.",
                 List.of("B3", "C3"), "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop",
                 "ScreenX 270° Panoramic", "UPCOMING", 78, "Opens Next Week",
@@ -97,7 +97,7 @@ public class MovieCatalogService {
                 "\"The Grid has never looked or sounded more intoxicating.\" — IndieWire", 140,
                 "https://www.youtube.com/embed/q098q1c6c0E", "Joachim Rønning", "Jared Leto, Greta Lee, Evan Peters, Jeff Bridges", "PG-13");
 
-        addSeededMovie(9L, "Inception", "Sci-Fi", 4.9, 2010, "2h 28m", 16.00, true,
+        addSeededMovie(9L, "Inception", "Sci-Fi", 4.9, 2010, "2010-07-16", "2h 28m", 16.00, true,
                 "A thief who steals corporate secrets through the use of dream-sharing technology is given the inverse task of planting an idea.",
                 List.of("C3", "C4"), "https://images.unsplash.com/photo-1478760329108-5c3ed9d495a0?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 95, "6:00 PM, 9:30 PM",
@@ -105,7 +105,7 @@ public class MovieCatalogService {
                 "\"A breathtaking tour de force of conceptual cinema.\" — Roger Ebert", 520,
                 "https://www.youtube.com/embed/YoHD9XEInc0", "Christopher Nolan", "Leonardo DiCaprio, Joseph Gordon-Levitt, Elliot Page", "PG-13");
 
-        addSeededMovie(10L, "Furiosa: A Mad Max Saga", "Action", 4.5, 2024, "2h 28m", 16.50, false,
+        addSeededMovie(10L, "Furiosa: A Mad Max Saga", "Action", 4.5, 2024, "2024-05-24", "2h 28m", 16.50, false,
                 "The origin story of renegade warrior Furiosa before her encounter and teamup with Mad Max in Fury Road.",
                 List.of("A2", "A3"), "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop",
                 "Large Format Screen 2", "NOW_SHOWING", 83, "3:00 PM, 7:00 PM",
@@ -113,7 +113,7 @@ public class MovieCatalogService {
                 "\"A thunderous action operetta that rages across the screen.\" — Variety", 380,
                 "https://www.youtube.com/embed/XJMuhwVlca4", "George Miller", "Anya Taylor-Joy, Chris Hemsworth, Tom Burke", "R");
 
-        addSeededMovie(11L, "Alien: Romulus", "Horror", 4.6, 2024, "1h 59m", 15.00, false,
+        addSeededMovie(11L, "Alien: Romulus", "Horror", 4.6, 2024, "2024-08-16", "1h 59m", 15.00, false,
                 "While scavenging the deep ends of a derelict space station, a group of young space colonizers come face to face with the most terrifying life form.",
                 List.of("C4", "C5"), "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 88, "8:15 PM, 10:45 PM",
@@ -121,7 +121,7 @@ public class MovieCatalogService {
                 "\"A visceral, dread-soaked return to form for sci-fi horror.\" — BBC Culture", 330,
                 "https://www.youtube.com/embed/x0XDEhP4MQs", "Fede Álvarez", "Cailee Spaeny, David Jonsson, Archie Renaux", "R");
 
-        addSeededMovie(12L, "The Batman: Part II", "Action", 4.9, 2026, "2h 45m", 19.00, true,
+        addSeededMovie(12L, "The Batman: Part II", "Action", 4.9, 2026, "2026-10-02", "2h 45m", 19.00, true,
                 "Bruce Wayne navigates the fractured underworld of Gotham City as emerging adversaries challenge his psychological endurance.",
                 List.of("C3", "D3"), "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "UPCOMING", 98, "World Premiere Advance Screening",
@@ -131,38 +131,15 @@ public class MovieCatalogService {
     }
 
     private void addSeededMovie(Long id, String title, String genre, Double rating, Integer year,
-                                String duration, Double price, Boolean aiPick, String synopsis,
+                                String releaseDate, String duration, Double price, Boolean aiPick, String synopsis,
                                 List<String> suggestedSeats, String posterUrl, String auditorium,
                                 String status, Integer occupancyRate, String showtimes,
                                 Integer rottenTomatoes, Integer metacritic, Double imdbRating,
                                 String criticConsensus, String topCriticQuote, Integer reviewsCount,
                                 String trailerUrl, String director, String cast, String ageRating) {
-        String releaseDate = switch (id != null ? id.intValue() : 0) {
-            case 1 -> "2014-11-07"; // Interstellar
-            case 2 -> "2024-03-01"; // Dune: Part Two
-            case 3 -> "2023-07-21"; // Oppenheimer
-            case 4 -> "2023-06-02"; // Spider-Man: Across the Spider-Verse
-            case 5 -> "2023-06-02"; // Past Lives
-            case 6 -> "2017-10-06"; // Blade Runner 2049
-            case 7 -> "2024-11-22"; // Gladiator II
-            case 8 -> "2025-10-10"; // Tron: Ares
-            case 9 -> "2010-07-16"; // Inception
-            case 10 -> "2024-05-24"; // Furiosa
-            case 11 -> "2024-08-16"; // Alien: Romulus
-            case 12, 206 -> "2026-10-02"; // The Batman: Part II
-            case 201 -> "2026-03-20"; // Project Hail Mary
-            case 202 -> "2026-01-31"; // Mickey 17
-            case 203 -> "2026-07-11"; // Superman
-            case 204 -> "2026-12-19"; // Avatar: Fire and Ash
-            case 205 -> "2026-05-01"; // Avengers: Doomsday
-            case 207 -> "2026-06-05"; // Spider-Man: Beyond the Spider-Verse
-            case 208 -> "2026-05-22"; // The Mandalorian & Grogu
-            case 209 -> "2026-07-01"; // Shrek 5
-            case 210 -> "2026-06-19"; // Toy Story 5
-            case 211 -> "2026-09-18"; // A Quiet Place: Part III
-            case 212 -> "2026-01-16"; // Weapons
-            default -> (year != null ? year : 2026) + "-05-22";
-        };
+        if (releaseDate == null || releaseDate.isBlank()) {
+            releaseDate = (year != null ? year : 2026) + "-05-22";
+        }
 
         Movie movie = Movie.builder()
                 .id(id)
@@ -381,7 +358,7 @@ public class MovieCatalogService {
         int year = (targetYear >= 2024 && targetYear <= 2030) ? targetYear : 2026;
         List<Movie> ingested = new ArrayList<>();
 
-        addSeededMovie(201L, "Project Hail Mary", "Sci-Fi", 4.9, year, "2h 35m", 19.50, true,
+        addSeededMovie(201L, "Project Hail Mary", "Sci-Fi", 4.9, year, year + "-03-20", "2h 35m", 19.50, true,
                 "Astronaut Ryland Grace is the lone survivor on an interstellar mission to save Earth from a global extinction event.",
                 List.of("C3", "C4"), "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 97, "1:15 PM, 4:45 PM, 8:15 PM",
@@ -390,7 +367,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/zSWdZVtXT7E", "Phil Lord, Christopher Miller", "Ryan Gosling, Sandra Hüller, Milana Vayntrub", "PG-13");
         ingested.add(movieStore.get(201L));
 
-        addSeededMovie(202L, "Mickey 17", "Sci-Fi", 4.8, year, "2h 19m", 18.00, true,
+        addSeededMovie(202L, "Mickey 17", "Sci-Fi", 4.8, year, year + "-01-31", "2h 19m", 18.00, true,
                 "An 'expendable' human employee on a space colonization expedition refuses to let his clone replacement take over.",
                 List.of("B3", "B4"), "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 93, "2:00 PM, 5:30 PM, 9:00 PM",
@@ -399,7 +376,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/osYlpQ8Duac", "Bong Joon-ho", "Robert Pattinson, Naomi Ackie, Steven Yeun, Mark Ruffalo", "R");
         ingested.add(movieStore.get(202L));
 
-        addSeededMovie(203L, "Superman", "Action", 4.8, year, "2h 25m", 19.00, true,
+        addSeededMovie(203L, "Superman", "Action", 4.8, year, year + "-07-11", "2h 25m", 19.00, true,
                 "Clark Kent strives to balance his Kryptonian heritage with his human upbringing, standing as the beacon of hope and truth.",
                 List.of("D3", "D4"), "https://images.unsplash.com/photo-1534447677768-be436bb09401?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 95, "12:30 PM, 4:00 PM, 7:30 PM, 10:30 PM",
@@ -408,7 +385,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/Way9Dexny3w", "James Gunn", "David Corenswet, Rachel Brosnahan, Nicholas Hoult", "PG-13");
         ingested.add(movieStore.get(203L));
 
-        addSeededMovie(204L, "Avatar: Fire and Ash", "Epic", 4.7, year, "3h 10m", 21.00, true,
+        addSeededMovie(204L, "Avatar: Fire and Ash", "Epic", 4.7, year, year + "-12-19", "3h 10m", 21.00, true,
                 "The journey of Jake Sully and Neytiri continues as they encounter the aggressive nomadic Ash People across the volcanic ranges of Pandora.",
                 List.of("C3", "C4", "D3", "D4"), "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop",
                 "IMAX 3D Laser Auditorium 1", "NOW_SHOWING", 98, "1:00 PM, 5:15 PM, 9:30 PM",
@@ -417,7 +394,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/cqGjhVJWtEg", "James Cameron", "Sam Worthington, Zoe Saldana, Sigourney Weaver, Michelle Yeoh", "PG-13");
         ingested.add(movieStore.get(204L));
 
-        addSeededMovie(205L, "Avengers: Doomsday", "Action", 4.9, year, "2h 50m", 20.00, true,
+        addSeededMovie(205L, "Avengers: Doomsday", "Action", 4.9, year, year + "-05-01", "2h 50m", 20.00, true,
                 "The multiverse collapses as Earth's mightiest heroes face Victor von Doom in a battle across parallel timelines.",
                 List.of("B2", "B3", "B4"), "https://images.unsplash.com/photo-1604200213928-ba3cf4fc8436?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 99, "11:45 AM, 3:30 PM, 7:15 PM, 11:00 PM",
@@ -426,7 +403,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/uYPbbksJxIg", "Anthony Russo, Joe Russo", "Robert Downey Jr., Pedro Pascal, Vanessa Kirby, Florence Pugh", "PG-13");
         ingested.add(movieStore.get(205L));
 
-        addSeededMovie(206L, "The Batman Part II", "Action", 4.9, year, "2h 55m", 19.50, true,
+        addSeededMovie(206L, "The Batman Part II", "Action", 4.9, year, year + "-10-02", "2h 55m", 19.50, true,
                 "Batman descends deeper into Gotham's criminal underworld as the Court of Owls strikes from the city's ancient shadows.",
                 List.of("C3", "C4", "D3"), "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop",
                 "70mm Large Format Screen 2", "NOW_SHOWING", 96, "12:15 PM, 4:15 PM, 8:15 PM",
@@ -435,7 +412,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/mqqft2x_Aa4", "Matt Reeves", "Robert Pattinson, Zoë Kravitz, Colin Farrell, Andy Serkis", "PG-13");
         ingested.add(movieStore.get(206L));
 
-        addSeededMovie(207L, "Spider-Man: Beyond the Spider-Verse", "Action", 4.9, year, "2h 30m", 18.50, true,
+        addSeededMovie(207L, "Spider-Man: Beyond the Spider-Verse", "Action", 4.9, year, year + "-06-05", "2h 30m", 18.50, true,
                 "Miles Morales must reckon with the multiverse's darkest anomalies to save both his father and every alternate universe from unraveling.",
                 List.of("A3", "A4", "B3"), "https://images.unsplash.com/photo-1604200213928-ba3cf4fc8436?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 98, "11:00 AM, 2:30 PM, 6:00 PM, 9:30 PM",
@@ -444,7 +421,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/cqGjhVJWtEg", "Joaquim Dos Santos, Kemp Powers", "Shameik Moore, Hailee Steinfeld, Oscar Isaac, Daniel Kaluuya", "PG");
         ingested.add(movieStore.get(207L));
 
-        addSeededMovie(208L, "The Mandalorian & Grogu", "Sci-Fi", 4.8, year, "2h 12m", 18.00, true,
+        addSeededMovie(208L, "The Mandalorian & Grogu", "Sci-Fi", 4.8, year, year + "-05-22", "2h 12m", 18.00, true,
                 "Din Djarin and his young apprentice Grogu are enlisted by the New Republic for a perilous secret mission across the galaxy's Outer Rim.",
                 List.of("B3", "B4"), "https://images.unsplash.com/photo-1451187580459-43490279c0fa?w=600&auto=format&fit=crop",
                 "IMAX 70mm Auditorium 1", "NOW_SHOWING", 94, "1:00 PM, 4:30 PM, 8:00 PM",
@@ -453,7 +430,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/aOC8E8R_n54", "Jon Favreau", "Pedro Pascal, Sigourney Weaver, Katee Sackhoff", "PG-13");
         ingested.add(movieStore.get(208L));
 
-        addSeededMovie(209L, "Shrek 5", "Animation", 4.7, year, "1h 48m", 16.50, true,
+        addSeededMovie(209L, "Shrek 5", "Animation", 4.7, year, year + "-07-01", "1h 48m", 16.50, true,
                 "Shrek, Donkey, and Fiona embark on a wild adventure to save Far Far Away when an enchanted spell threatens to rewrite fairytale history.",
                 List.of("C2", "C3", "C4"), "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 93, "11:30 AM, 2:15 PM, 5:00 PM, 7:45 PM",
@@ -462,7 +439,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/q098q1c6c0E", "Walt Dohrn", "Mike Myers, Eddie Murphy, Cameron Diaz, Antonio Banderas", "PG");
         ingested.add(movieStore.get(209L));
 
-        addSeededMovie(210L, "Toy Story 5", "Animation", 4.8, year, "1h 52m", 17.00, true,
+        addSeededMovie(210L, "Toy Story 5", "Animation", 4.8, year, year + "-06-19", "1h 52m", 17.00, true,
                 "Woody, Buzz, and the toys confront their greatest modern competitor yet: children captivated by tablet screens and digital electronics.",
                 List.of("D2", "D3", "D4"), "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?w=600&auto=format&fit=crop",
                 "ScreenX 270° Panoramic", "NOW_SHOWING", 91, "12:00 PM, 2:45 PM, 5:30 PM, 8:15 PM",
@@ -471,7 +448,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/wmiIUN-7qhE", "Andrew Stanton", "Tom Hanks, Tim Allen, Joan Cusack, Tony Hale", "G");
         ingested.add(movieStore.get(210L));
 
-        addSeededMovie(211L, "A Quiet Place: Part III", "Horror", 4.7, year, "1h 55m", 17.50, true,
+        addSeededMovie(211L, "A Quiet Place: Part III", "Horror", 4.7, year, year + "-09-18", "1h 55m", 17.50, true,
                 "The Abbott family makes a final desperate stand at an offshore sanctuary to transmit the sonic frequency that can liberate humanity.",
                 List.of("B2", "B3"), "https://images.unsplash.com/photo-1518199266791-5375a83190b7?w=600&auto=format&fit=crop",
                 "Indie Studio 4", "NOW_SHOWING", 89, "4:00 PM, 7:00 PM, 9:45 PM",
@@ -480,7 +457,7 @@ public class MovieCatalogService {
                 "https://www.youtube.com/embed/BpdDN9d9Jio", "John Krasinski", "Emily Blunt, Millicent Simmonds, Noah Jupe, Cillian Murphy", "PG-13");
         ingested.add(movieStore.get(211L));
 
-        addSeededMovie(212L, "Weapons", "Horror", 4.8, year, "2h 10m", 18.00, true,
+        addSeededMovie(212L, "Weapons", "Horror", 4.8, year, year + "-01-16", "2h 10m", 18.00, true,
                 "A community unravels in terror when high school students begin disappearing under eerie, interconnected supernatural circumstances.",
                 List.of("C3", "C4"), "https://images.unsplash.com/photo-1440404653325-ab127d49abc1?w=600&auto=format&fit=crop",
                 "Dolby Cinema Auditorium 3", "NOW_SHOWING", 95, "5:00 PM, 8:15 PM, 11:15 PM",
