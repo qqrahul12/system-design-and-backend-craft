@@ -83,15 +83,34 @@ public class ChatService {
             );
         }
 
-        // 3. Cache Miss — Call LLM Provider
+        // 3. Cache Miss — Call LLM Provider with automatic resilience failover
         log.info("Processing blocking chat via provider={} (model={}): conversationId={}",
                 provider, modelName, request.conversationId());
 
-        String content = activeClient.prompt()
-                .system(SYSTEM_PROMPT)
-                .user(request.message())
-                .call()
-                .content();
+        String content;
+        try {
+            content = activeClient.prompt()
+                    .system(SYSTEM_PROMPT)
+                    .user(request.message())
+                    .call()
+                    .content();
+        } catch (Exception ex) {
+            log.warn("⚠️ Primary LLM call ({}) failed with '{}'. Auto-failing over to backup provider ({})",
+                    modelName, ex.getMessage(), (useGroq ? GEMINI_MODEL : GROQ_MODEL));
+            ChatClient backupClient = useGroq ? geminiChatClient : groqChatClient;
+            try {
+                content = backupClient.prompt()
+                        .system(SYSTEM_PROMPT)
+                        .user(request.message())
+                        .call()
+                        .content();
+                modelName = (useGroq ? GEMINI_MODEL : GROQ_MODEL) + " (Failover)";
+            } catch (Exception backupEx) {
+                log.error("❌ Both LLM providers failed: primary='{}', backup='{}'",
+                        ex.getMessage(), backupEx.getMessage());
+                content = "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). Our box office, ticketing, and concessions services are active. Please retry in a few moments.";
+            }
+        }
 
         long elapsed = System.currentTimeMillis() - start;
         log.info("Chat completed via {} in {}ms", modelName, elapsed);
@@ -118,7 +137,7 @@ public class ChatService {
     }
 
     /**
-     * Streaming chat with Prompt Guard verification.
+     * Streaming chat with Prompt Guard verification and multi-provider failover.
      */
     public Flux<String> streamChat(String message, String provider) {
         PromptGuardService.GuardResult guardCheck = promptGuardService.inspect(message);
@@ -127,15 +146,35 @@ public class ChatService {
         }
 
         boolean useGroq = "groq".equalsIgnoreCase(provider);
-        ChatClient activeClient = useGroq ? groqChatClient : geminiChatClient;
-        String modelName = useGroq ? GROQ_MODEL : GEMINI_MODEL;
+        ChatClient primaryClient = useGroq ? groqChatClient : geminiChatClient;
+        ChatClient backupClient = useGroq ? geminiChatClient : groqChatClient;
+        String primaryModel = useGroq ? GROQ_MODEL : GEMINI_MODEL;
+        String backupModel = useGroq ? GEMINI_MODEL : GROQ_MODEL;
 
-        log.info("Starting streaming chat via provider={} ({})", provider, modelName);
-        return activeClient.prompt()
+        log.info("Starting streaming chat via primary provider={} ({})", provider, primaryModel);
+        return primaryClient.prompt()
                 .system(SYSTEM_PROMPT)
                 .user(message)
                 .stream()
-                .content();
+                .content()
+                .onErrorResume(ex -> {
+                    log.warn("⚠️ Primary LLM stream ({}) failed with '{}'. Auto-failing over to backup provider ({})",
+                            primaryModel, ex.getMessage(), backupModel);
+                    return backupClient.prompt()
+                            .system(SYSTEM_PROMPT)
+                            .user(message)
+                            .stream()
+                            .content()
+                            .onErrorResume(backupEx -> {
+                                log.error("❌ Both LLM streaming providers exhausted: primary='{}', backup='{}'",
+                                        ex.getMessage(), backupEx.getMessage());
+                                return Flux.just(
+                                        "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). ",
+                                        "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational! ",
+                                        "Please explore our latest theatrical releases or try asking your query again in a few moments."
+                                );
+                            });
+                });
     }
 
     public Flux<String> streamChat(String message) {
