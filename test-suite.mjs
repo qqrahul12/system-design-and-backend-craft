@@ -406,6 +406,74 @@ async function runTestSuite() {
     if (!Array.isArray(orders) || orders.length === 0) throw new Error('Expected at least 1 order');
   });
 
+  await test('Advance Concessions Order Status (/api/v1/concessions/orders/{id}/status)', async () => {
+    const listRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/concessions/orders',
+      method: 'GET',
+    });
+    const orders = JSON.parse(listRes.body);
+    if (!orders.length) throw new Error('No orders found to advance');
+    const orderId = orders[0].orderId;
+
+    const payload = JSON.stringify({ status: 'PLATED' });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: `/api/v1/concessions/orders/${orderId}/status`,
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const updated = JSON.parse(res.body);
+    if (updated.status !== 'PLATED') throw new Error(`Status not updated to PLATED: ${updated.status}`);
+  });
+
+  await test('Real-Time Seat Events SSE Stream Header (/api/v1/tickets/seats/stream)', async () => {
+    return new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: 8080,
+        path: '/api/v1/tickets/seats/stream',
+        method: 'GET',
+        headers: { Accept: 'text/event-stream' },
+      }, (res) => {
+        if (res.statusCode === 200 && res.headers['content-type']?.includes('text/event-stream')) {
+          req.destroy();
+          resolve();
+        } else {
+          req.destroy();
+          reject(new Error(`Expected 200 text/event-stream, got ${res.statusCode} ${res.headers['content-type']}`));
+        }
+      });
+      req.on('error', (e) => reject(e));
+      req.end();
+    });
+  });
+
+  await test('Real-Time Concessions Orders SSE Stream Header (/api/v1/concessions/orders/stream)', async () => {
+    return new Promise((resolve, reject) => {
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: 8080,
+        path: '/api/v1/concessions/orders/stream',
+        method: 'GET',
+        headers: { Accept: 'text/event-stream' },
+      }, (res) => {
+        if (res.statusCode === 200 && res.headers['content-type']?.includes('text/event-stream')) {
+          req.destroy();
+          resolve();
+        } else {
+          req.destroy();
+          reject(new Error(`Expected 200 text/event-stream, got ${res.statusCode} ${res.headers['content-type']}`));
+        }
+      });
+      req.on('error', (e) => reject(e));
+      req.end();
+    });
+  });
+
   await test('APM Waterfall Traces (/api/v1/telemetry/traces)', async () => {
     const res = await request({
       hostname: '127.0.0.1',

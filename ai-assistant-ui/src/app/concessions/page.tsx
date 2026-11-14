@@ -93,12 +93,102 @@ function ConcessionsContent() {
     estimatedMinutes: number
   } | null>(null)
   const [allOrders, setAllOrders] = useState<any[]>([])
+  const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
+  const [isAdvancingStatus, setIsAdvancingStatus] = useState<boolean>(false)
+
+  const playKitchenChime = (kind: 'order' | 'plated' | 'delivered') => {
+    if (typeof window === 'undefined') return
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
+      if (!AudioCtx) return
+      const ctx = new AudioCtx()
+      const osc = ctx.createOscillator()
+      const gain = ctx.createGain()
+      osc.connect(gain)
+      gain.connect(ctx.destination)
+      if (kind === 'order') {
+        osc.frequency.setValueAtTime(440, ctx.currentTime)
+        gain.gain.setValueAtTime(0.06, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.15)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.15)
+      } else if (kind === 'plated') {
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime)
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.1)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.3)
+      } else if (kind === 'delivered') {
+        osc.frequency.setValueAtTime(523.25, ctx.currentTime)
+        osc.frequency.setValueAtTime(659.25, ctx.currentTime + 0.08)
+        osc.frequency.setValueAtTime(783.99, ctx.currentTime + 0.16)
+        osc.frequency.setValueAtTime(1046.5, ctx.currentTime + 0.24)
+        gain.gain.setValueAtTime(0.09, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.45)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.45)
+      }
+    } catch {}
+  }
 
   useEffect(() => {
     fetchMenu()
     fetchCombos(selectedGenre, partySize)
     fetchOrders()
     detectTicketSeat()
+
+    // SSE Stream for Real-Time Kitchen Order Updates
+    let eventSource: EventSource | null = null
+    try {
+      eventSource = new EventSource(`${API_BASE}/api/v1/concessions/orders/stream`)
+      eventSource.onopen = () => setLiveStreamConnected(true)
+      eventSource.addEventListener('order-update', (e) => {
+        try {
+          const updated = JSON.parse(e.data)
+          if (!updated) return
+          setAllOrders((prev) => {
+            const idx = prev.findIndex((o) => o.orderId === updated.orderId)
+            if (idx >= 0) {
+              const copy = [...prev]
+              copy[idx] = updated
+              return copy
+            }
+            return [updated, ...prev]
+          })
+
+          setActiveOrder((prev) => {
+            if (!prev || prev.orderId === updated.orderId) {
+              const status = updated.status === 'DELIVERED'
+                ? 'DELIVERED'
+                : updated.status === 'PLATED' || updated.status === 'READY'
+                ? 'READY'
+                : 'PREPARING'
+
+              if (status === 'READY') playKitchenChime('plated')
+              if (status === 'DELIVERED') playKitchenChime('delivered')
+
+              return {
+                orderId: updated.orderId,
+                total: updated.totalAmount || prev?.total || 18.5,
+                seat: updated.deliverySeat || prev?.seat || 'VIP Seat',
+                itemsCount: updated.items?.length || prev?.itemsCount || 1,
+                status,
+                estimatedMinutes: updated.estimatedMinutes ?? 0,
+              }
+            }
+            return prev
+          })
+        } catch {}
+      })
+      eventSource.onerror = () => setLiveStreamConnected(false)
+    } catch {
+      setLiveStreamConnected(false)
+    }
+
+    return () => {
+      if (eventSource) eventSource.close()
+    }
   }, [])
 
   const detectTicketSeat = async () => {
@@ -202,6 +292,34 @@ function ConcessionsContent() {
       return updated
     })
     showNotice(`Added ${combo.name} combo to order!`)
+  }
+
+  const handleAdvanceStatus = async (targetStatus: string) => {
+    if (!activeOrder || isAdvancingStatus) return
+    setIsAdvancingStatus(true)
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/concessions/orders/${activeOrder.orderId}/status`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: targetStatus }),
+      })
+      if (res.ok) {
+        const updated = await res.json()
+        const st = updated.status === 'DELIVERED' ? 'DELIVERED' : updated.status === 'PLATED' ? 'READY' : 'PREPARING'
+        setActiveOrder((prev) => prev ? {
+          ...prev,
+          status: st,
+          estimatedMinutes: updated.estimatedMinutes,
+        } : null)
+        if (st === 'READY') playKitchenChime('plated')
+        if (st === 'DELIVERED') playKitchenChime('delivered')
+        showNotice(`Kitchen status updated: ${updated.status}`)
+      }
+    } catch (e) {
+      console.warn('Failed to advance order status:', e)
+    } finally {
+      setIsAdvancingStatus(false)
+    }
   }
 
   const handlePlaceOrder = async () => {
@@ -337,49 +455,146 @@ function ConcessionsContent() {
 
       {/* Live Kitchen Order Tracker (if an order was placed) */}
       {activeOrder && (
-        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-zinc-900 to-zinc-950 p-6 space-y-4 shadow-xl">
+        <div className="rounded-2xl border border-amber-500/30 bg-gradient-to-r from-amber-950/30 via-zinc-900 to-zinc-950 p-6 space-y-4 shadow-xl animate-fade-in">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2.5">
               <ChefHat className="h-5 w-5 text-amber-400 animate-bounce" />
-              <h3 className="text-base font-bold text-white">Active Concessions Order: {activeOrder.orderId}</h3>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-base font-bold text-white">Active Order: {activeOrder.orderId}</h3>
+                  <span
+                    className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-mono border ${
+                      liveStreamConnected
+                        ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/40'
+                        : 'bg-zinc-800 text-zinc-400 border-zinc-700'
+                    }`}
+                  >
+                    <span
+                      className={`w-1.5 h-1.5 rounded-full ${
+                        liveStreamConnected ? 'bg-emerald-400 animate-ping' : 'bg-zinc-500'
+                      }`}
+                    />
+                    {liveStreamConnected ? 'SSE Kitchen Stream' : 'Live Sync'}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 font-mono">Seat: {activeOrder.seat}</p>
+              </div>
             </div>
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-amber-300 font-mono">
-                ETA: ~{activeOrder.estimatedMinutes} Mins
+            <div className="flex flex-wrap items-center gap-2.5">
+              <span className="text-xs text-amber-300 font-mono bg-amber-950/40 px-2.5 py-1 rounded-lg border border-amber-500/20">
+                {activeOrder.status === 'DELIVERED'
+                  ? 'DELIVERED'
+                  : activeOrder.status === 'READY'
+                  ? 'READY FOR DELIVERY (~1 MIN)'
+                  : `PREP IN PROGRESS (~${activeOrder.estimatedMinutes} MIN)`}
               </span>
+
+              {/* Expediter Stage Fast-Forward Controls */}
+              {activeOrder.status === 'PREPARING' && (
+                <button
+                  onClick={() => handleAdvanceStatus('PLATED')}
+                  disabled={isAdvancingStatus}
+                  className="flex items-center gap-1 rounded-xl bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
+                  title="Simulate kitchen chef finishing prep"
+                >
+                  <Sparkles className="h-3 w-3" /> Mark Plated
+                </button>
+              )}
+              {activeOrder.status === 'READY' && (
+                <button
+                  onClick={() => handleAdvanceStatus('DELIVERED')}
+                  disabled={isAdvancingStatus}
+                  className="flex items-center gap-1 rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 transition"
+                  title="Simulate in-seat usher delivery"
+                >
+                  <Truck className="h-3 w-3" /> Mark Delivered
+                </button>
+              )}
+
               <Link
                 href="/tickets"
-                className="flex items-center gap-1.5 rounded-xl bg-purple-600/30 border border-purple-500/40 px-3 py-1.5 text-xs font-semibold text-purple-300 hover:bg-purple-600/40"
+                className="flex items-center gap-1.5 rounded-xl bg-purple-600/30 border border-purple-500/40 px-3 py-1 text-xs font-semibold text-purple-300 hover:bg-purple-600/40 transition"
               >
-                <Ticket className="h-3.5 w-3.5" /> View Movie Tickets
+                <Ticket className="h-3.5 w-3.5" /> View Pass Wallet
               </Link>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs pt-1">
+            {/* Step 1: Order Verified */}
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-full bg-emerald-500/10 text-emerald-400 flex items-center justify-center font-bold">✓</div>
+              <div className="h-8 w-8 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold">
+                ✓
+              </div>
               <div>
                 <p className="font-bold text-white">Order Received</p>
-                <p className="text-zinc-500 text-[10px]">Payment verified</p>
+                <p className="text-zinc-500 text-[10px]">Payment verified & routed to kitchen</p>
               </div>
             </div>
 
+            {/* Step 2: Artisanal Batch Prep */}
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-full bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold animate-pulse">2</div>
+              <div
+                className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${
+                  activeOrder.status === 'READY' || activeOrder.status === 'DELIVERED'
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : 'bg-amber-500/20 text-amber-400 animate-pulse'
+                }`}
+              >
+                {activeOrder.status === 'READY' || activeOrder.status === 'DELIVERED' ? '✓' : '2'}
+              </div>
               <div>
-                <p className="font-bold text-amber-300">Artisanal Batch Prep</p>
-                <p className="text-zinc-500 text-[10px]">Truffle oil infusion in progress</p>
+                <p
+                  className={`font-bold ${
+                    activeOrder.status === 'PREPARING'
+                      ? 'text-amber-300'
+                      : activeOrder.status === 'READY' || activeOrder.status === 'DELIVERED'
+                      ? 'text-emerald-400'
+                      : 'text-zinc-400'
+                  }`}
+                >
+                  Artisanal Batch Prep
+                </p>
+                <p className="text-zinc-500 text-[10px]">
+                  {activeOrder.status === 'PREPARING'
+                    ? 'Truffle infusion & beverage tapping'
+                    : 'Plated & thermal wrapped'}
+                </p>
               </div>
             </div>
 
+            {/* Step 3: In-Theater Delivery */}
             <div className="flex items-center gap-2.5">
-              <div className="h-8 w-8 rounded-full bg-zinc-800 text-zinc-400 flex items-center justify-center font-bold">
-                <Truck className="h-4 w-4" />
+              <div
+                className={`h-8 w-8 rounded-full flex items-center justify-center font-bold ${
+                  activeOrder.status === 'DELIVERED'
+                    ? 'bg-emerald-500/20 text-emerald-400'
+                    : activeOrder.status === 'READY'
+                    ? 'bg-amber-500/20 text-amber-300 animate-bounce'
+                    : 'bg-zinc-800 text-zinc-500'
+                }`}
+              >
+                {activeOrder.status === 'DELIVERED' ? '✓' : <Truck className="h-4 w-4" />}
               </div>
               <div>
-                <p className="font-bold text-zinc-300">In-Theater Delivery</p>
-                <p className="text-zinc-500 text-[10px]">Delivering to: {activeOrder.seat}</p>
+                <p
+                  className={`font-bold ${
+                    activeOrder.status === 'DELIVERED'
+                      ? 'text-emerald-400'
+                      : activeOrder.status === 'READY'
+                      ? 'text-amber-300'
+                      : 'text-zinc-400'
+                  }`}
+                >
+                  In-Theater Delivery
+                </p>
+                <p className="text-zinc-500 text-[10px]">
+                  {activeOrder.status === 'DELIVERED'
+                    ? `Hand-delivered to ${activeOrder.seat}!`
+                    : activeOrder.status === 'READY'
+                    ? `Usher en route to ${activeOrder.seat}`
+                    : `Dispatches when plated`}
+                </p>
               </div>
             </div>
           </div>

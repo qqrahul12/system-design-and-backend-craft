@@ -265,6 +265,8 @@ export default function BookingPage() {
   const [selectedShowtime, setSelectedShowtime] = useState<string>('7:30 PM')
   const [selectedFormat, setSelectedFormat] = useState<string>('IMAX 70mm')
   const [selectedDate, setSelectedDate] = useState<string>('today')
+  const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
+  const [liveBroadcastToast, setLiveBroadcastToast] = useState<string | null>(null)
 
   const playSound = (kind: 'click' | 'lock' | 'success') => {
     if (typeof window === 'undefined') return
@@ -492,6 +494,50 @@ REASON: <1 sentence why it matches>`
       isMounted = false
     }
   }, [selectedMovie, selectedShowtime])
+
+  // Real-Time SSE Distributed Seat Synchronizer across concurrent patrons
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    let eventSource: EventSource | null = null
+    try {
+      eventSource = new EventSource(`${API_BASE}/api/v1/tickets/seats/stream`)
+      eventSource.onopen = () => {
+        setLiveStreamConnected(true)
+      }
+      eventSource.addEventListener('seat-update', (e) => {
+        try {
+          const payload = JSON.parse(e.data)
+          if (!payload) return
+          const seats: string[] = Array.isArray(payload.seats) ? payload.seats : []
+          if (payload.event === 'LOCK_ACQUIRED') {
+            setLockedSeats((prev) => Array.from(new Set([...prev, ...seats])))
+            setLiveBroadcastToast(`⚡ Guest hold acquired on seat ${seats.join(', ')}`)
+            setTimeout(() => setLiveBroadcastToast(null), 4000)
+            playSound('lock')
+          } else if (payload.event === 'LOCK_RELEASED') {
+            setLockedSeats((prev) => prev.filter((s) => !seats.includes(s)))
+          } else if (payload.event === 'TICKET_ISSUED') {
+            setOccupiedSeats((prev) => Array.from(new Set([...prev, ...seats])))
+            setLockedSeats((prev) => prev.filter((s) => !seats.includes(s)))
+            setLiveBroadcastToast(`🎟️ Seat ${seats.join(', ')} confirmed reserved`)
+            setTimeout(() => setLiveBroadcastToast(null), 4000)
+            playSound('success')
+          }
+        } catch {}
+      })
+      eventSource.onerror = () => {
+        setLiveStreamConnected(false)
+      }
+    } catch {
+      setLiveStreamConnected(false)
+    }
+
+    return () => {
+      if (eventSource) {
+        eventSource.close()
+      }
+    }
+  }, [])
 
   // 10-Minute Distributed Lock Countdown Timer
   useEffect(() => {
@@ -771,12 +817,38 @@ REASON: <1 sentence why it matches>`
   return (
     <div className="mx-auto max-w-6xl space-y-8">
       {/* Page Header */}
-      <div>
-        <h1 className="text-2xl font-bold text-white">🎬 Smart Movie Booking</h1>
-        <p className="mt-1 text-sm text-[#888]">
-          Tell the AI Agent what kind of movie you want, or browse and book with optimized seating.
-        </p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <span>🎬 Smart Movie Booking</span>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-mono border ${
+                liveStreamConnected
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50'
+                  : 'bg-zinc-900 text-zinc-400 border-zinc-700'
+              }`}
+            >
+              <span
+                className={`w-2 h-2 rounded-full ${
+                  liveStreamConnected ? 'bg-emerald-400 animate-pulse' : 'bg-zinc-500'
+                }`}
+              />
+              {liveStreamConnected ? 'Real-Time Sync Active' : 'Polling Sync'}
+            </span>
+          </h1>
+          <p className="mt-1 text-sm text-[#888]">
+            Browse theatrical titles, select sensory formats, and claim real-time distributed seat locks.
+          </p>
+        </div>
       </div>
+
+      {/* Floating Live Broadcast Toast for Circuit Seat Activity */}
+      {liveBroadcastToast && (
+        <div className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-purple-950/80 border border-purple-500/50 text-purple-200 text-xs font-mono animate-slide-up shadow-xl backdrop-blur-md">
+          <span className="w-2 h-2 rounded-full bg-purple-400 animate-ping" />
+          <span>{liveBroadcastToast}</span>
+        </div>
+      )}
 
       {/* AI Movie Concierge Agent Bar */}
       <div

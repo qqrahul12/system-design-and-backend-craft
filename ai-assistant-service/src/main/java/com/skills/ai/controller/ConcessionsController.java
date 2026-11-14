@@ -7,8 +7,11 @@ import com.skills.ai.concessions.ConcessionsService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
@@ -49,5 +52,24 @@ public class ConcessionsController {
     @GetMapping("/orders")
     public List<ConcessionOrder> listOrders() {
         return concessionsService.listOrders();
+    }
+
+    @PostMapping("/orders/{orderId}/status")
+    public ResponseEntity<ConcessionOrder> updateOrderStatus(
+            @PathVariable String orderId,
+            @RequestBody Map<String, String> body) {
+        String status = body != null ? body.getOrDefault("status", "PLATED") : "PLATED";
+        return concessionsService.updateOrderStatus(orderId, status)
+                .map(ResponseEntity::ok)
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @GetMapping(value = "/orders/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<ConcessionOrder>> streamOrderEvents() {
+        return concessionsService.getOrderEvents()
+                .map(order -> ServerSentEvent.<ConcessionOrder>builder()
+                        .event("order-update")
+                        .data(order)
+                        .build());
     }
 }

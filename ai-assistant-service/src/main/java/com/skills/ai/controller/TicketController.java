@@ -4,8 +4,11 @@ import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
+import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
@@ -39,6 +42,15 @@ public class TicketController {
             @RequestParam(required = false) String showtime
     ) {
         return ResponseEntity.ok(ticketService.getAuditoriumSeats(movie, showtime));
+    }
+
+    @GetMapping(value = "/seats/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+    public Flux<ServerSentEvent<Map<String, Object>>> streamSeatEvents() {
+        return ticketService.getSeatEvents()
+                .map(data -> ServerSentEvent.<Map<String, Object>>builder()
+                        .event("seat-update")
+                        .data(data)
+                        .build());
     }
 
     @PostMapping("/lock")

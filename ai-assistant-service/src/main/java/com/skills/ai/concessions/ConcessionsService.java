@@ -2,6 +2,8 @@ package com.skills.ai.concessions;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 import java.util.*;
 
@@ -170,6 +172,12 @@ public class ConcessionsService {
     }
 
     private final Map<String, ConcessionOrder> orders = new java.util.concurrent.ConcurrentHashMap<>();
+    private final Sinks.Many<ConcessionOrder> orderEventSink =
+            Sinks.many().multicast().onBackpressureBuffer();
+
+    public Flux<ConcessionOrder> getOrderEvents() {
+        return orderEventSink.asFlux();
+    }
 
     public ConcessionOrder placeOrder(List<Map<String, Object>> items, String deliverySeat, double total) {
         String orderId = "FB-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
@@ -183,8 +191,36 @@ public class ConcessionsService {
                 .createdAt(java.time.Instant.now())
                 .build();
         orders.put(orderId, order);
+        orderEventSink.tryEmitNext(order);
         log.info("🍿 Placed concessions order: id={}, total={}, deliverySeat={}", orderId, total, deliverySeat);
         return order;
+    }
+
+    public Optional<ConcessionOrder> updateOrderStatus(String orderId, String newStatus) {
+        ConcessionOrder existing = orders.get(orderId);
+        if (existing == null) {
+            return Optional.empty();
+        }
+        String cleanStatus = (newStatus != null && !newStatus.isBlank()) ? newStatus.toUpperCase().trim() : "PLATED";
+        int newEst = switch (cleanStatus) {
+            case "PLATED", "READY" -> 3;
+            case "OUT_FOR_DELIVERY" -> 1;
+            case "DELIVERED" -> 0;
+            default -> Math.max(1, existing.estimatedMinutes() - 2);
+        };
+        ConcessionOrder updated = ConcessionOrder.builder()
+                .orderId(existing.orderId())
+                .items(existing.items())
+                .totalAmount(existing.totalAmount())
+                .deliverySeat(existing.deliverySeat())
+                .status(cleanStatus)
+                .estimatedMinutes(newEst)
+                .createdAt(existing.createdAt())
+                .build();
+        orders.put(orderId, updated);
+        orderEventSink.tryEmitNext(updated);
+        log.info("🍽️ Order status advanced: orderId={}, status={}, remainingMinutes={}", orderId, cleanStatus, newEst);
+        return Optional.of(updated);
     }
 
     public List<ConcessionOrder> listOrders() {

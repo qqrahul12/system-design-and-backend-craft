@@ -2,6 +2,8 @@ package com.skills.ai.ticket;
 
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import reactor.core.publisher.Flux;
+import reactor.core.publisher.Sinks;
 
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
@@ -21,6 +23,13 @@ public class TicketService {
     private final Map<String, DigitalTicket> tickets = new ConcurrentHashMap<>();
     private final Map<String, SeatLock> activeLocks = new ConcurrentHashMap<>();
 
+    private final Sinks.Many<Map<String, Object>> seatEventSink =
+            Sinks.many().multicast().onBackpressureBuffer();
+
+    public Flux<Map<String, Object>> getSeatEvents() {
+        return seatEventSink.asFlux();
+    }
+
     public record SeatLock(String lockToken, String movieTitle, String showTime, List<String> seats, Instant expiresAt) {}
 
     public TicketService() {
@@ -38,6 +47,15 @@ public class TicketService {
         SeatLock lock = new SeatLock(lockToken, movieTitle, showTime != null ? showTime : "7:30 PM", seats, expiresAt);
         activeLocks.put(lockToken, lock);
         log.info("🔒 Acquired 10-minute distributed seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
+        
+        seatEventSink.tryEmitNext(Map.of(
+                "event", "LOCK_ACQUIRED",
+                "movieTitle", movieTitle != null ? movieTitle : "",
+                "showTime", showTime != null ? showTime : "",
+                "seats", seats,
+                "lockToken", lockToken,
+                "timestamp", Instant.now().toString()
+        ));
         return lock;
     }
 
@@ -45,6 +63,14 @@ public class TicketService {
         SeatLock removed = activeLocks.remove(lockToken);
         if (removed != null) {
             log.info("🔓 Released seat lock: token={}, seats={}", lockToken, removed.seats());
+            seatEventSink.tryEmitNext(Map.of(
+                    "event", "LOCK_RELEASED",
+                    "movieTitle", removed.movieTitle() != null ? removed.movieTitle() : "",
+                    "showTime", removed.showTime() != null ? removed.showTime() : "",
+                    "seats", removed.seats(),
+                    "lockToken", lockToken != null ? lockToken : "",
+                    "timestamp", Instant.now().toString()
+            ));
             return true;
         }
         return false;
@@ -144,6 +170,15 @@ public class TicketService {
 
         tickets.put(ticketId, ticket);
         log.info("Issued digital ticket: id={}, movie={}, seats={}", ticketId, movieTitle, seats);
+
+        seatEventSink.tryEmitNext(Map.of(
+                "event", "TICKET_ISSUED",
+                "movieTitle", movieTitle != null ? movieTitle : "",
+                "showTime", showTime != null ? showTime : "",
+                "seats", seats != null ? seats : List.of(),
+                "ticketId", ticketId,
+                "timestamp", Instant.now().toString()
+        ));
         return ticket;
     }
 
