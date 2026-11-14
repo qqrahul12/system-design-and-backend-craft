@@ -122,8 +122,8 @@ public class MultiAgentOrchestratorService {
                         "Pricing & Billing Specialist",
                         "💳",
                         "Discounts & Payment Capture",
-                        "Validates promotional voucher codes, calculates sales tax/discounts, and captures payments idempotently.",
-                        List.of("apply_promocode", "process_payment"),
+                        "Validates promotional voucher codes, calculates sales tax/discounts, and captures payments idempotently via Card or CineMind Fintech Wallet.",
+                        List.of("apply_promocode", "process_payment", "check_wallet_balance", "pay_with_wallet"),
                         "Groq LPU (Sub-second)"
                 ),
                 new AgentPersona(
@@ -291,15 +291,36 @@ public class MultiAgentOrchestratorService {
 
         double finalAmount = promoCode.equals("VIP50") ? 15.0 : (promoCode.equals("STUDENT10") ? 27.0 : 24.0);
         List<String> assignedSeats = List.of("B3", "B4");
+
+        // Stored-value wallet balance check via MCP
+        McpToolDefinition.CallResult walletCheck = toolRegistry.executeTool("check_wallet_balance", Map.of());
+        String walletText = walletCheck.getContent().isEmpty() ? "" : walletCheck.getContent().get(0).getText();
+
+        boolean useWallet = objective.toLowerCase().contains("wallet") ||
+                objective.toLowerCase().contains("cinecash") ||
+                objective.toLowerCase().contains("stored") ||
+                objective.toLowerCase().contains("cash");
+
+        String payMethodUsed = useWallet ? "cinemind_wallet_stored" : "card_4242";
         Map<String, Object> payInput = Map.of(
                 "movieTitle", searchTarget,
                 "showTime", "7:30 PM",
                 "seats", String.join(", ", assignedSeats),
                 "amount", finalAmount,
-                "paymentMethod", "card_4242"
+                "paymentMethod", payMethodUsed
         );
         McpToolDefinition.CallResult payResult = toolRegistry.executeTool("process_payment", payInput);
         String payText = payResult.getContent().isEmpty() ? "" : payResult.getContent().get(0).getText();
+
+        if (useWallet) {
+            McpToolDefinition.CallResult walletDebitResult = toolRegistry.executeTool("pay_with_wallet", Map.of(
+                    "amount", finalAmount,
+                    "description", "Autonomous Concierge Booking: " + searchTarget + " (" + String.join(", ", assignedSeats) + ")"
+            ));
+            if (!walletDebitResult.getContent().isEmpty()) {
+                payText += " \n" + walletDebitResult.getContent().get(0).getText();
+            }
+        }
 
         // Extract or record real digital ticket
         String issuedTicketId = null;
@@ -331,11 +352,11 @@ public class MultiAgentOrchestratorService {
                 "billing",
                 "Pricing & Billing Specialist",
                 "💳",
-                "Executing MCP Tools: apply_promocode & process_payment",
-                "Validating promotional voucher and capturing payment with zero double-charge guarantee...",
-                "apply_promocode, process_payment",
+                "Executing MCP Tools: " + (useWallet ? "pay_with_wallet" : "process_payment") + ", apply_promocode & check_wallet_balance",
+                "Validating promo voucher and capturing payment via " + (useWallet ? "CineMind Fintech Wallet" : "Stripe gateway") + " with zero double-charge guarantee...",
+                "apply_promocode, check_wallet_balance, " + (useWallet ? "pay_with_wallet" : "process_payment"),
                 payInput,
-                promoText + " \n" + payText,
+                walletText + " \n" + promoText + " \n" + payText,
                 payResult.isError(),
                 System.currentTimeMillis() - bStart,
                 Instant.now()

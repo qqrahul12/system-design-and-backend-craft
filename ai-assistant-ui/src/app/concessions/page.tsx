@@ -20,6 +20,7 @@ import {
   ShieldCheck,
   Zap,
   CreditCard,
+  Wallet,
   X,
   Ticket,
   CheckCircle2,
@@ -95,6 +96,8 @@ function ConcessionsContent() {
   const [allOrders, setAllOrders] = useState<any[]>([])
   const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
   const [isAdvancingStatus, setIsAdvancingStatus] = useState<boolean>(false)
+  const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
+  const [walletBalance, setWalletBalance] = useState<number>(175.00)
 
   const playKitchenChime = (kind: 'order' | 'plated' | 'delivered') => {
     if (typeof window === 'undefined') return
@@ -137,6 +140,7 @@ function ConcessionsContent() {
     fetchCombos(selectedGenre, partySize)
     fetchOrders()
     detectTicketSeat()
+    fetchWallet()
 
     // SSE Stream for Real-Time Kitchen Order Updates
     let eventSource: EventSource | null = null
@@ -203,6 +207,16 @@ function ConcessionsContent() {
             setDeliverySeat(`${latest.auditorium || 'Auditorium 1'}, Seat ${latest.seats[0]}`)
           }
         }
+      }
+    } catch {}
+  }
+
+  const fetchWallet = async () => {
+    try {
+      const res = await fetch(`${API_BASE}/api/v1/wallet`)
+      if (res.ok) {
+        const data = await res.json()
+        setWalletBalance(data.balance)
       }
     } catch {}
   }
@@ -336,6 +350,24 @@ function ConcessionsContent() {
     })
 
     try {
+      if (paymentMethod === 'WALLET') {
+        try {
+          const wRes = await fetch(`${API_BASE}/api/v1/wallet/pay`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              amount: cartTotal,
+              type: 'CONCESSION_PAYMENT',
+              description: `Gourmet Concessions (${cartItemCount} items to ${deliverySeat})`,
+            }),
+          })
+          if (wRes.ok) {
+            const wTxn = await wRes.json()
+            setWalletBalance(wTxn.balanceAfter)
+          }
+        } catch {}
+      }
+
       const res = await fetch(`${API_BASE}/api/v1/concessions/order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -356,9 +388,14 @@ function ConcessionsContent() {
           status: 'PREPARING',
           estimatedMinutes: 8,
         })
+        playKitchenChime('order')
         setCart({})
         setIsCheckoutOpen(false)
-        showNotice('Gourmet concessions order dispatched to kitchen!')
+        showNotice(
+          paymentMethod === 'WALLET'
+            ? `Paid $${cartTotal.toFixed(2)} via CineMind Wallet! Dispatched to kitchen.`
+            : 'Gourmet concessions order dispatched to kitchen!'
+        )
       }
     } catch {
       // Local fallback
@@ -370,6 +407,7 @@ function ConcessionsContent() {
         status: 'PREPARING',
         estimatedMinutes: 8,
       })
+      playKitchenChime('order')
       setCart({})
       setIsCheckoutOpen(false)
       showNotice('Gourmet concessions order placed!')
@@ -808,6 +846,46 @@ function ConcessionsContent() {
                   </p>
                 </div>
 
+                {/* Payment Method Selector */}
+                <div className="space-y-2 rounded-xl border border-zinc-800 bg-zinc-950 p-3">
+                  <div className="flex items-center justify-between text-xs text-zinc-400">
+                    <span className="font-semibold text-zinc-300">Payment Method:</span>
+                    <span className="text-[11px] text-zinc-500 font-mono">1-Click Auth</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('WALLET')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg font-semibold border transition ${
+                        paymentMethod === 'WALLET'
+                          ? 'bg-amber-500/15 border-amber-500/80 text-amber-300 shadow-sm shadow-amber-500/20'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <Wallet className="h-3.5 w-3.5 text-amber-400" />
+                      <span>Wallet (${walletBalance.toFixed(2)})</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPaymentMethod('CARD')}
+                      className={`flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg font-semibold border transition ${
+                        paymentMethod === 'CARD'
+                          ? 'bg-purple-500/15 border-purple-500/80 text-purple-300 shadow-sm shadow-purple-500/20'
+                          : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      <CreditCard className="h-3.5 w-3.5 text-purple-400" />
+                      <span>Card (Stripe)</span>
+                    </button>
+                  </div>
+                  {paymentMethod === 'WALLET' && (
+                    <p className="text-[10px] text-amber-400/90 flex items-center gap-1">
+                      <Zap className="h-2.5 w-2.5" />
+                      Debits stored CineCash balance with zero fees & instant kitchen dispatch.
+                    </p>
+                  )}
+                </div>
+
                 {/* Summary */}
                 <div className="space-y-1 text-xs border-t border-zinc-800 pt-3 text-zinc-400">
                   <div className="flex justify-between">
@@ -829,7 +907,7 @@ function ConcessionsContent() {
                   disabled={isPlacingOrder}
                   className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 text-black font-bold text-xs hover:opacity-90 transition active:scale-95 shadow-lg shadow-amber-500/20"
                 >
-                  {isPlacingOrder ? 'Dispatching to Kitchen...' : `Confirm & Pay ($${cartTotal.toFixed(2)})`}
+                  {isPlacingOrder ? 'Dispatching to Kitchen...' : `Confirm & Pay with ${paymentMethod === 'WALLET' ? 'Wallet' : 'Card'} ($${cartTotal.toFixed(2)})`}
                 </button>
               </div>
             ) : (

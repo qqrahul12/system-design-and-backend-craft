@@ -27,6 +27,7 @@ import {
   Plus,
   Compass,
   Navigation,
+  UserCheck,
 } from 'lucide-react'
 
 const API_BASE =
@@ -71,9 +72,14 @@ function TicketsContent() {
   const [turnstileState, setTurnstileState] = useState<'LOCKED' | 'UNLOCKING' | 'OPEN' | 'DENIED'>('LOCKED')
   const [activeWayfinderStep, setActiveWayfinderStep] = useState<number>(1)
   const [newPassBanner, setNewPassBanner] = useState<string | null>(null)
+  const [currentUser, setCurrentUser] = useState<any>(null)
 
   useEffect(() => {
     fetchTickets()
+    fetch(`${API_BASE}/api/v1/auth/me`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((u) => { if (u) setCurrentUser(u) })
+      .catch(() => {})
 
     let eventSource: EventSource | null = null
     try {
@@ -245,6 +251,19 @@ function TicketsContent() {
         <div className="fixed top-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-5 py-3 text-sm text-emerald-200 shadow-2xl backdrop-blur-md animate-fade-in">
           <CheckCircle2 className="h-5 w-5 text-emerald-400" />
           <span>{actionNotice}</span>
+        </div>
+      )}
+
+      {/* Staff Gate Attendant Mode Banner */}
+      {currentUser?.role === 'AUDITORIUM_USHER' && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 rounded-2xl border border-indigo-500/40 bg-indigo-950/30 text-xs text-indigo-200">
+          <div className="flex items-center gap-2 font-semibold">
+            <ShieldCheck className="h-4 w-4 text-indigo-400" />
+            <span>Staff Gate Attendant Mode: <strong>Sarah Jenkins</strong> (Lead Auditorium Usher)</span>
+          </div>
+          <span className="font-mono text-[11px] text-indigo-300 bg-indigo-900/50 px-2 py-0.5 rounded border border-indigo-700/50 self-start sm:self-auto">
+            Optical Laser Turnstile Unit 01 Active
+          </span>
         </div>
       )}
 

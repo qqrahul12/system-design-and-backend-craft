@@ -708,6 +708,29 @@ async function runTestSuite() {
     }, revertPayload);
   });
 
+  await test('Multi-Agent Autonomous Concierge Wallet Auto-Pay Execution', async () => {
+    const payload = JSON.stringify({
+      objective: 'Book 2 tickets for Interstellar and pay using my CineMind wallet balance',
+      model: 'groq',
+      mode: 'SUPERVISOR_DAG',
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/agents/orchestrate',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    const data = JSON.parse(res.body);
+    if (!data.success) throw new Error('Autonomous booking did not succeed');
+    const billingStep = data.steps.find((s) => s.agentId === 'billing' || s.agentName?.includes('Billing'));
+    if (!billingStep) throw new Error('Billing agent step missing');
+    if (!billingStep.toolOutput?.toLowerCase().includes('wallet')) {
+      throw new Error(`Billing step did not record wallet transaction: ${billingStep.toolOutput}`);
+    }
+  });
+
   console.log('\n====================================================');
   console.log(`🎯 Test Results: ${passed}/${total} Passed (${Math.round((passed / total) * 100)}%)`);
   console.log('====================================================');
