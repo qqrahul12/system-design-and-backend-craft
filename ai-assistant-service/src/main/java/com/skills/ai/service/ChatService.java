@@ -133,7 +133,7 @@ public class ChatService {
     }
 
     public ChatResponse chat(ChatRequest request) {
-        return chat(request, "gemini");
+        return chat(request, "groq");
     }
 
     /**
@@ -178,6 +178,6 @@ public class ChatService {
     }
 
     public Flux<String> streamChat(String message) {
-        return streamChat(message, "gemini");
+        return streamChat(message, "groq");
     }
 }

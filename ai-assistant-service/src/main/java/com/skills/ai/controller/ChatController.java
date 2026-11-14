@@ -40,7 +40,7 @@ public class ChatController {
     @PostMapping
     public ResponseEntity<ChatResponse> chat(
             @Valid @RequestBody ChatRequest request,
-            @RequestParam(required = false, defaultValue = "gemini") String provider) {
+            @RequestParam(required = false, defaultValue = "groq") String provider) {
         log.debug("POST /api/v1/chat  provider={} conversationId={}", provider, request.conversationId());
         ChatResponse response = chatService.chat(request, provider);
         return ResponseEntity.ok(response);
@@ -54,13 +54,13 @@ public class ChatController {
      * so the client knows the stream has ended.</p>
      *
      * @param message The user's message text (passed as a query parameter).
-     * @param provider "gemini" or "groq" (defaults to "gemini").
+     * @param provider "groq" or "gemini" (defaults to "groq").
      * @return A reactive {@link Flux} of {@link ServerSentEvent} objects.
      */
     @GetMapping(value = "/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamChat(
             @RequestParam String message,
-            @RequestParam(required = false, defaultValue = "gemini") String provider) {
+            @RequestParam(required = false, defaultValue = "groq") String provider) {
         log.debug("GET /api/v1/chat/stream  provider={} messageLength={}", provider, message.length());
 
         Flux<ServerSentEvent<String>> tokenEvents = chatService.streamChat(message, provider)

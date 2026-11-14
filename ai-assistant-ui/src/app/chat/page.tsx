@@ -139,7 +139,7 @@ function MessageBubble({ message }: { message: Message }) {
 export default function ChatPage() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
-  const [provider, setProvider] = useState<'gemini' | 'groq'>('gemini')
+  const [provider, setProvider] = useState<'gemini' | 'groq'>('groq')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
