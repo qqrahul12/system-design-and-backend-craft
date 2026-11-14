@@ -63,13 +63,41 @@ function TicketsContent() {
     message: string
   } | null>(null)
 
-  // Interactive Modals
+  // Interactive Modals & Real-Time Sync
   const [isAppleWalletOpen, setIsAppleWalletOpen] = useState(false)
   const [isPrintModalOpen, setIsPrintModalOpen] = useState(false)
   const [actionNotice, setActionNotice] = useState<string | null>(null)
+  const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
+  const [turnstileState, setTurnstileState] = useState<'LOCKED' | 'UNLOCKING' | 'OPEN' | 'DENIED'>('LOCKED')
+  const [activeWayfinderStep, setActiveWayfinderStep] = useState<number>(1)
+  const [newPassBanner, setNewPassBanner] = useState<string | null>(null)
 
   useEffect(() => {
     fetchTickets()
+
+    let eventSource: EventSource | null = null
+    try {
+      eventSource = new EventSource(`${API_BASE}/api/v1/tickets/seats/stream`)
+      eventSource.onopen = () => setLiveStreamConnected(true)
+      eventSource.addEventListener('seat-update', (e) => {
+        try {
+          const payload = JSON.parse(e.data)
+          if (payload && payload.event === 'TICKET_ISSUED') {
+            fetchTickets()
+            setNewPassBanner(`🎟️ New Gate Pass Issued: ${payload.ticketId || ''} (${payload.movieTitle || 'Movie'})`)
+            playScannerBeep('arrival')
+            setTimeout(() => setNewPassBanner(null), 6000)
+          }
+        } catch {}
+      })
+      eventSource.onerror = () => setLiveStreamConnected(false)
+    } catch {
+      setLiveStreamConnected(false)
+    }
+
+    return () => {
+      if (eventSource) eventSource.close()
+    }
   }, [])
 
   const fetchTickets = async () => {
@@ -95,7 +123,7 @@ function TicketsContent() {
     }
   }
 
-  const playScannerBeep = (success: boolean) => {
+  const playScannerBeep = (kind: 'success' | 'failure' | 'arrival') => {
     if (typeof window === 'undefined') return
     try {
       const AudioCtx = window.AudioContext || (window as any).webkitAudioContext
@@ -105,7 +133,15 @@ function TicketsContent() {
       const gain = ctx.createGain()
       osc.connect(gain)
       gain.connect(ctx.destination)
-      if (success) {
+      if (kind === 'arrival') {
+        osc.type = 'triangle'
+        osc.frequency.setValueAtTime(587.33, ctx.currentTime)
+        osc.frequency.setValueAtTime(880, ctx.currentTime + 0.1)
+        gain.gain.setValueAtTime(0.08, ctx.currentTime)
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.3)
+        osc.start(ctx.currentTime)
+        osc.stop(ctx.currentTime + 0.3)
+      } else if (kind === 'success') {
         osc.type = 'sine'
         osc.frequency.setValueAtTime(1100, ctx.currentTime)
         gain.gain.setValueAtTime(0.08, ctx.currentTime)
@@ -128,6 +164,7 @@ function TicketsContent() {
     setIsValidating(true)
     setIsScanningLaser(true)
     setValidationResult(null)
+    setTurnstileState('UNLOCKING')
 
     // Optical laser animation delay
     await new Promise((r) => setTimeout(r, 700))
@@ -145,7 +182,12 @@ function TicketsContent() {
       if (res.ok) {
         const result = await res.json()
         setValidationResult(result)
-        playScannerBeep(result.valid || result.code === 'ALREADY_CHECKED_IN')
+        const isGranted = result.valid || result.code === 'ALREADY_CHECKED_IN'
+        playScannerBeep(isGranted ? 'success' : 'failure')
+        setTurnstileState(isGranted ? 'OPEN' : 'DENIED')
+        if (isGranted) {
+          setTimeout(() => setTurnstileState('LOCKED'), 5000)
+        }
         if (result.ticket) {
           setSelectedTicket(result.ticket)
           setTickets((prev) =>
@@ -154,7 +196,8 @@ function TicketsContent() {
         }
       }
     } catch (err: any) {
-      playScannerBeep(false)
+      playScannerBeep('failure')
+      setTurnstileState('DENIED')
       setValidationResult({
         valid: false,
         code: 'NETWORK_ERROR',
@@ -208,7 +251,7 @@ function TicketsContent() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222] pb-6">
         <div>
-          <div className="flex items-center gap-2.5">
+          <div className="flex flex-wrap items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-purple-600 to-indigo-500 text-white shadow-lg shadow-purple-500/20">
               <Ticket className="h-4 w-4" />
             </span>
@@ -217,6 +260,20 @@ function TicketsContent() {
             </h1>
             <span className="rounded-full bg-emerald-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-emerald-400 border border-emerald-500/20">
               HMAC-SHA256 Signed
+            </span>
+            <span
+              className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-mono border ${
+                liveStreamConnected
+                  ? 'bg-emerald-950/60 text-emerald-300 border-emerald-700/50'
+                  : 'bg-zinc-900 text-zinc-400 border-zinc-700'
+              }`}
+            >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  liveStreamConnected ? 'bg-emerald-400 animate-ping' : 'bg-zinc-500'
+                }`}
+              />
+              {liveStreamConnected ? 'Live Pass Stream' : 'Synced'}
             </span>
           </div>
           <p className="mt-1.5 text-sm text-[#888]">
@@ -240,6 +297,17 @@ function TicketsContent() {
           </button>
         </div>
       </div>
+
+      {/* Real-time Pass Arrival Toast Banner */}
+      {newPassBanner && (
+        <div className="flex items-center justify-between p-3.5 rounded-2xl bg-purple-950/80 border border-purple-500/50 text-purple-200 text-xs font-mono animate-slide-up shadow-2xl backdrop-blur-md">
+          <div className="flex items-center gap-2.5">
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 animate-ping" />
+            <span className="font-semibold">{newPassBanner}</span>
+          </div>
+          <span className="text-[10px] text-purple-300 bg-purple-900/60 px-2 py-0.5 rounded">Just Now</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Digital Pass Card (7 cols) */}
@@ -391,22 +459,65 @@ function TicketsContent() {
                 </div>
 
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
-                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                  <button
+                    onClick={() => setActiveWayfinderStep(1)}
+                    className={`p-2.5 rounded-xl border text-left transition ${
+                      activeWayfinderStep === 1
+                        ? 'bg-indigo-950/60 border-indigo-500/50 text-indigo-300'
+                        : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400'
+                    }`}
+                  >
                     <span className="text-[10px] text-zinc-500 block uppercase font-semibold">1. Concourse</span>
                     <span className="font-bold text-zinc-200">Level 2 North</span>
-                  </div>
-                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                  </button>
+                  <button
+                    onClick={() => setActiveWayfinderStep(2)}
+                    className={`p-2.5 rounded-xl border text-left transition ${
+                      activeWayfinderStep === 2
+                        ? 'bg-purple-950/60 border-purple-500/50 text-purple-300'
+                        : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400'
+                    }`}
+                  >
                     <span className="text-[10px] text-zinc-500 block uppercase font-semibold">2. Auditorium</span>
                     <span className="font-bold text-purple-400">{selectedTicket.auditorium.split(' ')[0]} Entry</span>
-                  </div>
-                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                  </button>
+                  <button
+                    onClick={() => setActiveWayfinderStep(3)}
+                    className={`p-2.5 rounded-xl border text-left transition ${
+                      activeWayfinderStep === 3
+                        ? 'bg-indigo-950/60 border-indigo-500/50 text-indigo-300'
+                        : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400'
+                    }`}
+                  >
                     <span className="text-[10px] text-zinc-500 block uppercase font-semibold">3. Aisle</span>
                     <span className="font-bold text-zinc-200">Center Walkway</span>
-                  </div>
-                  <div className="bg-zinc-900/60 p-2.5 rounded-xl border border-zinc-800/60">
+                  </button>
+                  <button
+                    onClick={() => setActiveWayfinderStep(4)}
+                    className={`p-2.5 rounded-xl border text-left transition ${
+                      activeWayfinderStep === 4
+                        ? 'bg-emerald-950/60 border-emerald-500/50 text-emerald-300'
+                        : 'bg-zinc-900/60 border-zinc-800/60 text-zinc-400'
+                    }`}
+                  >
                     <span className="text-[10px] text-zinc-500 block uppercase font-semibold">4. Your Seats</span>
                     <span className="font-bold text-emerald-400 font-mono">{selectedTicket.seats.join(', ')}</span>
-                  </div>
+                  </button>
+                </div>
+
+                <div className="p-3 rounded-xl bg-zinc-900/80 border border-zinc-800/80 text-[11px] text-zinc-300 leading-relaxed font-mono">
+                  {activeWayfinderStep === 1 && (
+                    <p>📍 <span className="text-white font-bold">Step 1:</span> Take Central Promenade Escalator to Level 2. Head toward North Wing past Gourmet F&B Concessions Lounge.</p>
+                  )}
+                  {activeWayfinderStep === 2 && (
+                    <p>🚪 <span className="text-white font-bold">Step 2:</span> Approach {selectedTicket.auditorium}. Scan QR code at Optical Pod #2 to disengage acoustic sound-lock doors.</p>
+                  )}
+                  {activeWayfinderStep === 3 && (
+                    <p>🚶 <span className="text-white font-bold">Step 3:</span> Walk down Center Aisle toward row {selectedTicket.seats[0]?.[0] || 'C'}. Low-intensity floor safety LEDs illuminate your pathway.</p>
+                  )}
+                  {activeWayfinderStep === 4 && (
+                    <p>💺 <span className="text-white font-bold">Step 4:</span> Locate your motorized luxury recliners ({selectedTicket.seats.join(', ')}). In-seat swivel tray & heating controls are ready.</p>
+                  )}
                 </div>
               </div>
             </div>
@@ -443,6 +554,60 @@ function TicketsContent() {
             <p className="text-xs text-[#888] leading-relaxed">
               Simulates the optical gate turnstile scanning the ticket&apos;s cryptographic token. Prevents gate fraud and duplicate admissions.
             </p>
+
+            {/* Turnstile Visual Mechanism Status */}
+            <div
+              className={`p-3.5 rounded-xl border flex items-center justify-between transition-all duration-300 ${
+                turnstileState === 'OPEN'
+                  ? 'bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
+                  : turnstileState === 'DENIED'
+                  ? 'bg-rose-950/40 border-rose-500/50 shadow-lg shadow-rose-500/10'
+                  : turnstileState === 'UNLOCKING'
+                  ? 'bg-amber-950/40 border-amber-500/50'
+                  : 'bg-zinc-900/60 border-zinc-800'
+              }`}
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`h-4 w-4 rounded-full flex items-center justify-center shrink-0 ${
+                    turnstileState === 'OPEN'
+                      ? 'bg-emerald-400 animate-ping'
+                      : turnstileState === 'DENIED'
+                      ? 'bg-rose-500 animate-pulse'
+                      : turnstileState === 'UNLOCKING'
+                      ? 'bg-amber-400 animate-spin'
+                      : 'bg-zinc-600'
+                  }`}
+                />
+                <div>
+                  <p className="text-xs font-bold text-white tracking-wide">
+                    {turnstileState === 'OPEN'
+                      ? 'GATE UNLOCKED — PROCEED THROUGH'
+                      : turnstileState === 'DENIED'
+                      ? 'GATE LOCKED — ACCESS DENIED'
+                      : turnstileState === 'UNLOCKING'
+                      ? 'VERIFYING OPTICAL HMAC...'
+                      : 'PHYSICAL TURNSTILE BARRIER ENGAGED'}
+                  </p>
+                  <p className="text-[10px] text-zinc-400 font-mono">
+                    {turnstileState === 'OPEN'
+                      ? 'Turnstile Barrier #2: Open (Green LED)'
+                      : 'Turnstile Barrier #2: Locked (Red LED)'}
+                  </p>
+                </div>
+              </div>
+              <div
+                className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase ${
+                  turnstileState === 'OPEN'
+                    ? 'bg-emerald-500 text-black'
+                    : turnstileState === 'DENIED'
+                    ? 'bg-rose-500 text-white'
+                    : 'bg-zinc-800 text-zinc-400'
+                }`}
+              >
+                {turnstileState === 'OPEN' ? 'OPEN' : 'LOCKED'}
+              </div>
+            </div>
 
             <button
               onClick={validateAtGate}

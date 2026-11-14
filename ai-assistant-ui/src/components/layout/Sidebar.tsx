@@ -1,5 +1,6 @@
 'use client'
 
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
@@ -16,6 +17,11 @@ import {
   Sliders,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+
+const API_BASE =
+  typeof window !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
+    : 'http://localhost:8080'
 
 interface NavItem {
   href: string
@@ -103,6 +109,61 @@ const navSections: NavSection[] = [
 
 export default function Sidebar() {
   const pathname = usePathname()
+  const [ticketCount, setTicketCount] = useState<number>(0)
+  const [hasActiveOrder, setHasActiveOrder] = useState<boolean>(false)
+
+  useEffect(() => {
+    // 1. Initial fetch
+    fetch(`${API_BASE}/api/v1/tickets`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) setTicketCount(data.length)
+      })
+      .catch(() => {})
+
+    fetch(`${API_BASE}/api/v1/concessions/orders`)
+      .then((r) => (r.ok ? r.json() : []))
+      .then((data) => {
+        if (Array.isArray(data)) {
+          const active = data.some((o: any) => o.status === 'PREPARING' || o.status === 'READY')
+          setHasActiveOrder(active)
+        }
+      })
+      .catch(() => {})
+
+    // 2. SSE Listeners for real-time badge updates
+    let seatSource: EventSource | null = null
+    let orderSource: EventSource | null = null
+
+    try {
+      seatSource = new EventSource(`${API_BASE}/api/v1/tickets/seats/stream`)
+      seatSource.addEventListener('seat-update', (e) => {
+        try {
+          const payload = JSON.parse(e.data)
+          if (payload?.event === 'TICKET_ISSUED') {
+            setTicketCount((prev) => prev + 1)
+          }
+        } catch {}
+      })
+    } catch {}
+
+    try {
+      orderSource = new EventSource(`${API_BASE}/api/v1/concessions/orders/stream`)
+      orderSource.addEventListener('order-update', (e) => {
+        try {
+          const order = JSON.parse(e.data)
+          if (order) {
+            setHasActiveOrder(order.status === 'PREPARING' || order.status === 'READY')
+          }
+        } catch {}
+      })
+    } catch {}
+
+    return () => {
+      if (seatSource) seatSource.close()
+      if (orderSource) orderSource.close()
+    }
+  }, [])
 
   return (
     <aside
@@ -191,11 +252,19 @@ export default function Sidebar() {
                           >
                             {item.label}
                           </p>
-                          {item.badge && (
+                          {item.href === '/tickets' && ticketCount > 0 ? (
+                            <span className="rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 text-[9px] font-mono font-bold">
+                              {ticketCount} PASS{ticketCount > 1 ? 'ES' : ''}
+                            </span>
+                          ) : item.href === '/concessions' && hasActiveOrder ? (
+                            <span className="rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 text-[9px] font-mono font-bold flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping" /> KITCHEN
+                            </span>
+                          ) : item.badge ? (
                             <span className="rounded bg-gradient-to-r from-purple-500 to-indigo-500 px-1.5 py-0.2 text-[9px] font-bold text-white shadow-sm">
                               {item.badge}
                             </span>
-                          )}
+                          ) : null}
                         </div>
                         <p className="mt-0.5 truncate text-[10px] text-[#555] group-hover:text-[#777]">
                           {item.description}
@@ -217,10 +286,12 @@ export default function Sidebar() {
             <Zap className="h-3.5 w-3.5 text-[#a78bfa]" />
           </div>
           <div className="min-w-0 flex-1">
-            <p className="text-[10px] font-semibold text-gray-200 truncate">Dual Engine Active</p>
-            <p className="text-[10px] text-[#555] truncate">Gemini 3.8 + Groq LPU</p>
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-semibold text-gray-200 truncate">Circuit Mesh Active</p>
+              <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            </div>
+            <p className="text-[10px] text-[#666] truncate font-mono">88.4% Occupancy • SSE</p>
           </div>
-          <div className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
         </div>
       </div>
     </aside>
