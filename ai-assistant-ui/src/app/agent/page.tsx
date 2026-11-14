@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   Terminal,
   Wrench,
@@ -24,13 +24,21 @@ import {
   Compass,
   Check,
   Flame,
-  Info
+  Info,
+  Radio,
+  PauseCircle,
+  Network
 } from 'lucide-react'
 
 const API_BASE =
   typeof window !== 'undefined'
     ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
     : 'http://localhost:8080'
+
+const WS_BASE =
+  typeof window !== 'undefined'
+    ? (process.env.NEXT_PUBLIC_WS_URL ?? 'ws://localhost:8080')
+    : 'ws://localhost:8080'
 
 interface AgentPersona {
   id: string
@@ -55,14 +63,6 @@ interface AgentExecutionStep {
   isError: boolean
   durationMs: number
   timestamp: string
-}
-
-interface AgentGraphNode {
-  id: string
-  label: string
-  avatar: string
-  role: string
-  status: 'IDLE' | 'ACTIVE' | 'EXECUTING_TOOL' | 'COMPLETED' | 'FAILED'
 }
 
 interface McpTool {
@@ -98,6 +98,8 @@ export default function MultiAgentOrchestratorPage() {
   const [agents, setAgents] = useState<AgentPersona[]>([])
   const [activeObjective, setActiveObjective] = useState(PRESET_GOALS[0].prompt)
   const [selectedModel, setSelectedModel] = useState<'groq' | 'gemini'>('groq')
+  const [protocol, setProtocol] = useState<'websocket' | 'sse' | 'rest'>('websocket')
+  
   const [isSwarmRunning, setIsSwarmRunning] = useState(false)
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null)
   const [completedAgentIds, setCompletedAgentIds] = useState<string[]>([])
@@ -105,6 +107,11 @@ export default function MultiAgentOrchestratorPage() {
   const [finalSynthesis, setFinalSynthesis] = useState<string | null>(null)
   const [totalDuration, setTotalDuration] = useState<number | null>(null)
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
+  const [hitlNotice, setHitlNotice] = useState<string | null>(null)
+
+  // WebSocket Live Connection
+  const [wsConnected, setWsConnected] = useState(false)
+  const wsRef = useRef<WebSocket | null>(null)
 
   // Expandable steps in execution feed
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({})
@@ -117,11 +124,66 @@ export default function MultiAgentOrchestratorPage() {
   const [mcpRawOutput, setMcpRawOutput] = useState<string | null>(null)
   const [showMcpConsole, setShowMcpConsole] = useState(false)
 
-  // Load Agent Roster and MCP Tools on mount
+  // Initialize WebSocket if protocol is websocket
   useEffect(() => {
     loadRoster()
     loadMcpTools()
+
+    if (typeof window !== 'undefined') {
+      initWebSocket()
+    }
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close()
+      }
+    }
   }, [])
+
+  const initWebSocket = () => {
+    try {
+      const socket = new WebSocket(`${WS_BASE}/ws/agents`)
+      wsRef.current = socket
+
+      socket.onopen = () => {
+        setWsConnected(true)
+        console.log('🔌 [WebSocket] Connected to /ws/agents')
+      }
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data)
+          if (data.type === 'AGENT_STEP') {
+            const step: AgentExecutionStep = data.step
+            setActiveAgentId(step.agentId)
+            setSteps((prev) => [...prev, step])
+            setCompletedAgentIds((prev) => [...prev, step.agentId])
+          } else if (data.type === 'FINAL_SYNTHESIS') {
+            setFinalSynthesis(data.synthesis)
+            if (data.totalDurationMs) setTotalDuration(data.totalDurationMs)
+            setIsSwarmRunning(false)
+            setActiveAgentId(null)
+          } else if (data.type === 'INTERRUPTED') {
+            setHitlNotice(data.guidance || 'Human-in-the-Loop intervention acknowledged.')
+          }
+        } catch (e) {
+          console.warn('Failed to parse WS frame:', e)
+        }
+      }
+
+      socket.onclose = () => {
+        setWsConnected(false)
+        console.log('🔌 [WebSocket] Closed')
+      }
+
+      socket.onerror = (err) => {
+        console.warn('🔌 [WebSocket] Error:', err)
+        setWsConnected(false)
+      }
+    } catch (e) {
+      console.warn('WebSocket init failed:', e)
+    }
+  }
 
   const loadRoster = async () => {
     try {
@@ -262,8 +324,20 @@ export default function MultiAgentOrchestratorPage() {
     }
   }
 
-  // Trigger Full Multi-Agent Swarm Orchestration
-  const runSwarmOrchestration = async (e?: React.FormEvent) => {
+  // Human-in-the-Loop Interrupt via WebSocket
+  const sendHitlInterrupt = () => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(
+        JSON.stringify({
+          action: 'INTERRUPT',
+          guidance: 'User paused swarm to inspect auditoriums.',
+        })
+      )
+    }
+  }
+
+  // Launch Swarm via Selected Protocol
+  const launchSwarm = async (e?: React.FormEvent) => {
     if (e) e.preventDefault()
     if (!activeObjective.trim() || isSwarmRunning) return
 
@@ -273,10 +347,66 @@ export default function MultiAgentOrchestratorPage() {
     setTotalDuration(null)
     setCompletedAgentIds([])
     setStatusMessage(null)
+    setHitlNotice(null)
     setActiveAgentId('supervisor')
 
     const startClock = Date.now()
 
+    // 1. WebSocket Protocol Mode
+    if (protocol === 'websocket') {
+      if (!wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) {
+        initWebSocket()
+      }
+      setTimeout(() => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+          wsRef.current.send(
+            JSON.stringify({
+              action: 'START',
+              objective: activeObjective.trim(),
+              model: selectedModel,
+            })
+          )
+        } else {
+          // Fallback to REST if socket is not ready
+          runRestOrchestration(startClock)
+        }
+      }, 100)
+      return
+    }
+
+    // 2. Server-Sent Events (SSE) Protocol Mode
+    if (protocol === 'sse') {
+      try {
+        const url = `${API_BASE}/api/v1/agents/orchestrate/stream?objective=${encodeURIComponent(
+          activeObjective.trim()
+        )}&model=${selectedModel}`
+        const eventSource = new EventSource(url)
+
+        eventSource.addEventListener('agent-step', (event) => {
+          const step: AgentExecutionStep = JSON.parse(event.data)
+          setActiveAgentId(step.agentId)
+          setSteps((prev) => [...prev, step])
+          setCompletedAgentIds((prev) => [...prev, step.agentId])
+        })
+
+        eventSource.onerror = () => {
+          eventSource.close()
+          setTotalDuration(Date.now() - startClock)
+          setIsSwarmRunning(false)
+          setActiveAgentId(null)
+        }
+      } catch (err: any) {
+        setStatusMessage(`SSE Error: ${err.message}`)
+        setIsSwarmRunning(false)
+      }
+      return
+    }
+
+    // 3. REST Batch Mode
+    runRestOrchestration(startClock)
+  }
+
+  const runRestOrchestration = async (startClock: number) => {
     try {
       const res = await fetch(`${API_BASE}/api/v1/agents/orchestrate`, {
         method: 'POST',
@@ -291,12 +421,11 @@ export default function MultiAgentOrchestratorPage() {
       if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to orchestrate swarm`)
       const data = await res.json()
 
-      // Step-by-step playback to visualize the agent swarm in action
       const receivedSteps: AgentExecutionStep[] = data.steps || []
       for (let i = 0; i < receivedSteps.length; i++) {
         const step = receivedSteps[i]
         setActiveAgentId(step.agentId)
-        await new Promise((r) => setTimeout(r, 450))
+        await new Promise((r) => setTimeout(r, 400))
         setSteps((prev) => [...prev, step])
         setCompletedAgentIds((prev) => [...prev, step.agentId])
       }
@@ -332,40 +461,71 @@ export default function MultiAgentOrchestratorPage() {
               Multi-Agent Swarm Orchestrator
             </h1>
             <span className="rounded-full bg-purple-500/10 px-2.5 py-0.5 text-[11px] font-semibold text-[#a78bfa] border border-purple-500/20">
-              AutoGen & LangGraph Pattern
+              WebSocket + SSE Enabled
             </span>
           </div>
           <p className="mt-1.5 text-sm text-[#888]">
-            Coordinated autonomous execution across 6 specialized AI agents with shared MCP tools, RAG memory, and verification critic.
+            Coordinated autonomous execution across 6 specialized AI agents with shared MCP tools, RAG memory, and real-time streaming.
           </p>
         </div>
 
-        {/* Model Selector Pill */}
-        <div className="flex items-center gap-2 self-start md:self-auto rounded-lg bg-[#141414] border border-[#2a2a2a] p-1">
-          <button
-            type="button"
-            onClick={() => setSelectedModel('groq')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              selectedModel === 'groq'
-                ? 'bg-[#7c3aed] text-white shadow'
-                : 'text-[#888] hover:text-white'
-            }`}
-          >
-            <Zap className="h-3.5 w-3.5 text-yellow-400" />
-            Groq LPU (Sub-second)
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedModel('gemini')}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
-              selectedModel === 'gemini'
-                ? 'bg-[#7c3aed] text-white shadow'
-                : 'text-[#888] hover:text-white'
-            }`}
-          >
-            <Cpu className="h-3.5 w-3.5 text-cyan-400" />
-            Gemini 3.8 Flash
-          </button>
+        {/* Dual Selectors: Model & Streaming Protocol */}
+        <div className="flex flex-wrap items-center gap-2 self-start md:self-auto">
+          {/* Protocol Toggle */}
+          <div className="flex items-center rounded-lg bg-[#141414] border border-[#2a2a2a] p-1">
+            <button
+              type="button"
+              onClick={() => setProtocol('websocket')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                protocol === 'websocket'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
+                  : 'text-[#888] hover:text-white'
+              }`}
+            >
+              <Network className="h-3.5 w-3.5 text-cyan-400" />
+              WebSocket (HITL)
+            </button>
+            <button
+              type="button"
+              onClick={() => setProtocol('sse')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                protocol === 'sse'
+                  ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow'
+                  : 'text-[#888] hover:text-white'
+              }`}
+            >
+              <Radio className="h-3.5 w-3.5 text-emerald-400" />
+              SSE Stream
+            </button>
+          </div>
+
+          {/* Model Toggle */}
+          <div className="flex items-center rounded-lg bg-[#141414] border border-[#2a2a2a] p-1">
+            <button
+              type="button"
+              onClick={() => setSelectedModel('groq')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                selectedModel === 'groq'
+                  ? 'bg-[#7c3aed] text-white shadow'
+                  : 'text-[#888] hover:text-white'
+              }`}
+            >
+              <Zap className="h-3.5 w-3.5 text-yellow-400" />
+              Groq LPU
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedModel('gemini')}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-all ${
+                selectedModel === 'gemini'
+                  ? 'bg-[#7c3aed] text-white shadow'
+                  : 'text-[#888] hover:text-white'
+              }`}
+            >
+              <Cpu className="h-3.5 w-3.5 text-cyan-400" />
+              Gemini 3.8
+            </button>
+          </div>
         </div>
       </div>
 
@@ -377,16 +537,33 @@ export default function MultiAgentOrchestratorPage() {
             <span className="text-xs font-semibold uppercase tracking-wider text-[#ccc]">
               Objective Dispatcher
             </span>
+            {protocol === 'websocket' && (
+              <span className="flex items-center gap-1 text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                WS Active (ws://localhost:8080/ws/agents)
+              </span>
+            )}
           </div>
-          {totalDuration && (
-            <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              <Clock className="h-3 w-3" /> Swarm Latency: {totalDuration}ms
-            </span>
-          )}
+          <div className="flex items-center gap-2">
+            {isSwarmRunning && protocol === 'websocket' && (
+              <button
+                type="button"
+                onClick={sendHitlInterrupt}
+                className="flex items-center gap-1.5 text-xs text-amber-400 bg-amber-500/10 hover:bg-amber-500/20 px-2.5 py-1 rounded border border-amber-500/30 transition-colors"
+              >
+                <PauseCircle className="h-3.5 w-3.5" /> Steer / Pause (HITL)
+              </button>
+            )}
+            {totalDuration && (
+              <span className="flex items-center gap-1 text-xs text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                <Clock className="h-3 w-3" /> Latency: {totalDuration}ms
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Form */}
-        <form onSubmit={runSwarmOrchestration} className="flex gap-2">
+        <form onSubmit={launchSwarm} className="flex gap-2">
           <div className="relative flex-1">
             <Terminal className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-[#666]" />
             <input
@@ -404,11 +581,11 @@ export default function MultiAgentOrchestratorPage() {
           >
             {isSwarmRunning ? (
               <>
-                <RefreshCw className="h-4 w-4 animate-spin" /> Swarm Executing...
+                <RefreshCw className="h-4 w-4 animate-spin" /> Swarm Streaming...
               </>
             ) : (
               <>
-                <Play className="h-4 w-4 fill-white" /> Launch Swarm
+                <Play className="h-4 w-4 fill-white" /> Launch Swarm ({protocol.toUpperCase()})
               </>
             )}
           </button>
@@ -438,6 +615,21 @@ export default function MultiAgentOrchestratorPage() {
           </div>
         </div>
       </div>
+
+      {hitlNotice && (
+        <div className="p-3.5 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-300 text-xs flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <PauseCircle className="h-4 w-4 shrink-0 text-amber-400" />
+            <span><strong>Human-in-the-Loop Event:</strong> {hitlNotice}</span>
+          </div>
+          <button
+            onClick={() => setHitlNotice(null)}
+            className="text-[10px] text-amber-400 hover:text-white underline"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {statusMessage && (
         <div className="p-3.5 rounded-lg border border-red-500/20 bg-red-500/10 text-red-400 text-xs flex items-center gap-2">
@@ -537,7 +729,7 @@ export default function MultiAgentOrchestratorPage() {
               <Terminal className="h-4 w-4 text-[#a78bfa]" /> Real-Time Swarm Execution Trace
             </h2>
             <span className="text-[11px] text-[#666]">
-              {steps.length} Step{steps.length !== 1 ? 's' : ''} captured
+              {steps.length} Step{steps.length !== 1 ? 's' : ''} captured via {protocol.toUpperCase()}
             </span>
           </div>
 
@@ -546,7 +738,7 @@ export default function MultiAgentOrchestratorPage() {
               <Compass className="h-8 w-8 mx-auto mb-2 text-[#444]" />
               <p className="text-xs">No active execution trace.</p>
               <p className="text-[11px] text-[#555] mt-1">
-                Click &quot;Launch Swarm&quot; above to watch the agents plan, execute MCP tools, and synthesize.
+                Click &quot;Launch Swarm&quot; above to watch the agents plan, execute MCP tools, and synthesize over {protocol.toUpperCase()}.
               </p>
             </div>
           )}
@@ -667,7 +859,7 @@ export default function MultiAgentOrchestratorPage() {
             ) : isSwarmRunning ? (
               <div className="my-auto text-center space-y-3 p-8">
                 <RefreshCw className="h-8 w-8 text-[#7c3aed] animate-spin mx-auto" />
-                <p className="text-xs font-medium text-white">Swarm In Motion</p>
+                <p className="text-xs font-medium text-white">Swarm Streaming ({protocol.toUpperCase()})</p>
                 <p className="text-[11px] text-[#777] max-w-xs mx-auto">
                   Agents are communicating over MCP, verifying seat availability, computing pricing vouchers, and checking compliance.
                 </p>
@@ -677,7 +869,7 @@ export default function MultiAgentOrchestratorPage() {
                 <Film className="h-8 w-8 mx-auto text-[#444]" />
                 <p className="text-xs text-[#888]">Awaiting Swarm Run</p>
                 <p className="text-[11px] text-[#555]">
-                  When you launch an objective, the Supervisor will synthesize findings from all agents into a unified receipt and briefing here.
+                  Select WebSocket or SSE and launch an objective to watch real-time multi-agent execution.
                 </p>
               </div>
             )}

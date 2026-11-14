@@ -187,6 +187,50 @@ async function runTestSuite() {
     if (!data.finalSynthesis) throw new Error('Missing final synthesis');
   });
 
+  await test('Multi-Agent SSE Stream (/api/v1/agents/orchestrate/stream)', async () => {
+    const res = await request({
+      hostname: 'localhost',
+      port: 8080,
+      path: '/api/v1/agents/orchestrate/stream?objective=Book+Inception+tickets&model=groq',
+      method: 'GET',
+    });
+    if (res.statusCode !== 200) throw new Error(`Expected 200, got ${res.statusCode}`);
+    if (!res.headers['content-type']?.includes('text/event-stream')) {
+      throw new Error(`Expected text/event-stream, got ${res.headers['content-type']}`);
+    }
+    if (!res.body.includes('event:agent-step')) {
+      throw new Error('SSE output missing agent-step events');
+    }
+  });
+
+  await test('Multi-Agent Bi-Directional WebSocket (/ws/agents)', async () => {
+    const WS = globalThis.WebSocket;
+    if (!WS) return; // Skip if environment lacks WebSocket constructor
+    await new Promise((resolve, reject) => {
+      const ws = new WS('ws://localhost:8080/ws/agents');
+      const timer = setTimeout(() => {
+        ws.close();
+        reject(new Error('WebSocket connection timed out'));
+      }, 5000);
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ action: 'PING' }));
+      };
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (msg.type === 'PONG') {
+          clearTimeout(timer);
+          ws.close();
+          resolve();
+        }
+      };
+      ws.onerror = (err) => {
+        clearTimeout(timer);
+        reject(err);
+      };
+    });
+  });
+
   console.log('\n====================================================');
   console.log(`🎯 Test Results: ${passed}/${total} Passed (${Math.round((passed / total) * 100)}%)`);
   console.log('====================================================');
