@@ -29,6 +29,8 @@ import {
   Navigation,
   UserCheck,
 } from 'lucide-react'
+import { ticketService } from '@/services/ticketService'
+import { authService } from '@/services/authService'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -76,8 +78,7 @@ function TicketsContent() {
 
   useEffect(() => {
     fetchTickets()
-    fetch(`${API_BASE}/api/v1/auth/me`)
-      .then((r) => (r.ok ? r.json() : null))
+    authService.getCurrentUser()
       .then((u) => { if (u) setCurrentUser(u) })
       .catch(() => {})
 
@@ -108,9 +109,8 @@ function TicketsContent() {
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/tickets`)
-      if (res.ok) {
-        const data = await res.json()
+      const data: any = await ticketService.getTickets()
+      if (data) {
         setTickets(data)
 
         if (targetId) {
@@ -176,17 +176,12 @@ function TicketsContent() {
     await new Promise((r) => setTimeout(r, 700))
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/tickets/validate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ticketId: selectedTicket.ticketId,
-          qrToken: selectedTicket.qrPayload,
-        }),
-      })
+      const result: any = await ticketService.validateTicket(
+        selectedTicket.ticketId,
+        selectedTicket.qrPayload
+      )
 
-      if (res.ok) {
-        const result = await res.json()
+      if (result) {
         setValidationResult(result)
         const isGranted = result.valid || result.code === 'ALREADY_CHECKED_IN'
         playScannerBeep(isGranted ? 'success' : 'failure')
@@ -222,15 +217,11 @@ function TicketsContent() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/tickets/${selectedTicket.ticketId}`, {
-        method: 'DELETE',
-      })
-      if (res.ok) {
-        showNotice(`Refunded $${selectedTicket.totalPaid.toFixed(2)} to original payment method.`)
-        const remaining = tickets.filter((t) => t.ticketId !== selectedTicket.ticketId)
-        setTickets(remaining)
-        setSelectedTicket(remaining.length > 0 ? remaining[0] : null)
-      }
+      await ticketService.cancelTicket(selectedTicket.ticketId)
+      showNotice(`Refunded $${selectedTicket.totalPaid.toFixed(2)} to original payment method.`)
+      const remaining = tickets.filter((t) => t.ticketId !== selectedTicket.ticketId)
+      setTickets(remaining)
+      setSelectedTicket(remaining.length > 0 ? remaining[0] : null)
     } catch {
       showNotice('Reservation cancelled.')
       const remaining = tickets.filter((t) => t.ticketId !== selectedTicket.ticketId)

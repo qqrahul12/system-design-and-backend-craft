@@ -1,21 +1,27 @@
 package com.skills.ai.patterns.strategy;
 
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import java.util.Comparator;
 import java.util.List;
 
 /**
  * Strategy Pattern: Context Class
- * Holds a reference to PricingStrategy and resolves the optimal pricing algorithm based on runtime context.
+ * Holds ordered references to PricingStrategy and resolves the optimal pricing algorithm based on polymorphic support (OCP + LSP).
  */
 @Slf4j
 @Service
-@RequiredArgsConstructor
 public class PricingEngine {
 
     private final List<PricingStrategy> strategies;
+
+    public PricingEngine(List<PricingStrategy> strategies) {
+        // Sort strategies by precedence order so specialized strategies evaluate before defaults
+        this.strategies = strategies.stream()
+                .sorted(Comparator.comparingInt(PricingStrategy::getOrder))
+                .toList();
+    }
 
     public double computeTicketPrice(double basePrice, String format, boolean isSurgeActive) {
         PricingStrategy strategy = resolveStrategy(format);
@@ -26,14 +32,8 @@ public class PricingEngine {
     }
 
     private PricingStrategy resolveStrategy(String format) {
-        if (format != null && (format.toUpperCase().contains("IMAX") || format.toUpperCase().contains("DOLBY"))) {
-            return strategies.stream()
-                    .filter(s -> s instanceof ImaxLargeFormatStrategy)
-                    .findFirst()
-                    .orElse(strategies.get(0));
-        }
         return strategies.stream()
-                .filter(s -> s instanceof StandardCatalogPricingStrategy)
+                .filter(s -> s.supports(format))
                 .findFirst()
                 .orElse(strategies.get(0));
     }

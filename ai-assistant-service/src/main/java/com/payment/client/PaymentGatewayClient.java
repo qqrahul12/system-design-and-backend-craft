@@ -13,4 +13,10 @@ public interface PaymentGatewayClient {
      * Returns payment provider name (e.g. STRIPE, RAZORPAY, PAYTM).
      */
     String getProviderName();
+
+    default void setSimulateFailure(boolean simulate) {}
+
+    default boolean isSimulateFailure() {
+        return false;
+    }
 }

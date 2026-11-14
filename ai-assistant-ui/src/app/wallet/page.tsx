@@ -26,6 +26,8 @@ import {
   Copy,
   ChevronRight,
 } from 'lucide-react'
+import { walletService } from '@/services/walletService'
+import { apiClient } from '@/services/apiClient'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -77,14 +79,12 @@ export default function WalletPage() {
   const fetchWallet = async () => {
     setIsLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/wallet`)
-      if (res.ok) {
-        const data = await res.json()
+      const data: any = await walletService.getWalletSummary().catch(() => null)
+      if (data) {
         setWallet(data)
       }
-      const cbRes = await fetch(`${API_BASE}/api/v1/admin/circuit-breaker`)
-      if (cbRes.ok) {
-        const cbData = await cbRes.json()
+      const cbData: any = await apiClient.get('/api/v1/admin/circuit-breaker').catch(() => null)
+      if (cbData) {
         setCircuitBreaker(cbData)
       }
     } catch (err) {
@@ -107,24 +107,15 @@ export default function WalletPage() {
 
     setIsTopUpLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/wallet/topup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          amount: finalAmt,
-          paymentMethod: paymentMethod === 'STRIPE_CARD' ? 'Stripe Gateway' : paymentMethod,
-        }),
-      })
-
-      if (res.ok) {
-        showNotification(`🎉 Successfully credited +$${finalAmt.toFixed(2)} CineCash via ${paymentMethod}!`)
-        setCustomAmount('')
-        await fetchWallet()
-      } else {
-        showNotification('❌ Top-up failed. Circuit breaker may be open or gateway unreachable.')
-      }
+      await walletService.topUp(
+        finalAmt,
+        paymentMethod === 'STRIPE_CARD' ? 'Stripe Gateway' : paymentMethod
+      )
+      showNotification(`🎉 Successfully credited +$${finalAmt.toFixed(2)} CineCash via ${paymentMethod}!`)
+      setCustomAmount('')
+      await fetchWallet()
     } catch {
-      showNotification('❌ Top-up network error. Please verify backend.')
+      showNotification('❌ Top-up failed. Circuit breaker may be open or gateway unreachable.')
     } finally {
       setIsTopUpLoading(false)
     }

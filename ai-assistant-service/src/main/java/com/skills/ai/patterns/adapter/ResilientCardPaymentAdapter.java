@@ -1,27 +1,30 @@
 package com.skills.ai.patterns.adapter;
 
-import com.payment.client.impl.StripePaymentGatewayClient;
+import com.payment.client.PaymentGatewayClient;
 import com.payment.dto.PaymentResponse;
-import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Component;
 
 /**
  * Adapter Pattern Concrete Implementation:
- * Adapts payment-service's StripePaymentGatewayClient with Resilience4j circuit breaker protection.
+ * Adapts PaymentGatewayClient abstraction with Resilience4j circuit breaker protection (DIP + LSP).
  */
 @Slf4j
 @Component
-@RequiredArgsConstructor
 public class ResilientCardPaymentAdapter implements PaymentGatewayAdapter {
 
-    private final StripePaymentGatewayClient stripeClient;
+    private final PaymentGatewayClient paymentClient;
+
+    public ResilientCardPaymentAdapter(@Qualifier("stripePaymentGatewayClient") PaymentGatewayClient paymentClient) {
+        this.paymentClient = paymentClient;
+    }
 
     @Override
     public PaymentResult processPayment(String orderReference, double amount, String description) {
-        log.info("💳 [ResilientCardPaymentAdapter] Executing card capture via StripePaymentGatewayClient: amount=${}, orderRef={}", amount, orderReference);
+        log.info("💳 [ResilientCardPaymentAdapter] Executing card capture via PaymentGatewayClient: amount=${}, orderRef={}", amount, orderReference);
         try {
-            PaymentResponse response = stripeClient.processPayment(orderReference, amount);
+            PaymentResponse response = paymentClient.processPayment(orderReference, amount);
             if (response.success()) {
                 return PaymentResult.success(
                         response.transactionId(),
@@ -61,7 +64,7 @@ public class ResilientCardPaymentAdapter implements PaymentGatewayAdapter {
 
     public void setSimulateFailure(boolean simulateFailure) {
         this.simulateFailure = simulateFailure;
-        stripeClient.setSimulateFailure(simulateFailure);
+        paymentClient.setSimulateFailure(simulateFailure);
     }
 
     public boolean isSimulateFailure() {

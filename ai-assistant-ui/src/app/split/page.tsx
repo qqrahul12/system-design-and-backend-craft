@@ -21,11 +21,8 @@ import {
   ChevronRight,
   ShieldCheck,
 } from 'lucide-react'
+import { splitService } from '@/services/splitService'
 
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
 
 interface SplitUser {
   id: string
@@ -135,22 +132,19 @@ export default function SplitPage() {
   const loadData = async () => {
     setIsLoading(true)
     try {
-      const [uRes, gRes, eRes, bRes] = await Promise.all([
-        fetch(`${API_BASE}/api/v1/split/users`),
-        fetch(`${API_BASE}/api/v1/split/groups`),
-        fetch(`${API_BASE}/api/v1/split/expenses`),
-        fetch(`${API_BASE}/api/v1/split/balances`),
+      const [fetchedUsers, fetchedGroups, fetchedExpenses, fetchedBalances] = await Promise.all([
+        splitService.getUsers().catch(() => null),
+        splitService.getGroups().catch(() => null),
+        splitService.getExpenses().catch(() => null),
+        splitService.getBalances().catch(() => null),
       ])
 
-      if (uRes.ok) {
-        const fetchedUsers: SplitUser[] = await uRes.json()
-        if (fetchedUsers && fetchedUsers.length > 0) {
-          setUsers(fetchedUsers)
-        }
+      if (fetchedUsers && fetchedUsers.length > 0) {
+        setUsers(fetchedUsers)
       }
-      if (gRes.ok) setGroups(await gRes.json())
-      if (eRes.ok) setExpenses(await eRes.json())
-      if (bRes.ok) setBalances(await bRes.json())
+      if (fetchedGroups) setGroups(fetchedGroups as unknown as SplitGroup[])
+      if (fetchedExpenses) setExpenses(fetchedExpenses as unknown as SplitExpense[])
+      if (fetchedBalances) setBalances(fetchedBalances as unknown as Record<string, number>)
     } catch (err) {
       console.warn('Failed to load SplitMoney squad data:', err)
     } finally {
@@ -165,24 +159,15 @@ export default function SplitPage() {
   const handleSettle = async (expenseId: string, debtorUserId: string, method: string) => {
     setIsSettling(`${expenseId}-${debtorUserId}`)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/split/settle`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          expenseId,
-          debtorUserId,
-          paymentMethod: method,
-        }),
+      await splitService.settleShare({
+        expenseId,
+        debtorUserId,
+        paymentMethod: method,
       })
-
-      if (res.ok) {
-        showNotification(`🎉 Settled share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card'}!`)
-        await loadData()
-      } else {
-        showNotification('❌ Failed to settle share.')
-      }
+      showNotification(`🎉 Settled share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card'}!`)
+      await loadData()
     } catch {
-      showNotification('❌ Network error during settlement.')
+      showNotification('❌ Failed to settle share.')
     } finally {
       setIsSettling(null)
     }
@@ -198,29 +183,20 @@ export default function SplitPage() {
 
     setIsCreatingExpense(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/split/create`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: expenseName,
-          totalAmount: amt,
-          paidByUserId: selectedPayerId,
-          memberUserIds: selectedMembers,
-          referenceType: 'CINEMA_OUTING',
-        }),
+      await splitService.createSplit({
+        name: expenseName,
+        totalAmount: amt,
+        paidByUserId: selectedPayerId,
+        memberUserIds: selectedMembers,
+        referenceType: 'CINEMA_OUTING',
       })
-
-      if (res.ok) {
-        showNotification('🎉 Group split expense created successfully!')
-        setIsCreateModalOpen(false)
-        setExpenseName('')
-        setExpenseTotal('')
-        await loadData()
-      } else {
-        showNotification('❌ Error creating group split expense.')
-      }
+      showNotification('🎉 Group split expense created successfully!')
+      setIsCreateModalOpen(false)
+      setExpenseName('')
+      setExpenseTotal('')
+      await loadData()
     } catch {
-      showNotification('❌ Network error creating expense.')
+      showNotification('❌ Error creating group split expense.')
     } finally {
       setIsCreatingExpense(false)
     }
