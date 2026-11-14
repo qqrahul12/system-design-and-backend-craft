@@ -884,6 +884,16 @@ async function runTestSuite() {
 
   await test('SplitMoney 1-Click Share Settlement with CineCash Wallet (/api/v1/split/settle)', async () => {
     if (!createdExpenseId) throw new Error('No expense to settle');
+    // Ensure sufficient wallet balance for settlement across repeated test runs
+    const topupPayload = JSON.stringify({ amount: 100.0, paymentMethod: 'Test TopUp' });
+    await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/wallet/topup',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(topupPayload) },
+    }, topupPayload);
+
     const payload = JSON.stringify({
       expenseId: createdExpenseId,
       debtorUserId: 'usr-alex',
