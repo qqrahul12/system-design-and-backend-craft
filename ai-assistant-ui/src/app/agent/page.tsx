@@ -255,6 +255,9 @@ export default function MultiAgentOrchestratorPage() {
   // WebSocket Live Connection
   const [wsConnected, setWsConnected] = useState(false)
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const reconnectAttemptsRef = useRef(0)
+  const isMountedRef = useRef(true)
 
   // Expandable steps in execution feed
   const [expandedSteps, setExpandedSteps] = useState<Record<number, boolean>>({})
@@ -269,6 +272,7 @@ export default function MultiAgentOrchestratorPage() {
 
   // Initialize WebSocket if protocol is websocket
   useEffect(() => {
+    isMountedRef.current = true
     loadRoster()
     loadMcpTools()
 
@@ -277,6 +281,10 @@ export default function MultiAgentOrchestratorPage() {
     }
 
     return () => {
+      isMountedRef.current = false
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+      }
       if (wsRef.current) {
         wsRef.current.close()
       }
@@ -285,11 +293,17 @@ export default function MultiAgentOrchestratorPage() {
 
   const initWebSocket = () => {
     try {
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current)
+        reconnectTimerRef.current = null
+      }
+
       const socket = new WebSocket(`${WS_BASE}/ws/agents`)
       wsRef.current = socket
 
       socket.onopen = () => {
         setWsConnected(true)
+        reconnectAttemptsRef.current = 0
         console.log('🔌 [WebSocket] Connected to /ws/agents')
       }
 
@@ -324,13 +338,24 @@ export default function MultiAgentOrchestratorPage() {
         }
       }
 
-      socket.onclose = () => {
+      socket.onclose = (event) => {
         setWsConnected(false)
-        console.log('🔌 [WebSocket] Closed')
+        console.log('🔌 [WebSocket] Closed (code: ' + event.code + ')')
+        // Resilient automatic reconnection with exponential backoff & jitter
+        if (isMountedRef.current && reconnectAttemptsRef.current < 6) {
+          const delay = Math.min(10000, 1000 * Math.pow(1.8, reconnectAttemptsRef.current) + Math.random() * 300)
+          reconnectAttemptsRef.current += 1
+          console.log(`🔌 [WebSocket] Reconnecting in ${Math.round(delay)}ms (attempt ${reconnectAttemptsRef.current}/6)...`)
+          reconnectTimerRef.current = setTimeout(() => {
+            if (isMountedRef.current) {
+              initWebSocket()
+            }
+          }, delay)
+        }
       }
 
       socket.onerror = (err) => {
-        console.warn('🔌 [WebSocket] Error:', err)
+        console.warn('🔌 [WebSocket] Connection error:', err)
         setWsConnected(false)
       }
     } catch (e) {
@@ -344,64 +369,8 @@ export default function MultiAgentOrchestratorPage() {
       if (data && data.length > 0) {
         setAgents(data as any)
       }
-    } catch {
-      // Fallback roster
-      setAgents([
-        {
-          id: 'supervisor',
-          name: 'Supervisor Orchestrator',
-          avatar: '👑',
-          role: 'Workflow Planner & Dispatcher',
-          description: 'Deconstructs goals into execution DAG and synthesizes outcomes.',
-          assignedTools: ['plan_execution', 'synthesize_results'],
-          modelTier: 'Gemini 3.8 / Groq',
-        },
-        {
-          id: 'catalog',
-          name: 'Catalog Specialist',
-          avatar: '🎥',
-          role: 'Movie Discovery & Schedules',
-          description: 'Scans CineMind active inventory, formats (IMAX, Dolby), and showtimes.',
-          assignedTools: ['search_movies'],
-          modelTier: 'Groq LPU',
-        },
-        {
-          id: 'inventory',
-          name: 'Seat Inventory Strategist',
-          avatar: '💺',
-          role: 'Layout & Seat Locking',
-          description: 'Inspects real-time seat occupancy and secures distributed locks.',
-          assignedTools: ['check_seats', 'reserve_seats'],
-          modelTier: 'Groq LPU',
-        },
-        {
-          id: 'rag_policy',
-          name: 'Policy RAG Specialist',
-          avatar: '📚',
-          role: 'Vector Semantic Retrieval',
-          description: 'Queries internal CineMind vector store for concessions & refund rules.',
-          assignedTools: ['rag_knowledge_search'],
-          modelTier: 'Gemini RAG',
-        },
-        {
-          id: 'billing',
-          name: 'Pricing & Billing Specialist',
-          avatar: '💳',
-          role: 'Discounts & Payment Capture',
-          description: 'Validates promotional voucher codes and captures payments.',
-          assignedTools: ['apply_promocode', 'process_payment'],
-          modelTier: 'Groq LPU',
-        },
-        {
-          id: 'critic',
-          name: 'Compliance Critic',
-          avatar: '⚖️',
-          role: 'Safety & Constraint Auditor',
-          description: 'Validates MPAA ratings, quota boundaries, and payment integrity.',
-          assignedTools: ['audit_compliance'],
-          modelTier: 'Gemini 3.8',
-        },
-      ])
+    } catch (err) {
+      console.warn('Failed to load agent roster:', err)
     }
   }
 

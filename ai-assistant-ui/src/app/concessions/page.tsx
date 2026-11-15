@@ -489,25 +489,7 @@ function ConcessionsContent() {
       })
 
       setActiveOrder({
-        orderId: orderData.orderId || '#FB-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
-          total: cartTotal,
-          seat: deliverySeat,
-          itemsCount: cartItemCount,
-          status: 'PREPARING',
-          estimatedMinutes: 8,
-        })
-        playKitchenChime('order')
-        setCart({})
-        setIsCheckoutOpen(false)
-        showNotice(
-          paymentMethod === 'WALLET'
-            ? `Paid $${cartTotal.toFixed(2)} via CineMind Wallet! Dispatched to kitchen.`
-            : 'Gourmet concessions order dispatched to kitchen!'
-        )
-    } catch {
-      // Local fallback
-      setActiveOrder({
-        orderId: '#FB-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+        orderId: orderData.orderId,
         total: cartTotal,
         seat: deliverySeat,
         itemsCount: cartItemCount,
@@ -517,7 +499,15 @@ function ConcessionsContent() {
       playKitchenChime('order')
       setCart({})
       setIsCheckoutOpen(false)
-      showNotice('Gourmet concessions order placed!')
+      showNotice(
+        paymentMethod === 'WALLET'
+          ? `Paid $${cartTotal.toFixed(2)} via CineMind Wallet! Dispatched to kitchen.`
+          : 'Gourmet concessions order dispatched to kitchen!'
+      )
+    } catch (err: unknown) {
+      console.error('Failed to place concessions order:', err)
+      const errorMsg = err instanceof Error ? err.message : 'Kitchen order submission failed'
+      showNotice(`Order Error: ${errorMsg}. Please try again.`)
     } finally {
       setIsPlacingOrder(false)
     }

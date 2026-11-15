@@ -653,12 +653,12 @@ REASON: <1 sentence why it matches>`
           setSecondsRemaining(Math.max(0, Math.floor((expTime - Date.now()) / 1000)))
           playSound('lock')
         }
-      } catch {
-        // Fallback local lock
-        setActiveLockToken('LOCK-LOCAL-' + Math.random().toString(36).substring(2, 8).toUpperCase())
-        const expTime = Date.now() + 600 * 1000
-        setLockExpiresAt(expTime)
-        setSecondsRemaining(600)
+      } catch (err) {
+        console.warn('Seat lock request failed:', err)
+        setSelectedSeats(selectedSeats)
+        setActiveLockToken(null)
+        setLockExpiresAt(null)
+        setSecondsRemaining(0)
       } finally {
         setIsLocking(false)
       }
@@ -759,24 +759,10 @@ REASON: <1 sentence why it matches>`
       } else {
         throw new Error('Ticket issue failed')
       }
-    } catch {
-      // Local fallback
-      const fallbackTicketId =
-        'TKT-' +
-        selectedMovie.title.substring(0, 4).toUpperCase() +
-        '-' +
-        Math.random().toString(36).substring(2, 6).toUpperCase()
-      setBookingConfirmation({
-        ticketId: fallbackTicketId,
-        txnId: 'TXN-' + Math.random().toString(36).substring(2, 9).toUpperCase(),
-        movie: selectedMovie.title,
-        seats: [...selectedSeats],
-        totalAmount,
-        auditorium,
-        showTime,
-      })
-      setOccupiedSeats((prev) => [...prev, ...selectedSeats])
-      setSelectedSeats([])
+    } catch (err: unknown) {
+      console.error('Ticket checkout failed:', err)
+      const errorMsg = err instanceof Error ? err.message : 'Unable to complete ticket reservation'
+      alert(`Booking Error: ${errorMsg}. Please verify your payment balance or seat availability.`)
     } finally {
       setIsProcessing(false)
     }
