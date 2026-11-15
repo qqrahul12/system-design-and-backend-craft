@@ -127,6 +127,22 @@ public class AuthService {
                         return user;
                     }
                 }
+
+                // 2. Check per-client HTTP Session
+                jakarta.servlet.http.HttpSession session = request.getSession(false);
+                if (session != null) {
+                    String sessionRole = (String) session.getAttribute("CINEMIND_ROLE");
+                    if (sessionRole != null && !sessionRole.isBlank()) {
+                        UserRole sRole = UserRole.valueOf(sessionRole.toUpperCase().trim());
+                        if (sRole == UserRole.ANONYMOUS) {
+                            return ANONYMOUS_USER;
+                        }
+                        UserProfile user = findProfileByRole(sRole);
+                        if (user != null) {
+                            return user;
+                        }
+                    }
+                }
             }
         } catch (Exception ignored) {
         }
@@ -253,6 +269,15 @@ public class AuthService {
             );
         }
         this.currentRole = user.role();
+        try {
+            org.springframework.web.context.request.RequestAttributes attribs =
+                    org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            if (attribs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttribs) {
+                jakarta.servlet.http.HttpSession session = servletAttribs.getRequest().getSession(true);
+                session.setAttribute("CINEMIND_ROLE", user.role().name());
+                session.setAttribute("CINEMIND_USER_ID", user.userId());
+            }
+        } catch (Exception ignored) {}
         log.info("User successfully authenticated with verified credentials: {} ({})", user.email(), user.role());
         return user;
     }
@@ -323,6 +348,14 @@ public class AuthService {
         }
         if (role != null) {
             this.currentRole = role;
+            try {
+                org.springframework.web.context.request.RequestAttributes attribs =
+                        org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+                if (attribs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttribs) {
+                    jakarta.servlet.http.HttpSession session = servletAttribs.getRequest().getSession(true);
+                    session.setAttribute("CINEMIND_ROLE", role.name());
+                }
+            } catch (Exception ignored) {}
             UserProfile user = findProfileByRole(role);
             log.info("Active user switched to role: {} ({})", role, user.fullName());
             return user;
@@ -332,6 +365,16 @@ public class AuthService {
 
     public UserProfile logout() {
         this.currentRole = UserRole.ANONYMOUS;
+        try {
+            org.springframework.web.context.request.RequestAttributes attribs =
+                    org.springframework.web.context.request.RequestContextHolder.getRequestAttributes();
+            if (attribs instanceof org.springframework.web.context.request.ServletRequestAttributes servletAttribs) {
+                jakarta.servlet.http.HttpSession session = servletAttribs.getRequest().getSession(false);
+                if (session != null) {
+                    session.invalidate();
+                }
+            }
+        } catch (Exception ignored) {}
         log.info("User logged out. Session transitioned to ANONYMOUS");
         return ANONYMOUS_USER;
     }

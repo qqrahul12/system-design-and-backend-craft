@@ -15,6 +15,7 @@ import {
   ChevronDown,
   Key,
 } from 'lucide-react'
+import { authService, walletService } from '@/services'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -125,23 +126,13 @@ export default function Header() {
       return
     }
     try {
-      const r = await fetch(`${API_BASE}/api/v1/auth/me`)
-      if (r.ok) {
-        const u = await r.json()
-        if (u && u.isAuthenticated && u.role !== 'ANONYMOUS') {
-          setCurrentUser(u)
-        } else {
-          setCurrentUser(null)
-        }
+      const u = await authService.getCurrentUser()
+      if (u && u.isAuthenticated && u.role !== 'ANONYMOUS') {
+        setCurrentUser(u)
+        const w = await walletService.getWalletSummary().catch(() => null)
+        setWalletBalance(w?.balance || 0)
       } else {
         setCurrentUser(null)
-      }
-
-      const wRes = await fetch(`${API_BASE}/api/v1/wallet`)
-      if (wRes.ok) {
-        const w = await wRes.json()
-        setWalletBalance(w.balance || 0)
-      } else {
         setWalletBalance(0)
       }
     } catch {
@@ -248,16 +239,19 @@ export default function Header() {
                   {currentUser?.fullName}
                 </span>
                 <span className="text-[9px] font-mono text-purple-400">
-                  {currentUser?.role === 'VIP_PATRON' ? '👑 VIP Founder'
+                  {currentUser?.roleDisplayName || (
+                    currentUser?.role === 'VIP_PATRON' ? '👑 VIP Member'
                     : currentUser?.role === 'EXECUTIVE_ADMIN' ? '🛡️ Director'
+                    : currentUser?.role === 'CINEMA_MANAGER' ? '🎬 Operations Manager'
                     : currentUser?.role === 'AUDITORIUM_USHER' ? '🎟️ Usher'
-                    : 'Member'}
+                    : 'Member'
+                  )}
                 </span>
               </div>
 
               <div className="relative">
                 <img
-                  src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
+                  src={currentUser?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.fullName || 'User')}&background=7c3aed&color=fff`}
                   alt="Avatar"
                   className="w-7 h-7 rounded-full object-cover border border-purple-500/40"
                 />
@@ -272,7 +266,7 @@ export default function Header() {
               <div className="absolute right-0 mt-2 w-64 rounded-2xl bg-[#141414] border border-[#282828] shadow-2xl p-3 z-50 animate-in fade-in slide-in-from-top-2">
                 <div className="flex items-center gap-3 p-2.5 border-b border-[#222]">
                   <img
-                    src={currentUser?.avatarUrl || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop'}
+                    src={currentUser?.avatarUrl || `https://ui-avatars.com/api/?name=${encodeURIComponent(currentUser?.fullName || 'User')}&background=7c3aed&color=fff`}
                     alt="Avatar"
                     className="w-10 h-10 rounded-xl object-cover border border-[#333]"
                   />
@@ -280,7 +274,7 @@ export default function Header() {
                     <p className="text-xs font-bold text-white truncate">{currentUser?.fullName}</p>
                     <p className="text-[10px] text-[#888] font-mono truncate">{currentUser?.email}</p>
                     <span className="inline-block mt-1 text-[9px] font-mono font-bold px-1.5 py-0.2 rounded bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                      {currentUser?.membershipTier || 'Founder Gold'}
+                      {currentUser?.membershipTier || currentUser?.roleDisplayName || 'Member'}
                     </span>
                   </div>
                 </div>
