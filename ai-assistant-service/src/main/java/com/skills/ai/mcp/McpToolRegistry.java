@@ -463,6 +463,78 @@ public class McpToolRegistry {
                     ));
                 }
         );
+
+        // 16. Add Theatrical Film to Catalog Tool
+        registerTool(
+                McpToolDefinition.builder()
+                        .name("add_movie")
+                        .description("Creates and registers a new theatrical film release in the CineMind movie database with custom pricing, auditorium, showtimes, and critic metadata.")
+                        .inputSchema(Map.of(
+                                "type", "object",
+                                "properties", Map.of(
+                                        "title", Map.of("type", "string", "description", "Title of the movie"),
+                                        "genre", Map.of("type", "string", "description", "Genre, e.g. 'Sci-Fi', 'Action', 'Drama'"),
+                                        "year", Map.of("type", "number", "description", "Release year, e.g. 2026"),
+                                        "price", Map.of("type", "number", "description", "Standard ticket price in USD"),
+                                        "auditorium", Map.of("type", "string", "description", "Auditorium name e.g. 'IMAX 70mm Auditorium 1'"),
+                                        "showtimes", Map.of("type", "string", "description", "Comma-separated showtimes e.g. '2:00 PM, 6:00 PM, 9:30 PM'"),
+                                        "synopsis", Map.of("type", "string", "description", "Plot summary"),
+                                        "director", Map.of("type", "string", "description", "Director name"),
+                                        "rating", Map.of("type", "number", "description", "Audience rating score out of 5.0")
+                                ),
+                                "required", List.of("title", "genre", "price")
+                        ))
+                        .build(),
+                args -> {
+                    String title = (String) args.get("title");
+                    String genre = (String) args.getOrDefault("genre", "Sci-Fi");
+                    Number yearNum = (Number) args.getOrDefault("year", 2026);
+                    Number priceNum = (Number) args.getOrDefault("price", 18.0);
+                    Number ratingNum = (Number) args.getOrDefault("rating", 4.8);
+                    String auditorium = (String) args.getOrDefault("auditorium", "IMAX 70mm Auditorium 1");
+                    String showtimes = (String) args.getOrDefault("showtimes", "1:30 PM, 5:00 PM, 8:45 PM");
+                    String synopsis = (String) args.getOrDefault("synopsis", "A thrilling theatrical presentation.");
+                    String director = (String) args.getOrDefault("director", "Visionary Director");
+
+                    Movie created = movieCatalogService.createMovie(Movie.builder()
+                            .title(title)
+                            .genre(genre)
+                            .year(yearNum != null ? yearNum.intValue() : 2026)
+                            .price(priceNum != null ? priceNum.doubleValue() : 18.0)
+                            .rating(ratingNum != null ? ratingNum.doubleValue() : 4.8)
+                            .auditorium(auditorium)
+                            .showtimes(showtimes)
+                            .synopsis(synopsis)
+                            .director(director)
+                            .status("NOW_SHOWING")
+                            .aiPick(true)
+                            .duration("2h 15m")
+                            .occupancyRate(80)
+                            .suggestedSeats(List.of("B3", "B4", "C3"))
+                            .posterUrl("https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop")
+                            .rottenTomatoes(92)
+                            .metacritic(85)
+                            .imdbRating(8.5)
+                            .criticConsensus(title + " delivers an electrifying and unforgettable cinematic experience.")
+                            .topCriticQuote("\"A monumental theatrical masterpiece.\" — Rolling Stone")
+                            .reviewsCount(240)
+                            .trailerUrl("https://www.youtube.com/embed/zSWdZVtXT7E")
+                            .cast("Ensemble Cast")
+                            .ageRating("PG-13")
+                            .build());
+
+                    return McpToolDefinition.CallResult.text(String.format(
+                            "✅ Movie '%s' (ID: %d) successfully added to CineMind database!\n" +
+                            "• Genre: %s | Year: %d | Ticket: $%.2f | Rating: %.1f\n" +
+                            "• Auditorium: %s\n" +
+                            "• Showtimes: %s\n" +
+                            "• Synopsis: %s",
+                            created.getTitle(), created.getId(), created.getGenre(), created.getYear(),
+                            created.getPrice(), created.getRating(), created.getAuditorium(),
+                            created.getShowtimes(), created.getSynopsis()
+                    ));
+                }
+        );
     }
 
     public Map<String, Object> fetchPublicCinemaInsights() {
