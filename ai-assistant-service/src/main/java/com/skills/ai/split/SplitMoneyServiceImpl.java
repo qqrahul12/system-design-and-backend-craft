@@ -3,6 +3,7 @@ package com.skills.ai.split;
 import com.skills.ai.patterns.adapter.PaymentAdapterRegistry;
 import com.skills.ai.patterns.adapter.PaymentGatewayAdapter;
 import com.skills.ai.patterns.adapter.PaymentResult;
+import com.skills.ai.persistence.queries.SplitMoneySqlQueries;
 import com.skills.ai.wallet.WalletService;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -17,6 +18,8 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
+
+import static com.skills.ai.persistence.queries.SplitMoneySqlQueries.*;
 
 /**
  * Production-grade distributed implementation of SplitMoneyService managing group bill-splitting,
@@ -50,59 +53,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
     private void initDatabase() {
         if (jdbcTemplate != null) {
             try {
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS split_users (
-                        id VARCHAR(64) PRIMARY KEY,
-                        first_name VARCHAR(128) NOT NULL,
-                        last_name VARCHAR(128) NOT NULL,
-                        email VARCHAR(255),
-                        phone VARCHAR(64),
-                        avatar_url TEXT
-                    )
-                """);
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS split_groups (
-                        id VARCHAR(64) PRIMARY KEY,
-                        name VARCHAR(255) NOT NULL,
-                        description TEXT,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                """);
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS split_group_members (
-                        group_id VARCHAR(64) NOT NULL,
-                        user_id VARCHAR(64) NOT NULL,
-                        PRIMARY KEY (group_id, user_id)
-                    )
-                """);
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS split_expenses (
-                        id VARCHAR(64) PRIMARY KEY,
-                        group_id VARCHAR(64),
-                        name VARCHAR(255) NOT NULL,
-                        total_amount DOUBLE PRECISION NOT NULL,
-                        paid_by_user_id VARCHAR(64) NOT NULL,
-                        paid_by_user_name VARCHAR(255) NOT NULL,
-                        expense_type VARCHAR(64) NOT NULL,
-                        reference_type VARCHAR(64),
-                        reference_id VARCHAR(64),
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                """);
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS split_shares (
-                        id VARCHAR(64) PRIMARY KEY,
-                        expense_id VARCHAR(64) NOT NULL,
-                        user_id VARCHAR(64) NOT NULL,
-                        user_name VARCHAR(255) NOT NULL,
-                        share_amount DOUBLE PRECISION NOT NULL,
-                        is_paid BOOLEAN NOT NULL DEFAULT FALSE,
-                        payment_method VARCHAR(64) NOT NULL DEFAULT 'PENDING',
-                        paid_at TIMESTAMP
-                    )
-                """);
-
-                Integer userCount = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM split_users", Integer.class);
+                Integer userCount = jdbcTemplate.queryForObject(COUNT_USERS, Integer.class);
                 if (userCount == null || userCount == 0) {
                     seedDatabase();
                 } else {
@@ -110,7 +61,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
                 }
                 return;
             } catch (Exception e) {
-                log.warn("⚠️ Failed to initialize SplitMoney tables in PostgreSQL, falling back to local memory: {}", e.getMessage());
+                log.warn("⚠️ Failed to check or seed SplitMoney in PostgreSQL, falling back to local memory: {}", e.getMessage());
             }
         }
         seedFallbackData();
@@ -124,20 +75,20 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
 
         for (SplitUser u : List.of(u1, u2, u3, u4)) {
             jdbcTemplate.update(
-                    "INSERT INTO split_users (id, first_name, last_name, email, phone, avatar_url) VALUES (?, ?, ?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
+                    INSERT_USER_IF_NOT_EXISTS,
                     u.id(), u.firstName(), u.lastName(), u.email(), u.phoneNumber(), u.avatarUrl()
             );
         }
 
         jdbcTemplate.update(
-                "INSERT INTO split_groups (id, name, description, created_at) VALUES (?, ?, ?, ?) ON CONFLICT (id) DO NOTHING",
+                INSERT_GROUP_IF_NOT_EXISTS,
                 "grp-imax-squad", "CineMind IMAX VIP Squad", "Weekend film screenings, 70mm re-releases, and gourmet lounge orders.",
                 Timestamp.from(Instant.now().minus(java.time.Duration.ofDays(14)))
         );
 
         for (SplitUser u : List.of(u1, u2, u3, u4)) {
             jdbcTemplate.update(
-                    "INSERT INTO split_group_members (group_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                    INSERT_GROUP_MEMBER_IF_NOT_EXISTS,
                     "grp-imax-squad", u.id()
             );
         }
@@ -187,7 +138,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
     public List<SplitUser> listUsers() {
         if (jdbcTemplate != null) {
             try {
-                return jdbcTemplate.query("SELECT id, first_name, last_name, email, phone, avatar_url FROM split_users", this::mapRowToUser);
+                return jdbcTemplate.query(SELECT_ALL_USERS, this::mapRowToUser);
             } catch (Exception e) {
                 log.warn("⚠️ Error listing users from PostgreSQL: {}", e.getMessage());
             }
@@ -200,7 +151,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (id == null) return Optional.empty();
         if (jdbcTemplate != null) {
             try {
-                List<SplitUser> users = jdbcTemplate.query("SELECT id, first_name, last_name, email, phone, avatar_url FROM split_users WHERE id = ?", this::mapRowToUser, id);
+                List<SplitUser> users = jdbcTemplate.query(SELECT_USER_BY_ID, this::mapRowToUser, id);
                 if (!users.isEmpty()) return Optional.of(users.get(0));
             } catch (Exception e) {
                 log.warn("⚠️ Error getting user {} from PostgreSQL: {}", id, e.getMessage());
@@ -213,11 +164,10 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
     public List<SplitGroup> listGroups() {
         if (jdbcTemplate != null) {
             try {
-                return jdbcTemplate.query("SELECT id, name, description, created_at FROM split_groups", (rs, rowNum) -> {
+                return jdbcTemplate.query(SELECT_ALL_GROUPS, (rs, rowNum) -> {
                     String groupId = rs.getString("id");
                     List<SplitUser> members = jdbcTemplate.query(
-                            "SELECT u.id, u.first_name, u.last_name, u.email, u.phone, u.avatar_url FROM split_users u " +
-                            "JOIN split_group_members m ON u.id = m.user_id WHERE m.group_id = ?",
+                            SELECT_GROUP_MEMBERS,
                             this::mapRowToUser, groupId
                     );
                     return new SplitGroup(
@@ -240,11 +190,10 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (id == null) return Optional.empty();
         if (jdbcTemplate != null) {
             try {
-                List<SplitGroup> list = jdbcTemplate.query("SELECT id, name, description, created_at FROM split_groups WHERE id = ?", (rs, rowNum) -> {
+                List<SplitGroup> list = jdbcTemplate.query(SELECT_GROUP_BY_ID, (rs, rowNum) -> {
                     String groupId = rs.getString("id");
                     List<SplitUser> members = jdbcTemplate.query(
-                            "SELECT u.id, u.first_name, u.last_name, u.email, u.phone, u.avatar_url FROM split_users u " +
-                            "JOIN split_group_members m ON u.id = m.user_id WHERE m.group_id = ?",
+                            SELECT_GROUP_MEMBERS,
                             this::mapRowToUser, groupId
                     );
                     return new SplitGroup(
@@ -282,12 +231,12 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (jdbcTemplate != null) {
             try {
                 jdbcTemplate.update(
-                        "INSERT INTO split_groups (id, name, description, created_at) VALUES (?, ?, ?, ?)",
+                        INSERT_GROUP,
                         groupId, name, description, Timestamp.from(now)
                 );
                 for (SplitUser u : members) {
                     jdbcTemplate.update(
-                            "INSERT INTO split_group_members (group_id, user_id) VALUES (?, ?) ON CONFLICT DO NOTHING",
+                            INSERT_GROUP_MEMBER_IF_NOT_EXISTS,
                             groupId, u.id()
                     );
                 }
@@ -346,12 +295,8 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
 
         if (jdbcTemplate != null) {
             try {
-                jdbcTemplate.update("""
-                    INSERT INTO split_expenses (
-                        id, group_id, name, total_amount, paid_by_user_id, paid_by_user_name,
-                        expense_type, reference_type, reference_id, created_at
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-                """,
+                jdbcTemplate.update(
+                        INSERT_EXPENSE,
                         expenseId, "grp-imax-squad", name, totalAmount, payer.id(), payer.getFullName(),
                         SplitExpenseType.EQUAL.name(), referenceType != null ? referenceType : "CUSTOM",
                         referenceId != null ? referenceId : "REF-GEN", Timestamp.from(now)
@@ -359,11 +304,8 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
 
                 for (UserShare share : shares) {
                     String shareId = "SHR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-                    jdbcTemplate.update("""
-                        INSERT INTO split_shares (
-                            id, expense_id, user_id, user_name, share_amount, is_paid, payment_method, paid_at
-                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    """,
+                    jdbcTemplate.update(
+                            INSERT_SHARE,
                             shareId, expenseId, share.userId(), share.userName(), share.shareAmount(),
                             share.isPaid(), share.paymentMethod(), share.paidAt() != null ? Timestamp.from(share.paidAt()) : null
                     );
@@ -389,12 +331,11 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (jdbcTemplate != null) {
             try {
                 return jdbcTemplate.query(
-                        "SELECT id, group_id, name, total_amount, paid_by_user_id, paid_by_user_name, expense_type, reference_type, reference_id, created_at " +
-                        "FROM split_expenses ORDER BY created_at DESC",
+                        SELECT_ALL_EXPENSES,
                         (rs, rowNum) -> {
                             String expId = rs.getString("id");
                             List<UserShare> shares = jdbcTemplate.query(
-                                    "SELECT user_id, user_name, share_amount, is_paid, payment_method, paid_at FROM split_shares WHERE expense_id = ?",
+                                    SELECT_SHARES_BY_EXPENSE_ID,
                                     this::mapRowToShare, expId
                             );
                             return new SplitExpense(
@@ -425,12 +366,11 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (jdbcTemplate != null) {
             try {
                 List<SplitExpense> list = jdbcTemplate.query(
-                        "SELECT id, group_id, name, total_amount, paid_by_user_id, paid_by_user_name, expense_type, reference_type, reference_id, created_at " +
-                        "FROM split_expenses WHERE id = ?",
+                        SELECT_EXPENSE_BY_ID,
                         (rs, rowNum) -> {
                             String expId = rs.getString("id");
                             List<UserShare> shares = jdbcTemplate.query(
-                                    "SELECT user_id, user_name, share_amount, is_paid, payment_method, paid_at FROM split_shares WHERE expense_id = ?",
+                                    SELECT_SHARES_BY_EXPENSE_ID,
                                     this::mapRowToShare, expId
                             );
                             return new SplitExpense(
@@ -498,7 +438,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (jdbcTemplate != null) {
             try {
                 jdbcTemplate.update(
-                        "UPDATE split_shares SET is_paid = TRUE, payment_method = ?, paid_at = ? WHERE expense_id = ? AND user_id = ?",
+                        UPDATE_SHARE_SETTLED,
                         method, Timestamp.from(now), expenseId, debtorUserId
                 );
                 log.info("💳 [Distributed] Share settled in PostgreSQL: expense={}, user={}, method={}", expenseId, debtorUserId, method);

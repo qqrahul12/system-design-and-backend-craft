@@ -1,5 +1,6 @@
 package com.skills.ai.wallet;
 
+import com.skills.ai.persistence.queries.WalletSqlQueries;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -14,6 +15,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static com.skills.ai.persistence.queries.WalletSqlQueries.*;
 
 /**
  * Distributed, relational PostgreSQL-backed implementation of WalletService managing CineMind's Fintech Digital Wallet (CineCash).
@@ -46,46 +49,19 @@ public class WalletServiceImpl implements WalletService {
     private void initDatabase() {
         if (jdbcTemplate != null) {
             try {
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS wallets (
-                        wallet_id VARCHAR(64) PRIMARY KEY,
-                        currency VARCHAR(16) NOT NULL DEFAULT 'USD',
-                        balance DOUBLE PRECISION NOT NULL DEFAULT 150.00,
-                        updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                """);
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS wallet_transactions (
-                        transaction_id VARCHAR(64) PRIMARY KEY,
-                        wallet_id VARCHAR(64) NOT NULL,
-                        type VARCHAR(32) NOT NULL,
-                        amount DOUBLE PRECISION NOT NULL,
-                        balance_after DOUBLE PRECISION NOT NULL,
-                        description TEXT,
-                        created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-                    )
-                """);
-
                 Integer count = jdbcTemplate.queryForObject(
-                        "SELECT COUNT(*) FROM wallets WHERE wallet_id = ?", Integer.class, DEFAULT_WALLET_ID
+                        COUNT_WALLET_BY_ID, Integer.class, DEFAULT_WALLET_ID
                 );
                 if (count == null || count == 0) {
-                    jdbcTemplate.update(
-                            "INSERT INTO wallets (wallet_id, currency, balance, updated_at) VALUES (?, 'USD', 150.00, CURRENT_TIMESTAMP)",
-                            DEFAULT_WALLET_ID
-                    );
-                    jdbcTemplate.update(
-                            "INSERT INTO wallet_transactions (transaction_id, wallet_id, type, amount, balance_after, description, created_at) " +
-                            "VALUES (?, ?, 'INITIAL_GRANT', 150.00, 150.00, 'CineMind VIP Welcome Bonus & Stored Value Grant', CURRENT_TIMESTAMP)",
-                            "TXN-WLT-INIT-001", DEFAULT_WALLET_ID
-                    );
+                    jdbcTemplate.update(INSERT_INITIAL_WALLET, DEFAULT_WALLET_ID);
+                    jdbcTemplate.update(INSERT_INITIAL_TRANSACTION, "TXN-WLT-INIT-001", DEFAULT_WALLET_ID);
                     log.info("💳 Initialized distributed CineCash wallet {} with $150.00 balance in PostgreSQL", DEFAULT_WALLET_ID);
                 } else {
                     log.info("💳 Found existing distributed CineCash wallet {} in PostgreSQL (SSOT)", DEFAULT_WALLET_ID);
                 }
                 syncRedisCache();
             } catch (Exception e) {
-                log.warn("⚠️ Failed to initialize wallets table in PostgreSQL, falling back to local memory: {}", e.getMessage());
+                log.warn("⚠️ Failed to check or initialize wallet in PostgreSQL, falling back to local memory: {}", e.getMessage());
             }
         } else {
             seedInitialFallback();
@@ -107,7 +83,7 @@ public class WalletServiceImpl implements WalletService {
         if (redisTemplate != null && jdbcTemplate != null) {
             try {
                 Double bal = jdbcTemplate.queryForObject(
-                        "SELECT balance FROM wallets WHERE wallet_id = ?", Double.class, DEFAULT_WALLET_ID
+                        SELECT_BALANCE_BY_ID, Double.class, DEFAULT_WALLET_ID
                 );
                 if (bal != null) {
                     redisTemplate.opsForValue().set(REDIS_BALANCE_KEY, String.valueOf(bal), Duration.ofMinutes(15));
@@ -143,14 +119,13 @@ public class WalletServiceImpl implements WalletService {
                 }
                 if (currentBalance == null) {
                     currentBalance = jdbcTemplate.queryForObject(
-                            "SELECT balance FROM wallets WHERE wallet_id = ?", Double.class, DEFAULT_WALLET_ID
+                            SELECT_BALANCE_BY_ID, Double.class, DEFAULT_WALLET_ID
                     );
                 }
                 double bal = (currentBalance != null) ? Math.round(currentBalance * 100.0) / 100.0 : 0.0;
 
                 List<WalletTransaction> txns = jdbcTemplate.query(
-                        "SELECT transaction_id, type, amount, balance_after, description, created_at " +
-                        "FROM wallet_transactions WHERE wallet_id = ? ORDER BY created_at DESC LIMIT 50",
+                        SELECT_RECENT_TRANSACTIONS,
                         this::mapRowToTransaction,
                         DEFAULT_WALLET_ID
                 );
@@ -179,14 +154,14 @@ public class WalletServiceImpl implements WalletService {
         if (jdbcTemplate != null) {
             // Pessimistic Row Lock: SELECT ... FOR UPDATE ensures zero concurrent race conditions across cluster pods
             Double currentBalance = jdbcTemplate.queryForObject(
-                    "SELECT balance FROM wallets WHERE wallet_id = ? FOR UPDATE", Double.class, DEFAULT_WALLET_ID
+                    SELECT_BALANCE_FOR_UPDATE, Double.class, DEFAULT_WALLET_ID
             );
             double current = (currentBalance != null) ? currentBalance : 0.0;
             double updated = Math.round((current + amount) * 100.0) / 100.0;
             Instant now = Instant.now();
 
             jdbcTemplate.update(
-                    "UPDATE wallets SET balance = ?, updated_at = ? WHERE wallet_id = ?",
+                    UPDATE_WALLET_BALANCE,
                     updated, Timestamp.from(now), DEFAULT_WALLET_ID
             );
 
@@ -194,9 +169,8 @@ public class WalletServiceImpl implements WalletService {
             String desc = "Wallet reload via " + (paymentMethod != null ? paymentMethod : "Stripe Card ending in 4242");
 
             jdbcTemplate.update(
-                    "INSERT INTO wallet_transactions (transaction_id, wallet_id, type, amount, balance_after, description, created_at) " +
-                    "VALUES (?, ?, 'TOP_UP', ?, ?, ?, ?)",
-                    txnId, DEFAULT_WALLET_ID, amount, updated, desc, Timestamp.from(now)
+                    INSERT_WALLET_TRANSACTION,
+                    txnId, DEFAULT_WALLET_ID, "TOP_UP", amount, updated, desc, Timestamp.from(now)
             );
 
             updateRedisCache(updated);
@@ -230,7 +204,7 @@ public class WalletServiceImpl implements WalletService {
         if (jdbcTemplate != null) {
             // Pessimistic Row Lock: SELECT ... FOR UPDATE eliminates double-spend across cluster nodes
             Double currentBalance = jdbcTemplate.queryForObject(
-                    "SELECT balance FROM wallets WHERE wallet_id = ? FOR UPDATE", Double.class, DEFAULT_WALLET_ID
+                    SELECT_BALANCE_FOR_UPDATE, Double.class, DEFAULT_WALLET_ID
             );
             double current = (currentBalance != null) ? currentBalance : 0.0;
             if (current < amount) {
@@ -240,7 +214,7 @@ public class WalletServiceImpl implements WalletService {
             Instant now = Instant.now();
 
             jdbcTemplate.update(
-                    "UPDATE wallets SET balance = ?, updated_at = ? WHERE wallet_id = ?",
+                    UPDATE_WALLET_BALANCE,
                     updated, Timestamp.from(now), DEFAULT_WALLET_ID
             );
 
@@ -249,8 +223,7 @@ public class WalletServiceImpl implements WalletService {
             String desc = (description != null) ? description : "CineMind Purchase";
 
             jdbcTemplate.update(
-                    "INSERT INTO wallet_transactions (transaction_id, wallet_id, type, amount, balance_after, description, created_at) " +
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    INSERT_WALLET_TRANSACTION,
                     txnId, DEFAULT_WALLET_ID, txnType, amount, updated, desc, Timestamp.from(now)
             );
 
@@ -286,14 +259,14 @@ public class WalletServiceImpl implements WalletService {
 
         if (jdbcTemplate != null) {
             Double currentBalance = jdbcTemplate.queryForObject(
-                    "SELECT balance FROM wallets WHERE wallet_id = ? FOR UPDATE", Double.class, DEFAULT_WALLET_ID
+                    SELECT_BALANCE_FOR_UPDATE, Double.class, DEFAULT_WALLET_ID
             );
             double current = (currentBalance != null) ? currentBalance : 0.0;
             double updated = Math.round((current + amount) * 100.0) / 100.0;
             Instant now = Instant.now();
 
             jdbcTemplate.update(
-                    "UPDATE wallets SET balance = ?, updated_at = ? WHERE wallet_id = ?",
+                    UPDATE_WALLET_BALANCE,
                     updated, Timestamp.from(now), DEFAULT_WALLET_ID
             );
 
@@ -301,9 +274,8 @@ public class WalletServiceImpl implements WalletService {
             String desc = (reason != null) ? reason : "Ticket/Order Refund";
 
             jdbcTemplate.update(
-                    "INSERT INTO wallet_transactions (transaction_id, wallet_id, type, amount, balance_after, description, created_at) " +
-                    "VALUES (?, ?, 'REFUND', ?, ?, ?, ?)",
-                    txnId, DEFAULT_WALLET_ID, amount, updated, desc, Timestamp.from(now)
+                    INSERT_WALLET_TRANSACTION,
+                    txnId, DEFAULT_WALLET_ID, "REFUND", amount, updated, desc, Timestamp.from(now)
             );
 
             updateRedisCache(updated);

@@ -1,5 +1,6 @@
 package com.skills.ai.movie;
 
+import com.skills.ai.persistence.queries.MovieSqlQueries;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,6 +15,8 @@ import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
+
+import static com.skills.ai.persistence.queries.MovieSqlQueries.*;
 
 /**
  * Relational PostgreSQL-backed implementation of MovieCatalogService managing CineMind's live theatrical catalog.
@@ -43,38 +46,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
     private void initDatabase() {
         if (jdbcTemplate != null) {
             try {
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS movies (
-                        id BIGINT PRIMARY KEY,
-                        title VARCHAR(255) NOT NULL,
-                        genre VARCHAR(100),
-                        rating DOUBLE PRECISION,
-                        year INT,
-                        release_date VARCHAR(64),
-                        duration VARCHAR(64),
-                        price DOUBLE PRECISION,
-                        ai_pick BOOLEAN,
-                        synopsis TEXT,
-                        suggested_seats_csv VARCHAR(255),
-                        poster_url TEXT,
-                        auditorium VARCHAR(255),
-                        status VARCHAR(64),
-                        occupancy_rate INT,
-                        showtimes VARCHAR(255),
-                        rotten_tomatoes INT,
-                        metacritic INT,
-                        imdb_rating DOUBLE PRECISION,
-                        critic_consensus TEXT,
-                        top_critic_quote TEXT,
-                        reviews_count INT,
-                        trailer_url TEXT,
-                        director VARCHAR(255),
-                        cast_members TEXT,
-                        age_rating VARCHAR(64)
-                    )
-                """);
-
-                Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM movies", Integer.class);
+                Integer count = jdbcTemplate.queryForObject(COUNT_MOVIES, Integer.class);
                 if (count != null && count > 0) {
                     log.info("🎬 Found {} persisted movies in PostgreSQL (Single Source of Truth). Zero hardcoded startup seeding needed.", count);
                     syncSequenceFromDatabase();
@@ -92,7 +64,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
     private void syncSequenceFromDatabase() {
         if (jdbcTemplate == null) return;
         try {
-            Long maxId = jdbcTemplate.queryForObject("SELECT COALESCE(MAX(id), 100) FROM movies", Long.class);
+            Long maxId = jdbcTemplate.queryForObject(SELECT_MAX_ID, Long.class);
             if (maxId != null && maxId > 100) {
                 idSequence.set(maxId);
             }
@@ -139,40 +111,8 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
 
     private int saveMovieToDatabase(Movie m) {
         String seatsCsv = m.getSuggestedSeats() != null ? String.join(", ", m.getSuggestedSeats()) : "C3, C4";
-        return jdbcTemplate.update("""
-            INSERT INTO movies (
-                id, title, genre, rating, year, release_date, duration, price, ai_pick,
-                synopsis, suggested_seats_csv, poster_url, auditorium, status, occupancy_rate,
-                showtimes, rotten_tomatoes, metacritic, imdb_rating, critic_consensus,
-                top_critic_quote, reviews_count, trailer_url, director, cast_members, age_rating
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT (id) DO UPDATE SET
-                title = EXCLUDED.title,
-                genre = EXCLUDED.genre,
-                rating = EXCLUDED.rating,
-                year = EXCLUDED.year,
-                release_date = EXCLUDED.release_date,
-                duration = EXCLUDED.duration,
-                price = EXCLUDED.price,
-                ai_pick = EXCLUDED.ai_pick,
-                synopsis = EXCLUDED.synopsis,
-                suggested_seats_csv = EXCLUDED.suggested_seats_csv,
-                poster_url = EXCLUDED.poster_url,
-                auditorium = EXCLUDED.auditorium,
-                status = EXCLUDED.status,
-                occupancy_rate = EXCLUDED.occupancy_rate,
-                showtimes = EXCLUDED.showtimes,
-                rotten_tomatoes = EXCLUDED.rotten_tomatoes,
-                metacritic = EXCLUDED.metacritic,
-                imdb_rating = EXCLUDED.imdb_rating,
-                critic_consensus = EXCLUDED.critic_consensus,
-                top_critic_quote = EXCLUDED.top_critic_quote,
-                reviews_count = EXCLUDED.reviews_count,
-                trailer_url = EXCLUDED.trailer_url,
-                director = EXCLUDED.director,
-                cast_members = EXCLUDED.cast_members,
-                age_rating = EXCLUDED.age_rating
-        """,
+        return jdbcTemplate.update(
+            UPSERT_MOVIE,
             m.getId(), m.getTitle(), m.getGenre(), m.getRating(), m.getYear(), m.getReleaseDate(),
             m.getDuration(), m.getPrice(), m.getAiPick(), m.getSynopsis(), seatsCsv,
             m.getPosterUrl(), m.getAuditorium(), m.getStatus(), m.getOccupancyRate(),
@@ -328,7 +268,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
     public List<Movie> getAllMovies(String genre, String status, String search) {
         if (jdbcTemplate != null) {
             try {
-                StringBuilder sql = new StringBuilder("SELECT * FROM movies WHERE 1=1");
+                StringBuilder sql = new StringBuilder(BASE_SELECT_ALL);
                 List<Object> params = new ArrayList<>();
                 if (genre != null && !genre.isBlank()) {
                     sql.append(" AND LOWER(genre) = LOWER(?)");
@@ -364,7 +304,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         if (id == null) return Optional.empty();
         if (jdbcTemplate != null) {
             try {
-                List<Movie> list = jdbcTemplate.query("SELECT * FROM movies WHERE id = ?", this::mapRow, id);
+                List<Movie> list = jdbcTemplate.query(SELECT_MOVIE_BY_ID, this::mapRow, id);
                 if (!list.isEmpty()) {
                     return Optional.of(list.get(0));
                 }
@@ -456,7 +396,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         }
         updated.setId(id);
         if (jdbcTemplate != null) {
-            Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM movies WHERE id = ?", Integer.class, id);
+            Integer count = jdbcTemplate.queryForObject(COUNT_MOVIE_BY_ID, Integer.class, id);
             if (count == null || count == 0) {
                 return Optional.empty();
             }
@@ -478,7 +418,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
     public boolean deleteMovie(Long id) {
         if (id == null) return false;
         if (jdbcTemplate != null) {
-            int rows = jdbcTemplate.update("DELETE FROM movies WHERE id = ?", id);
+            int rows = jdbcTemplate.update(DELETE_MOVIE_BY_ID, id);
             if (rows > 0) {
                 log.info("🗑️ Deleted movie from PostgreSQL: id={}", id);
                 return true;

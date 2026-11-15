@@ -2,6 +2,8 @@ package com.skills.ai.concessions;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.skills.ai.persistence.queries.ConcessionSqlQueries;
+import com.skills.ai.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -19,6 +21,8 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
+
+import static com.skills.ai.persistence.queries.ConcessionSqlQueries.*;
 
 /**
  * Relational database-backed implementation of ConcessionsService managing CineMind Gourmet Concessions,
@@ -253,16 +257,10 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         double orderTotal = (total > 0) ? total : 18.50;
         String seat = (deliverySeat != null && !deliverySeat.isBlank()) ? deliverySeat : "Express VIP Pickup Counter";
 
-        String itemsJson;
-        try {
-            itemsJson = objectMapper.writeValueAsString(orderItems);
-        } catch (Exception e) {
-            log.error("Failed to serialize items to JSON: {}", e.getMessage());
-            itemsJson = "[]";
-        }
+        String itemsJson = JsonUtils.toJsonOrFallback(orderItems, "[]");
 
         jdbcTemplate.update(
-                "INSERT INTO concession_orders (order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                INSERT_ORDER,
                 orderId, itemsJson, seat, orderTotal, "PREPARING", 8, Timestamp.from(orderTime)
         );
 
@@ -285,7 +283,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
     @Transactional
     public Optional<ConcessionOrder> updateOrderStatus(String orderId, String newStatus) {
         List<ConcessionOrder> matches = jdbcTemplate.query(
-                "SELECT order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at FROM concession_orders WHERE order_id = ?",
+                SELECT_ORDER_BY_ID,
                 this::mapRowToOrder,
                 orderId
         );
@@ -302,7 +300,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         };
 
         jdbcTemplate.update(
-                "UPDATE concession_orders SET status = ?, estimated_minutes = ? WHERE order_id = ?",
+                UPDATE_ORDER_STATUS,
                 cleanStatus, newEst, orderId
         );
 
@@ -324,21 +322,14 @@ public class ConcessionsServiceImpl implements ConcessionsService {
     @Override
     public List<ConcessionOrder> listOrders() {
         return jdbcTemplate.query(
-                "SELECT order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at FROM concession_orders ORDER BY created_at DESC",
+                SELECT_ALL_ORDERS,
                 this::mapRowToOrder
         );
     }
 
     private ConcessionOrder mapRowToOrder(ResultSet rs, int rowNum) throws SQLException {
         String itemsJson = rs.getString("items_json");
-        List<Map<String, Object>> items = List.of();
-        if (itemsJson != null && !itemsJson.isBlank()) {
-            try {
-                items = objectMapper.readValue(itemsJson, new TypeReference<List<Map<String, Object>>>() {});
-            } catch (Exception e) {
-                log.warn("Could not deserialize concession order items JSON: {}", e.getMessage());
-            }
-        }
+        List<Map<String, Object>> items = JsonUtils.fromJsonListOfMaps(itemsJson);
         Timestamp ts = rs.getTimestamp("created_at");
         Instant createdAt = (ts != null) ? ts.toInstant() : Instant.now();
 

@@ -2,6 +2,8 @@ package com.skills.ai.ticket;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.skills.ai.persistence.queries.TicketSqlQueries;
+import com.skills.ai.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -20,6 +22,8 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
+
+import static com.skills.ai.persistence.queries.TicketSqlQueries.*;
 
 /**
  * Enterprise Service Implementation for Digital Pass Management.
@@ -52,7 +56,7 @@ public class TicketServiceImpl implements TicketService {
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
         this.signatureService = signatureService;
-        this.objectMapper = (objectMapper != null) ? objectMapper : new ObjectMapper();
+        this.objectMapper = (objectMapper != null) ? objectMapper : JsonUtils.getMapper();
 
         initClusterPubSubListener(listenerContainer, seatEventsTopic);
     }
@@ -306,7 +310,7 @@ public class TicketServiceImpl implements TicketService {
         );
 
         jdbcTemplate.update(
-                "INSERT INTO tickets (ticket_id, movie_title, show_time, format, auditorium, seats_csv, total_paid, qr_payload, signature, status, issued_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                INSERT_TICKET,
                 ticketId, safeTitle, showTimeVal, formatVal, audVal, String.join(",", safeSeats), totalPaid, ticket.qrPayload(), signature, "ISSUED", Timestamp.from(issueTime)
         );
 
@@ -326,7 +330,7 @@ public class TicketServiceImpl implements TicketService {
     @Override
     public Optional<DigitalTicket> getTicket(String ticketId) {
         List<DigitalTicket> results = jdbcTemplate.query(
-                "SELECT ticket_id, movie_title, show_time, format, auditorium, seats_csv, total_paid, qr_payload, signature, status, issued_at FROM tickets WHERE ticket_id = ?",
+                SELECT_TICKET_BY_ID,
                 this::mapRowToTicket,
                 ticketId
         );
@@ -336,7 +340,7 @@ public class TicketServiceImpl implements TicketService {
     @Override
     public List<DigitalTicket> listTickets() {
         return jdbcTemplate.query(
-                "SELECT ticket_id, movie_title, show_time, format, auditorium, seats_csv, total_paid, qr_payload, signature, status, issued_at FROM tickets ORDER BY issued_at DESC",
+                SELECT_ALL_TICKETS,
                 this::mapRowToTicket
         );
     }
@@ -359,7 +363,7 @@ public class TicketServiceImpl implements TicketService {
         }
 
         jdbcTemplate.update(
-                "UPDATE tickets SET status = 'CHECKED_IN' WHERE ticket_id = ?",
+                UPDATE_TICKET_CHECKED_IN,
                 ticketId
         );
 
@@ -384,7 +388,7 @@ public class TicketServiceImpl implements TicketService {
 
     @Override
     public boolean deleteTicket(String ticketId) {
-        int rows = jdbcTemplate.update("DELETE FROM tickets WHERE ticket_id = ?", ticketId);
+        int rows = jdbcTemplate.update(DELETE_TICKET_BY_ID, ticketId);
         if (rows > 0) {
             log.info("Cancelled/refunded ticket in DB: id={}", ticketId);
             return true;

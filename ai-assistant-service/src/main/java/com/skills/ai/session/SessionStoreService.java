@@ -1,7 +1,7 @@
 package com.skills.ai.session;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
+import com.skills.ai.persistence.queries.SessionSqlQueries;
+import com.skills.ai.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -15,50 +15,38 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
+import static com.skills.ai.persistence.queries.SessionSqlQueries.*;
+
 /**
  * Distributed Service managing user multi-turn sessions, conversation context,
  * and swarm run logs across page reloads and distributed cluster nodes.
+ * Follows Single Responsibility Principle (SRP) by delegating SQL persistence definitions
+ * to SessionSqlQueries and JSON processing to JsonUtils.
  */
 @Slf4j
 @Service
 public class SessionStoreService {
 
     private final JdbcTemplate jdbcTemplate;
-    private final ObjectMapper objectMapper;
     private final Map<String, SessionSummary> fallbackSessions = new ConcurrentHashMap<>();
 
     public SessionStoreService(
-            @Autowired(required = false) JdbcTemplate jdbcTemplate,
-            @Autowired(required = false) ObjectMapper objectMapper
+            @Autowired(required = false) JdbcTemplate jdbcTemplate
     ) {
         this.jdbcTemplate = jdbcTemplate;
-        this.objectMapper = (objectMapper != null) ? objectMapper : new ObjectMapper();
         initDatabase();
     }
 
     private void initDatabase() {
         if (jdbcTemplate != null) {
             try {
-                jdbcTemplate.execute("""
-                    CREATE TABLE IF NOT EXISTS chat_sessions (
-                        session_id VARCHAR(64) PRIMARY KEY,
-                        title VARCHAR(255) NOT NULL,
-                        session_type VARCHAR(64) NOT NULL,
-                        last_active_at TIMESTAMP NOT NULL,
-                        created_at TIMESTAMP NOT NULL,
-                        message_count INT NOT NULL DEFAULT 0,
-                        summary_text TEXT,
-                        messages_json TEXT
-                    )
-                """);
-
-                Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM chat_sessions", Integer.class);
+                Integer count = jdbcTemplate.queryForObject(COUNT_SESSIONS, Integer.class);
                 if (count != null && count > 0) {
                     log.info("💬 Found {} persisted chat/swarm sessions in PostgreSQL (SSOT). Zero startup seeding needed.", count);
                     return;
                 }
             } catch (Exception e) {
-                log.warn("⚠️ Failed to initialize chat_sessions table in PostgreSQL, falling back to local memory: {}", e.getMessage());
+                log.warn("⚠️ Failed to check chat_sessions table in PostgreSQL, falling back to local memory: {}", e.getMessage());
             }
         }
         seedInitialSessions();
@@ -68,8 +56,7 @@ public class SessionStoreService {
         if (jdbcTemplate != null) {
             try {
                 return jdbcTemplate.query(
-                        "SELECT session_id, title, session_type, last_active_at, created_at, message_count, summary_text, messages_json " +
-                        "FROM chat_sessions ORDER BY last_active_at DESC",
+                        SELECT_ALL_SESSIONS,
                         this::mapRowToSession
                 );
             } catch (Exception e) {
@@ -86,8 +73,7 @@ public class SessionStoreService {
         if (jdbcTemplate != null) {
             try {
                 List<SessionSummary> results = jdbcTemplate.query(
-                        "SELECT session_id, title, session_type, last_active_at, created_at, message_count, summary_text, messages_json " +
-                        "FROM chat_sessions WHERE session_id = ?",
+                        SELECT_SESSION_BY_ID,
                         this::mapRowToSession,
                         id
                 );
@@ -107,22 +93,9 @@ public class SessionStoreService {
         if (summary == null) return null;
         if (jdbcTemplate != null) {
             try {
-                String json = "[]";
-                if (summary.events() != null) {
-                    json = objectMapper.writeValueAsString(summary.events());
-                }
-                jdbcTemplate.update("""
-                    INSERT INTO chat_sessions (
-                        session_id, title, session_type, last_active_at, created_at, message_count, summary_text, messages_json
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                    ON CONFLICT (session_id) DO UPDATE SET
-                        title = EXCLUDED.title,
-                        session_type = EXCLUDED.session_type,
-                        last_active_at = EXCLUDED.last_active_at,
-                        message_count = EXCLUDED.message_count,
-                        summary_text = EXCLUDED.summary_text,
-                        messages_json = EXCLUDED.messages_json
-                """,
+                String json = JsonUtils.toJsonOrFallback(summary.events(), "[]");
+                jdbcTemplate.update(
+                        UPSERT_SESSION,
                         summary.sessionId(),
                         summary.title(),
                         summary.type() != null ? summary.type() : "CHAT",
@@ -149,7 +122,7 @@ public class SessionStoreService {
         if (id == null) return false;
         if (jdbcTemplate != null) {
             try {
-                int affected = jdbcTemplate.update("DELETE FROM chat_sessions WHERE session_id = ?", id);
+                int affected = jdbcTemplate.update(DELETE_SESSION_BY_ID, id);
                 return affected > 0;
             } catch (Exception e) {
                 log.warn("⚠️ Failed to delete session {} from PostgreSQL: {}", id, e.getMessage());
@@ -160,12 +133,7 @@ public class SessionStoreService {
 
     private SessionSummary mapRowToSession(ResultSet rs, int rowNum) throws SQLException {
         String json = rs.getString("messages_json");
-        List<Map<String, Object>> events = List.of();
-        if (json != null && !json.isBlank()) {
-            try {
-                events = objectMapper.readValue(json, new TypeReference<List<Map<String, Object>>>() {});
-            } catch (Exception ignored) {}
-        }
+        List<Map<String, Object>> events = JsonUtils.fromJsonListOfMaps(json);
 
         return new SessionSummary(
                 rs.getString("session_id"),
