@@ -19,7 +19,7 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
-import { sessionService, SessionSummary } from '@/services'
+import { sessionService, llmopsService, SessionSummary } from '@/services'
 
 interface Message {
   id: string
@@ -38,11 +38,6 @@ const WELCOME_MESSAGE: Message = {
   model: 'gemini-2.0-flash',
   timestamp: new Date(),
 }
-
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
 
 // ── Typing indicator ─────────────────────────────────────────────────────────
 function TypingIndicator() {
@@ -457,10 +452,7 @@ export default function ChatPage() {
       const controller = new AbortController()
       abortRef.current = controller
 
-      const response = await fetch(
-        `${API_BASE}/api/v1/chat/stream?message=${encodeURIComponent(text)}&provider=${provider}`,
-        { signal: controller.signal },
-      )
+      const response = await llmopsService.streamChatMessage(text, provider, controller.signal)
 
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}: ${response.statusText}`)
@@ -545,7 +537,7 @@ export default function ChatPage() {
           {
             id: `error-${Date.now()}`,
             role: 'assistant' as const,
-            content: `⚠️ Connection error: ${errorText}\n\nMake sure the backend is running at \`${API_BASE}\`.`,
+            content: `⚠️ Connection error: ${errorText}\n\nMake sure the CineMind AI Assistant backend is running.`,
             timestamp: new Date(),
           },
         ]
