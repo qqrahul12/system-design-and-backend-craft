@@ -1,16 +1,20 @@
 package com.skills.ai.movie;
 
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.skills.ai.persistence.queries.MovieSqlQueries;
+import com.skills.ai.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
@@ -21,12 +25,18 @@ import static com.skills.ai.persistence.queries.MovieSqlQueries.*;
 /**
  * Relational PostgreSQL-backed implementation of MovieCatalogService managing CineMind's live theatrical catalog.
  * Follows Single Source of Truth architecture and strict transactional boundaries to eliminate dual-write hazards.
+ * Features L2 Distributed Redis caching with explicit 15m TTLs and eviction on catalog mutations.
  */
 @Slf4j
 @Service
 public class MovieCatalogServiceImpl implements MovieCatalogService {
 
+    private static final String REDIS_KEY_MOVIES_ALL = "cinemind:cache:movies:all";
+    private static final String REDIS_KEY_MOVIE_PREFIX = "cinemind:cache:movie:";
+    private static final Duration MOVIE_CACHE_TTL = Duration.ofMinutes(15);
+
     private final JdbcTemplate jdbcTemplate;
+    private final StringRedisTemplate redisTemplate;
     private final Map<Long, Movie> movieStore = new ConcurrentHashMap<>();
     private final AtomicLong idSequence = new AtomicLong(100);
     private final ChatClient geminiChatClient;
@@ -34,10 +44,12 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
 
     public MovieCatalogServiceImpl(
             @Autowired(required = false) JdbcTemplate jdbcTemplate,
+            @Autowired(required = false) StringRedisTemplate redisTemplate,
             @Autowired(required = false) @Qualifier("geminiChatClient") ChatClient geminiChatClient,
             @Autowired(required = false) @Qualifier("groqChatClient") ChatClient groqChatClient
     ) {
         this.jdbcTemplate = jdbcTemplate;
+        this.redisTemplate = redisTemplate;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
         initDatabase();
@@ -264,8 +276,42 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         return movie;
     }
 
+    private void evictMovieCaches(Long movieId) {
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.delete(REDIS_KEY_MOVIES_ALL);
+                if (movieId != null) {
+                    redisTemplate.delete(REDIS_KEY_MOVIE_PREFIX + movieId);
+                }
+                log.debug("⚡ [Redis Cache Evict] Evicted movie caches (movieId={})", movieId);
+            } catch (Exception e) {
+                log.debug("Redis movie cache eviction skipped: {}", e.getMessage());
+            }
+        }
+    }
+
     @Override
     public List<Movie> getAllMovies(String genre, String status, String search) {
+        boolean isFullCatalog = (genre == null || genre.isBlank()) &&
+                (status == null || status.isBlank()) &&
+                (search == null || search.isBlank());
+
+        // Fast-path: check distributed Redis cache for full catalog queries
+        if (isFullCatalog && redisTemplate != null) {
+            try {
+                String cached = redisTemplate.opsForValue().get(REDIS_KEY_MOVIES_ALL);
+                if (cached != null && !cached.isBlank()) {
+                    List<Movie> cachedList = JsonUtils.fromJson(cached, new TypeReference<List<Movie>>() {});
+                    if (cachedList != null && !cachedList.isEmpty()) {
+                        log.debug("⚡ [Redis Cache HIT] Retrieved {} movies from Redis cache in <2ms", cachedList.size());
+                        return cachedList;
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis movie cache check skipped: {}", e.getMessage());
+            }
+        }
+
         if (jdbcTemplate != null) {
             try {
                 StringBuilder sql = new StringBuilder(BASE_SELECT_ALL);
@@ -286,7 +332,17 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                     params.add(pattern);
                 }
                 sql.append(" ORDER BY id ASC");
-                return jdbcTemplate.query(sql.toString(), this::mapRow, params.toArray());
+                List<Movie> movies = jdbcTemplate.query(sql.toString(), this::mapRow, params.toArray());
+
+                if (isFullCatalog && redisTemplate != null && !movies.isEmpty()) {
+                    try {
+                        redisTemplate.opsForValue().set(REDIS_KEY_MOVIES_ALL, JsonUtils.toJson(movies), MOVIE_CACHE_TTL);
+                        log.debug("⚡ [Redis Cache SET] Cached {} movies in Redis (TTL: 15m)", movies.size());
+                    } catch (Exception e) {
+                        log.debug("Redis movie cache save skipped: {}", e.getMessage());
+                    }
+                }
+                return movies;
             } catch (Exception e) {
                 log.warn("⚠️ Error reading movies from PostgreSQL, falling back to local store: {}", e.getMessage());
             }
@@ -302,11 +358,35 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
     @Override
     public Optional<Movie> getMovieById(Long id) {
         if (id == null) return Optional.empty();
+
+        // Fast-path: check distributed Redis cache for movie details
+        String cacheKey = REDIS_KEY_MOVIE_PREFIX + id;
+        if (redisTemplate != null) {
+            try {
+                String cached = redisTemplate.opsForValue().get(cacheKey);
+                if (cached != null && !cached.isBlank()) {
+                    Movie movie = JsonUtils.fromJson(cached, Movie.class);
+                    if (movie != null) {
+                        log.debug("⚡ [Redis Cache HIT] Retrieved movie {} ('{}') from Redis in <2ms", id, movie.getTitle());
+                        return Optional.of(movie);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis movie detail check skipped: {}", e.getMessage());
+            }
+        }
+
         if (jdbcTemplate != null) {
             try {
                 List<Movie> list = jdbcTemplate.query(SELECT_MOVIE_BY_ID, this::mapRow, id);
                 if (!list.isEmpty()) {
-                    return Optional.of(list.get(0));
+                    Movie movie = list.get(0);
+                    if (redisTemplate != null) {
+                        try {
+                            redisTemplate.opsForValue().set(cacheKey, JsonUtils.toJson(movie), MOVIE_CACHE_TTL);
+                        } catch (Exception ignored) {}
+                    }
+                    return Optional.of(movie);
                 }
                 return Optional.empty();
             } catch (Exception e) {
@@ -380,6 +460,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         }
         if (jdbcTemplate != null) {
             saveMovieToDatabase(movie);
+            evictMovieCaches(movie.getId());
             log.info("🎬 Created & persisted movie in PostgreSQL (SSOT): id={}, title='{}', trailer='{}'", movie.getId(), movie.getTitle(), movie.getTrailerUrl());
         } else {
             movieStore.put(movie.getId(), movie);
@@ -401,6 +482,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 return Optional.empty();
             }
             saveMovieToDatabase(updated);
+            evictMovieCaches(id);
             log.info("✏️ Updated & persisted movie in PostgreSQL (SSOT): id={}, title='{}'", id, updated.getTitle());
             return Optional.of(updated);
         } else {
@@ -420,6 +502,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         if (jdbcTemplate != null) {
             int rows = jdbcTemplate.update(DELETE_MOVIE_BY_ID, id);
             if (rows > 0) {
+                evictMovieCaches(id);
                 log.info("🗑️ Deleted movie from PostgreSQL: id={}", id);
                 return true;
             }
@@ -611,6 +694,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 "\"Genuinely terrifying, ingeniously plotted, and breathtakingly audacious.\" — Bloody Disgusting", 380,
                 "https://www.youtube.com/embed/kA244xewjcI", "Zach Cregger", "Josh Brolin, Julia Garner, Alden Ehrenreich, Benedict Wong", "R"));
 
+        evictMovieCaches(null);
         log.info("🍿 Ingested {} real-time {} theatrical blockbuster movies into CineMind database", ingested.size(), year);
         return ingested;
     }
