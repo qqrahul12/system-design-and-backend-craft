@@ -997,8 +997,8 @@ REASON: <1 sentence why it matches>`
     const rec = getSmartExperienceRecommendation(movie)
     setSelectedCinemaId(rec.venueId)
 
-    const times = movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : ['7:30 PM']
-    const time = customShowtime || times[0] || '7:30 PM'
+    const times = movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : []
+    const time = customShowtime || times[0] || ''
     setSelectedShowtime(time)
 
     const defaultFmt =

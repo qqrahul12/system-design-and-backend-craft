@@ -808,51 +808,20 @@ function ConcessionsContent() {
           </div>
 
           {/* Delivery Run Sheet Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {(allOrders.length > 0 ? allOrders : [
-              {
-                orderId: 'ORD-7291',
-                deliverySeat: 'Auditorium 1 — IMAX GT, Seat C3',
-                customerName: 'VIP Patron (Row C)',
-                status: 'READY',
-                totalAmount: 24.50,
-                estimatedMinutes: 2,
-                items: [
-                  { name: 'Truffle Butter Popcorn (Large)', quantity: 1 },
-                  { name: 'Zero Sugar Craft Cola', quantity: 2 },
-                  { name: 'Warm Pretzel Bites', quantity: 1 },
-                ],
-              },
-              {
-                orderId: 'ORD-7292',
-                deliverySeat: 'Auditorium 1 — IMAX GT, Seat D4',
-                customerName: 'Club Member (Row D)',
-                status: 'PREPARING',
-                totalAmount: 18.00,
-                estimatedMinutes: 5,
-                items: [
-                  { name: 'Classic Salt Popcorn', quantity: 1 },
-                  { name: 'Sparkling Mineral Water', quantity: 1 },
-                ],
-              },
-              {
-                orderId: 'ORD-7293',
-                deliverySeat: 'Auditorium 2 — Dolby Prime, Seat B2',
-                customerName: 'Reserved Guest (Row B)',
-                status: 'READY',
-                totalAmount: 16.50,
-                estimatedMinutes: 1,
-                items: [
-                  { name: 'Nachos with Warm Cheese', quantity: 1 },
-                  { name: 'Fountain Soda (Large)', quantity: 1 },
-                ],
-              },
-            ])
-              .filter((ord) => {
-                if (usherAuditoriumFilter === 'ALL') return true
-                if (usherAuditoriumFilter === 'Counter') return (ord.deliverySeat || '').toLowerCase().includes('counter')
-                return (ord.deliverySeat || '').includes(usherAuditoriumFilter)
-              })
+          {allOrders.length === 0 ? (
+            <div className="rounded-2xl border border-zinc-800 bg-zinc-900/50 p-12 text-center text-zinc-500 space-y-2">
+              <UtensilsCrossed className="h-8 w-8 mx-auto text-zinc-600" />
+              <p className="text-sm font-semibold text-zinc-400">No In-Seat Delivery Orders Active</p>
+              <p className="text-xs text-zinc-600">Live theatrical concessions orders placed by patrons or counter staff will appear here in real-time.</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {allOrders
+                .filter((ord) => {
+                  if (usherAuditoriumFilter === 'ALL') return true
+                  if (usherAuditoriumFilter === 'Counter') return (ord.deliverySeat || '').toLowerCase().includes('counter')
+                  return (ord.deliverySeat || '').includes(usherAuditoriumFilter)
+                })
               .map((ord) => {
                 const isReady = ord.status === 'READY' || ord.status === 'PLATED'
                 const isDelivered = ord.status === 'DELIVERED'
@@ -951,7 +920,8 @@ function ConcessionsContent() {
                   </div>
                 )
               })}
-          </div>
+            </div>
+          )}
         </div>
       ) : concessionsViewMode === 'POS_COUNTER' ? (
         <div className="space-y-6">
