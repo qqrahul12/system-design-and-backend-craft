@@ -70,7 +70,7 @@ public class GeminiEmbeddingService {
             log.debug("Generated embedding vector of dimension: {}", vector.size());
             return vector;
         } catch (Exception e) {
-            log.warn("⚠️ Failed to generate embedding from Gemini ({}): falling back to deterministic local semantic vector", e.getMessage());
+            log.warn("Failed to generate embedding from Gemini ({}): falling back to deterministic local semantic vector", e.getMessage());
             return generateDeterministicLocalVector(text, 768);
         }
     }

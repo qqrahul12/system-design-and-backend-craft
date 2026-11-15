@@ -84,14 +84,14 @@ public class TicketOrderProcessor extends OrderProcessingTemplate<TicketOrderPro
 
     @Override
     protected void publishLifecycleEvent(DigitalTicket artifact) {
-        log.info("🎟️ [TicketOrderProcessor] Published lifecycle event for ticket: {}", artifact.ticketId());
+        log.info("[TicketOrderProcessor] Published lifecycle event for ticket: {}", artifact.ticketId());
     }
 
     @Override
     protected void onFailureRollback(TicketBookingRequest request, String lockToken, Exception error) {
         if (lockToken != null) {
             ticketService.releaseSeatLock(lockToken);
-            log.info("🔓 [TicketOrderProcessor] Released distributed seat lock due to order failure: token={}", lockToken);
+            log.info("[TicketOrderProcessor] Released distributed seat lock due to order failure: token={}", lockToken);
         }
     }
 }

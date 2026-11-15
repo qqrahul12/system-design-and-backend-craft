@@ -24,7 +24,7 @@ public class FintechWalletPaymentAdapter implements PaymentGatewayAdapter {
                     "PURCHASE",
                     description != null ? description : "Payment for " + orderReference
             );
-            log.info("💳 [FintechWalletPaymentAdapter] Debited ${} for ref={}, txnId={}", amount, orderReference, txn.txnId());
+            log.info("[FintechWalletPaymentAdapter] Debited ${} for ref={}, txnId={}", amount, orderReference, txn.txnId());
             return PaymentResult.success(
                     txn.txnId(),
                     getProviderName(),
@@ -33,7 +33,7 @@ public class FintechWalletPaymentAdapter implements PaymentGatewayAdapter {
                     "Wallet payment debited successfully from CineMind Cash"
             );
         } catch (Exception ex) {
-            log.warn("❌ [FintechWalletPaymentAdapter] Debit failed: {}", ex.getMessage());
+            log.warn("[FintechWalletPaymentAdapter] Debit failed: {}", ex.getMessage());
             return PaymentResult.failure(getProviderName(), amount, ex.getMessage());
         }
     }
@@ -45,7 +45,7 @@ public class FintechWalletPaymentAdapter implements PaymentGatewayAdapter {
                     amount,
                     reason != null ? reason : "Refund for txn " + transactionId
             );
-            log.info("💰 [FintechWalletPaymentAdapter] Refund credited ${} for txn={}, newBal={}", amount, transactionId, txn.balanceAfter());
+            log.info("[FintechWalletPaymentAdapter] Refund credited ${} for txn={}, newBal={}", amount, transactionId, txn.balanceAfter());
             return PaymentResult.success(
                     txn.txnId(),
                     getProviderName(),
@@ -54,7 +54,7 @@ public class FintechWalletPaymentAdapter implements PaymentGatewayAdapter {
                     "Refund credited to CineMind wallet"
             );
         } catch (Exception ex) {
-            log.warn("❌ [FintechWalletPaymentAdapter] Refund failed: {}", ex.getMessage());
+            log.warn("[FintechWalletPaymentAdapter] Refund failed: {}", ex.getMessage());
             return PaymentResult.failure(getProviderName(), amount, ex.getMessage());
         }
     }

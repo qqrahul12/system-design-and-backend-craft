@@ -22,7 +22,7 @@ public class ResilientCardPaymentAdapter implements PaymentGatewayAdapter {
 
     @Override
     public PaymentResult processPayment(String orderReference, double amount, String description) {
-        log.info("💳 [ResilientCardPaymentAdapter] Executing card capture via PaymentGatewayClient: amount=${}, orderRef={}", amount, orderReference);
+        log.info("[ResilientCardPaymentAdapter] Executing card capture via PaymentGatewayClient: amount=${}, orderRef={}", amount, orderReference);
         try {
             PaymentResponse response = paymentClient.processPayment(orderReference, amount);
             if (response.success()) {
@@ -35,7 +35,7 @@ public class ResilientCardPaymentAdapter implements PaymentGatewayAdapter {
                 );
             } else {
                 // Circuit breaker fallback executed by Resilience4j
-                log.warn("⚠️ [ResilientCardPaymentAdapter] Stripe Circuit Breaker fallback activated: {}", response.statusMessage());
+                log.warn("[ResilientCardPaymentAdapter] Stripe Circuit Breaker fallback activated: {}", response.statusMessage());
                 return PaymentResult.failure(
                         response.providerName(),
                         amount,
@@ -43,14 +43,14 @@ public class ResilientCardPaymentAdapter implements PaymentGatewayAdapter {
                 );
             }
         } catch (Exception e) {
-            log.error("❌ [ResilientCardPaymentAdapter] Stripe payment failure: {}", e.getMessage());
+            log.error("[ResilientCardPaymentAdapter] Stripe payment failure: {}", e.getMessage());
             return PaymentResult.failure(getProviderName(), amount, "Card payment error: " + e.getMessage());
         }
     }
 
     @Override
     public PaymentResult refundPayment(String transactionId, double amount, String reason) {
-        log.info("💳 [ResilientCardPaymentAdapter] Stripe refund initiated for txn {}: ${} ({})", transactionId, amount, reason);
+        log.info("[ResilientCardPaymentAdapter] Stripe refund initiated for txn {}: ${} ({})", transactionId, amount, reason);
         return PaymentResult.success(
                 "REF-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
                 getProviderName(),

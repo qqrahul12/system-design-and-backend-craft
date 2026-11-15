@@ -33,18 +33,6 @@ public class SessionStoreService {
             @Autowired(required = false) JdbcTemplate jdbcTemplate
     ) {
         this.jdbcTemplate = jdbcTemplate;
-        logStartupSessionMetrics();
-    }
-
-    private void logStartupSessionMetrics() {
-        if (jdbcTemplate != null) {
-            try {
-                Integer count = jdbcTemplate.queryForObject(COUNT_SESSIONS, Integer.class);
-                log.info("💬 Found {} persisted chat/swarm sessions in PostgreSQL (SSOT). Zero startup seeding needed.", count != null ? count : 0);
-            } catch (Exception e) {
-                log.warn("⚠️ Failed to check chat_sessions table in PostgreSQL: {}", e.getMessage());
-            }
-        }
     }
 
     public List<SessionSummary> listSessions() {
@@ -57,7 +45,7 @@ public class SessionStoreService {
                     this::mapRowToSession
             );
         } catch (Exception e) {
-            log.warn("⚠️ Error listing sessions from PostgreSQL: {}", e.getMessage());
+            log.warn("Error listing sessions from PostgreSQL: {}", e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -74,7 +62,7 @@ public class SessionStoreService {
                 return Optional.of(results.get(0));
             }
         } catch (Exception e) {
-            log.warn("⚠️ Error reading session {} from PostgreSQL: {}", id, e.getMessage());
+            log.warn("Error reading session {} from PostgreSQL: {}", id, e.getMessage());
         }
         return Optional.empty();
     }
@@ -95,10 +83,10 @@ public class SessionStoreService {
                     summary.lastPreview(),
                     json
             );
-            log.debug("💾 Saved session to PostgreSQL (SSOT): id={}, title={}", summary.sessionId(), summary.title());
+            log.debug("Saved session: id={}, title={}", summary.sessionId(), summary.title());
             return summary;
         } catch (Exception e) {
-            log.warn("⚠️ Error saving session to PostgreSQL: {}", e.getMessage());
+            log.warn("Error saving session to PostgreSQL: {}", e.getMessage());
             return summary;
         }
     }
@@ -110,7 +98,7 @@ public class SessionStoreService {
             int affected = jdbcTemplate.update(DELETE_SESSION_BY_ID, id);
             return affected > 0;
         } catch (Exception e) {
-            log.warn("⚠️ Failed to delete session {} from PostgreSQL: {}", id, e.getMessage());
+            log.warn("Failed to delete session {} from PostgreSQL: {}", id, e.getMessage());
             return false;
         }
     }

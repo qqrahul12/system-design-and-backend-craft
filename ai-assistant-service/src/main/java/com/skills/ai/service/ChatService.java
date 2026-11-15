@@ -86,7 +86,7 @@ public class ChatService {
         PromptGuardService.GuardResult guardCheck = promptGuardService.inspect(request.message());
         if (!guardCheck.isSafe()) {
             return new ChatResponse(
-                    "🛡️ [SECURITY ALERT] Your input was blocked by CineMind Prompt Guard. Reason: " + guardCheck.reason(),
+                    " [SECURITY ALERT] Your input was blocked by CineMind Prompt Guard. Reason: " + guardCheck.reason(),
                     "prompt-guard-v2",
                     request.conversationId() != null ? request.conversationId() : UUID.randomUUID().toString(),
                     System.currentTimeMillis() - start,
@@ -105,7 +105,7 @@ public class ChatService {
         LlmOpsCacheManager.CachedEntry cached = cacheManager.get(cacheKey);
 
         if (cached != null) {
-            log.info("⚡ [CACHE HIT] Returning memoized response for key: {}", cacheKey);
+            log.info("[CACHE HIT] Returning memoized response for key: {}", cacheKey);
             return new ChatResponse(
                     cached.getResponse(),
                     cached.getModel() + " (Cached)",
@@ -121,7 +121,7 @@ public class ChatService {
             try {
                 String redisVal = redisTemplate.opsForValue().get("cinemind:llmcache:" + cacheKey);
                 if (redisVal != null) {
-                    log.info("⚡ [REDIS CACHE HIT] Returning distributed cached response for key: {}", cacheKey);
+                    log.info("[REDIS CACHE HIT] Returning distributed cached response for key: {}", cacheKey);
                     return new ChatResponse(
                             redisVal,
                             modelName + " (Redis Cached)",
@@ -149,7 +149,7 @@ public class ChatService {
                     .call()
                     .content();
         } catch (Exception ex) {
-            log.warn("⚠️ Primary LLM call ({}) failed with '{}'. Auto-failing over to backup provider ({})",
+            log.warn("Primary LLM call ({}) failed with '{}'. Auto-failing over to backup provider ({})",
                     modelName, ex.getMessage(), (useGroq ? GEMINI_MODEL : GROQ_MODEL));
             ChatClient backupClient = useGroq ? geminiChatClient : groqChatClient;
             try {
@@ -160,9 +160,9 @@ public class ChatService {
                         .content();
                 modelName = (useGroq ? GEMINI_MODEL : GROQ_MODEL) + " (Failover)";
             } catch (Exception backupEx) {
-                log.error("❌ Both LLM providers failed: primary='{}', backup='{}'",
+                log.error("Both LLM providers failed: primary='{}', backup='{}'",
                         ex.getMessage(), backupEx.getMessage());
-                content = "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). Our box office, ticketing, and concessions services are active. Please retry in a few moments.";
+                content = " CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). Our box office, ticketing, and concessions services are active. Please retry in a few moments.";
             }
         }
 
@@ -203,7 +203,7 @@ public class ChatService {
     public Flux<String> streamChat(String message, String provider) {
         PromptGuardService.GuardResult guardCheck = promptGuardService.inspect(message);
         if (!guardCheck.isSafe()) {
-            return Flux.just("🛡️ [SECURITY ALERT] Your input was blocked by CineMind Prompt Guard. Reason: " + guardCheck.reason());
+            return Flux.just(" [SECURITY ALERT] Your input was blocked by CineMind Prompt Guard. Reason: " + guardCheck.reason());
         }
 
         boolean useGroq = "groq".equalsIgnoreCase(provider);
@@ -221,7 +221,7 @@ public class ChatService {
                     .stream()
                     .content()
                     .onErrorResume(ex -> {
-                        log.warn("⚠️ Primary LLM stream ({}) failed with '{}'. Auto-failing over to backup provider ({})",
+                        log.warn("Primary LLM stream ({}) failed with '{}'. Auto-failing over to backup provider ({})",
                                 primaryModel, ex.getMessage(), backupModel);
                         try {
                             return backupClient.prompt()
@@ -230,24 +230,24 @@ public class ChatService {
                                     .stream()
                                     .content()
                                     .onErrorResume(backupEx -> {
-                                        log.error("❌ Both LLM streaming providers exhausted: primary='{}', backup='{}'",
+                                        log.error("Both LLM streaming providers exhausted: primary='{}', backup='{}'",
                                                 ex.getMessage(), backupEx.getMessage());
                                         return Flux.just(
-                                                "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). ",
+                                                " CineMind Concierge: External AI providers are currently experiencing temporary rate limits (429). ",
                                                 "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational! ",
                                                 "Please explore our latest theatrical releases or try asking your query again in a few moments."
                                         );
                                     });
                         } catch (Exception backupSyncEx) {
-                            log.error("❌ Backup LLM client threw synchronous exception: {}", backupSyncEx.getMessage());
+                            log.error("Backup LLM client threw synchronous exception: {}", backupSyncEx.getMessage());
                             return Flux.just(
-                                    "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
+                                    " CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
                                     "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational!"
                             );
                         }
                     });
         } catch (Exception primarySyncEx) {
-            log.warn("⚠️ Primary LLM client threw synchronous exception: {}. Falling back to backup.", primarySyncEx.getMessage());
+            log.warn("Primary LLM client threw synchronous exception: {}. Falling back to backup.", primarySyncEx.getMessage());
             try {
                 return backupClient.prompt()
                         .system(systemPrompt)
@@ -255,12 +255,12 @@ public class ChatService {
                         .stream()
                         .content()
                         .onErrorResume(backupEx -> Flux.just(
-                                "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
+                                " CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
                                 "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational!"
                         ));
             } catch (Exception allFailed) {
                 return Flux.just(
-                        "🎬 CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
+                        " CineMind Concierge: External AI providers are currently experiencing temporary rate limits. ",
                         "Our box office ticketing, F&B concessions, seat reservation engines, and digital passes remain fully operational!"
                 );
             }

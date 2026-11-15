@@ -40,7 +40,7 @@ public class RedisConfig {
     public LettuceClientConfigurationBuilderCustomizer lettuceClientConfigurationBuilderCustomizer() {
         return clientConfigurationBuilder -> {
             if (sslEnabled) {
-                log.info("🔐 Enabling TLS with SNI for Redis host: {}", redisHost);
+                log.info("Enabling TLS with SNI for Redis host: {}", redisHost);
                 SslOptions sslOptions = SslOptions.builder()
                         .jdkSslProvider()
                         .build();

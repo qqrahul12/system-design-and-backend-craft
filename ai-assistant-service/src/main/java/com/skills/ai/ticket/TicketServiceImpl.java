@@ -76,15 +76,15 @@ public class TicketServiceImpl implements TicketService {
                         // Deduplicate: if event was published by this pod, skip emitting again
                         if (!nodeId.equals(senderNode)) {
                             seatEventSink.tryEmitNext(event);
-                            log.debug("📡 [Cluster Pub/Sub] Received remote seat event on node {}: {}", nodeId, event.get("event"));
+                            log.debug("[PubSub] Received remote seat event on node {}: {}", nodeId, event.get("event"));
                         }
                     } catch (Exception e) {
                         log.debug("Failed to deserialize cluster seat event: {}", e.getMessage());
                     }
                 }, topic);
-                log.info("📡 Subscribed node {} to distributed Redis topic: {}", nodeId, topic.getTopic());
+                log.info("Subscribed node {} to distributed Redis topic: {}", nodeId, topic.getTopic());
             } catch (Exception e) {
-                log.warn("⚠️ Failed to register Redis Pub/Sub listener for seat events: {}", e.getMessage());
+                log.warn("Failed to register Redis Pub/Sub listener for seat events: {}", e.getMessage());
             }
         }
     }
@@ -135,12 +135,12 @@ public class TicketServiceImpl implements TicketService {
                 redisTemplate.expire(REDIS_ACTIVE_SHOWTIMES_KEY, SEAT_LOCK_TTL);
                 String tokenKey = "cinemind:lock:" + lockToken;
                 redisTemplate.opsForValue().set(tokenKey, safeMovie + "|" + safeShow + "|" + String.join(",", seats), SEAT_LOCK_TTL);
-                log.info("🔐 Acquired 10-minute distributed Redis seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
+                log.info("Acquired distributed seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
             } catch (Exception e) {
-                log.warn("⚠️ Failed to write seat lock to Redis (falling back to memory): {}", e.getMessage());
+                log.warn("Failed to write seat lock to Redis (falling back to memory): {}", e.getMessage());
             }
         } else {
-            log.info("🔒 Acquired 10-minute in-memory seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
+            log.info("Acquired local seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
         }
 
         broadcastSeatEvent(Map.of(
@@ -185,12 +185,12 @@ public class TicketServiceImpl implements TicketService {
                     redisTemplate.delete(tokenKey);
                 }
             } catch (Exception e) {
-                log.warn("⚠️ Failed to release seat lock in Redis: {}", e.getMessage());
+                log.warn("Failed to release seat lock in Redis: {}", e.getMessage());
             }
         }
 
         if (removed != null || !releasedSeats.isEmpty()) {
-            log.info("🔓 Released seat lock across cluster: token={}, seats={}", lockToken, releasedSeats);
+            log.info("Released seat lock: token={}, seats={}", lockToken, releasedSeats);
             broadcastSeatEvent(Map.of(
                     "event", "LOCK_RELEASED",
                     "movieTitle", movie != null ? movie : "",

@@ -28,7 +28,7 @@ public abstract class OrderProcessingTemplate<TRequest, TArtifact> {
     public final TemplateExecutionResult<TArtifact> processOrder(TRequest request, String paymentMethod) {
         long startTime = System.currentTimeMillis();
         String orderRef = generateOrderReference(request);
-        log.info("🚀 [TemplateMethod] Starting order workflow: ref={}", orderRef);
+        log.info("[TemplateMethod] Starting order workflow: ref={}", orderRef);
 
         // Step 1: Pre-execution validation (Primitive hook)
         validateRequest(request);
@@ -55,11 +55,11 @@ public abstract class OrderProcessingTemplate<TRequest, TArtifact> {
             // Step 7: Record APM telemetry trace (Hook step)
             recordTrace(orderRef, System.currentTimeMillis() - startTime);
 
-            log.info("✅ [TemplateMethod] Workflow completed successfully: ref={}", orderRef);
+            log.info("[TemplateMethod] Workflow completed successfully: ref={}", orderRef);
             return new TemplateExecutionResult<>(true, orderRef, artifact, payment, null, Instant.now());
 
         } catch (Exception ex) {
-            log.error("❌ [TemplateMethod] Workflow aborted for ref={}: {}", orderRef, ex.getMessage());
+            log.error("[TemplateMethod] Workflow aborted for ref={}: {}", orderRef, ex.getMessage());
             onFailureRollback(request, lockToken, ex);
             return new TemplateExecutionResult<>(false, orderRef, null, null, ex.getMessage(), Instant.now());
         }

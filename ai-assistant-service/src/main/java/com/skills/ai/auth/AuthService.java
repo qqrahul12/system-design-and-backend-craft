@@ -87,11 +87,11 @@ public class AuthService {
                     for (UserProfile p : profiles) {
                         personaCatalog.put(p.role(), p);
                     }
-                    log.info("👥 [AuthService] Loaded {} user profiles from PostgreSQL (SSOT)", profiles.size());
+                    log.info("Loaded {} user profiles from database", profiles.size());
                     return;
                 }
             } catch (Exception e) {
-                log.warn("⚠️ [AuthService] Could not load user_profiles from PostgreSQL: {}", e.getMessage());
+                log.warn("Could not load user profiles from database: {}", e.getMessage());
             }
         }
     }
@@ -287,7 +287,7 @@ public class AuthService {
         if (role != null) {
             this.currentRole = role;
             UserProfile user = findProfileByRole(role);
-            log.info("👤 Active user switched to role: {} ({})", role, user.fullName());
+            log.info("Active user switched to role: {} ({})", role, user.fullName());
             return user;
         }
         return getCurrentUser();
@@ -295,7 +295,7 @@ public class AuthService {
 
     public UserProfile logout() {
         this.currentRole = UserRole.ANONYMOUS;
-        log.info("🚪 User logged out. Session transitioned to ANONYMOUS");
+        log.info("User logged out. Session transitioned to ANONYMOUS");
         return ANONYMOUS_USER;
     }
 
@@ -318,7 +318,7 @@ public class AuthService {
                     permissionsCsv,
                     profile.isAuthenticated()
             );
-            log.info("💾 [PostgreSQL SSOT] Upserted user profile: {} ({})", profile.userId(), profile.fullName());
+            log.info("[PostgreSQL SSOT] Upserted user profile: {} ({})", profile.userId(), profile.fullName());
         }
         personaCatalog.put(profile.role(), profile);
         return profile;

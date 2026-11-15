@@ -40,7 +40,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
         activeSessions.put(session.getId(), session);
-        log.info("🔌 [WebSocket] Client connected: sessionId={}", session.getId());
+        log.info("[WebSocket] Client connected: sessionId={}", session.getId());
 
         sendMessage(session, Map.of(
                 "type", "CONNECTED",
@@ -52,7 +52,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         String payload = message.getPayload();
-        log.info("📥 [WebSocket] Received frame from session={}: {}", session.getId(), payload);
+        log.info("[WebSocket] Received frame from session={}: {}", session.getId(), payload);
 
         Map<String, Object> request;
         try {
@@ -115,7 +115,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
 
             case "INTERRUPT" -> {
                 String guidance = (String) request.getOrDefault("guidance", "User requested intervention");
-                log.info("⚠️ [HITL INTERRUPT] Received human-in-the-loop steer from session {}: {}", session.getId(), guidance);
+                log.info("[HITL INTERRUPT] Received human-in-the-loop steer from session {}: {}", session.getId(), guidance);
                 sendMessage(session, Map.of(
                         "type", "INTERRUPTED",
                         "guidance", guidance,
@@ -130,7 +130,7 @@ public class AgentWebSocketHandler extends TextWebSocketHandler {
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
         activeSessions.remove(session.getId());
-        log.info("🔌 [WebSocket] Client disconnected: sessionId={}, status={}", session.getId(), status);
+        log.info("[WebSocket] Client disconnected: sessionId={}, status={}", session.getId(), status);
     }
 
     private void sendMessage(WebSocketSession session, Object payload) {

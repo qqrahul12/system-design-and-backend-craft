@@ -50,19 +50,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         this.redisTemplate = redisTemplate;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
-        logStartupCatalogMetrics();
-    }
-
-    private void logStartupCatalogMetrics() {
-        if (jdbcTemplate != null) {
-            try {
-                Integer count = jdbcTemplate.queryForObject(COUNT_MOVIES, Integer.class);
-                log.info("🎬 Found {} persisted movies in PostgreSQL (Single Source of Truth). Zero hardcoded startup seeding needed.", count != null ? count : 0);
-                syncSequenceFromDatabase();
-            } catch (Exception e) {
-                log.warn("⚠️ PostgreSQL movie table init error: {}", e.getMessage());
-            }
-        }
+        syncSequenceFromDatabase();
     }
 
     private void syncSequenceFromDatabase() {
@@ -73,7 +61,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 idSequence.set(maxId);
             }
         } catch (Exception e) {
-            log.warn("⚠️ Failed to synchronize idSequence from PostgreSQL: {}", e.getMessage());
+            log.warn("Failed to synchronize movie sequence: {}", e.getMessage());
         }
     }
 
@@ -175,7 +163,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 if (movieId != null) {
                     redisTemplate.delete(REDIS_KEY_MOVIE_PREFIX + movieId);
                 }
-                log.debug("⚡ [Redis Cache Evict] Evicted movie caches (movieId={})", movieId);
+                log.debug("[Redis Cache Evict] Evicted movie caches (movieId={})", movieId);
             } catch (Exception e) {
                 log.debug("Redis movie cache eviction skipped: {}", e.getMessage());
             }
@@ -195,7 +183,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 if (cached != null && !cached.isBlank()) {
                     List<Movie> cachedList = JsonUtils.fromJson(cached, new TypeReference<List<Movie>>() {});
                     if (cachedList != null && !cachedList.isEmpty()) {
-                        log.debug("⚡ [Redis Cache HIT] Retrieved {} movies from Redis cache in <2ms", cachedList.size());
+                        log.debug("[Redis Cache HIT] Retrieved {} movies from Redis cache in <2ms", cachedList.size());
                         return cachedList;
                     }
                 }
@@ -229,14 +217,14 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 if (isFullCatalog && redisTemplate != null && !movies.isEmpty()) {
                     try {
                         redisTemplate.opsForValue().set(REDIS_KEY_MOVIES_ALL, JsonUtils.toJson(movies), MOVIE_CACHE_TTL);
-                        log.debug("⚡ [Redis Cache SET] Cached {} movies in Redis (TTL: 15m)", movies.size());
+                        log.debug("[Redis Cache SET] Cached {} movies in Redis (TTL: 15m)", movies.size());
                     } catch (Exception e) {
                         log.debug("Redis movie cache save skipped: {}", e.getMessage());
                     }
                 }
                 return movies;
             } catch (Exception e) {
-                log.warn("⚠️ Error reading movies from PostgreSQL, falling back to local store: {}", e.getMessage());
+                log.warn("Error reading movies from PostgreSQL, falling back to local store: {}", e.getMessage());
             }
         }
         return Collections.emptyList();
@@ -254,7 +242,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 if (cached != null && !cached.isBlank()) {
                     Movie movie = JsonUtils.fromJson(cached, Movie.class);
                     if (movie != null) {
-                        log.debug("⚡ [Redis Cache HIT] Retrieved movie {} ('{}') from Redis in <2ms", id, movie.getTitle());
+                        log.debug("[Redis Cache HIT] Retrieved movie {} ('{}') from Redis in <2ms", id, movie.getTitle());
                         return Optional.of(movie);
                     }
                 }
@@ -277,7 +265,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 }
                 return Optional.empty();
             } catch (Exception e) {
-                log.warn("⚠️ Error reading movie {} from PostgreSQL: {}", id, e.getMessage());
+                log.warn("Error reading movie {} from PostgreSQL: {}", id, e.getMessage());
             }
         }
         return Optional.empty();
@@ -348,7 +336,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         if (jdbcTemplate != null) {
             saveMovieToDatabase(movie);
             evictMovieCaches(movie.getId());
-            log.info("🎬 Created & persisted movie in PostgreSQL (SSOT): id={}, title='{}', trailer='{}'", movie.getId(), movie.getTitle(), movie.getTrailerUrl());
+            log.info("Created movie: id={}, title='{}'", movie.getId(), movie.getTitle());
         }
         return movie;
     }
@@ -367,7 +355,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
             }
             saveMovieToDatabase(updated);
             evictMovieCaches(id);
-            log.info("✏️ Updated & persisted movie in PostgreSQL (SSOT): id={}, title='{}'", id, updated.getTitle());
+            log.info("Updated movie: id={}, title='{}'", id, updated.getTitle());
             return Optional.of(updated);
         }
         return Optional.empty();
@@ -381,7 +369,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
             int rows = jdbcTemplate.update(DELETE_MOVIE_BY_ID, id);
             if (rows > 0) {
                 evictMovieCaches(id);
-                log.info("🗑️ Deleted movie from PostgreSQL: id={}", id);
+                log.info("Deleted movie: id={}", id);
                 return true;
             }
         }
@@ -430,7 +418,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                     }
                 }
             } catch (Exception e) {
-                log.warn("⚠️ AI generation fallback used for draft '{}': {}", title, e.getMessage());
+                log.warn("AI generation fallback used for draft '{}': {}", title, e.getMessage());
             }
         }
 
@@ -566,7 +554,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 "https://www.youtube.com/embed/kA244xewjcI", "Zach Cregger", "Josh Brolin, Julia Garner, Alden Ehrenreich, Benedict Wong", "R"));
 
         evictMovieCaches(null);
-        log.info("🍿 Ingested {} real-time {} theatrical blockbuster movies into CineMind database", ingested.size(), year);
+        log.info("Ingested {} current-year ({}) theatrical movies", ingested.size(), year);
         return ingested;
     }
 }

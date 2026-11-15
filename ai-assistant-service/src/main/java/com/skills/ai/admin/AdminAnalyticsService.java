@@ -74,7 +74,7 @@ public class AdminAnalyticsService {
                 if (cached != null && !cached.isBlank()) {
                     Map<String, Object> cachedData = objectMapper.readValue(cached, new TypeReference<Map<String, Object>>() {});
                     if (cachedData != null && !cachedData.isEmpty()) {
-                        log.debug("⚡ [Redis Cache HIT] Retrieved dashboard analytics in <1ms");
+                        log.debug("[Redis Cache HIT] Retrieved dashboard analytics in <1ms");
                         return cachedData;
                     }
                 }
@@ -350,7 +350,7 @@ public class AdminAnalyticsService {
                 if (cached != null && !cached.isBlank()) {
                     Map<String, Object> cachedData = objectMapper.readValue(cached, new TypeReference<Map<String, Object>>() {});
                     if (cachedData != null && !cachedData.isEmpty()) {
-                        log.debug("⚡ [Redis Cache HIT] Retrieved executive briefing in <1ms");
+                        log.debug("[Redis Cache HIT] Retrieved executive briefing in <1ms");
                         return cachedData;
                     }
                 }
@@ -443,7 +443,7 @@ public class AdminAnalyticsService {
         if (redisTemplate != null) {
             try {
                 redisTemplate.delete(List.of(REDIS_KEY_DASHBOARD, REDIS_KEY_BRIEFING));
-                log.debug("🧹 Flushed executive analytics and briefing caches from Redis");
+                log.debug("Flushed executive analytics and briefing caches from Redis");
             } catch (Exception ignored) {}
         }
     }

@@ -21,7 +21,7 @@ public class PiiRedactionSecurityFilter extends PromptSecurityFilter {
         var matcher = CARD_PATTERN.matcher(prompt);
         if (matcher.find()) {
             String redacted = matcher.replaceAll("[REDACTED_CARD_NUMBER]");
-            log.info("🛡️ [Chain:PiiFilter] Redacted sensitive card number from prompt");
+            log.info("[Chain:PiiFilter] Redacted sensitive card number from prompt");
             return checkNext(redacted);
         }
         return checkNext(prompt);

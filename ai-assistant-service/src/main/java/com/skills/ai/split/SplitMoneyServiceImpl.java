@@ -62,18 +62,6 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         this.jdbcTemplate = jdbcTemplate;
         this.cache = RedisCache.of(redisTemplate);
         this.objectMapper = (objectMapper != null) ? objectMapper : JsonUtils.getMapper();
-        logStartupMetrics();
-    }
-
-    private void logStartupMetrics() {
-        if (jdbcTemplate != null) {
-            try {
-                Integer userCount = jdbcTemplate.queryForObject(COUNT_USERS, Integer.class);
-                log.info("👥 Found {} persisted squad users in PostgreSQL (SSOT). Zero startup seeding needed.", userCount != null ? userCount : 0);
-            } catch (Exception e) {
-                log.warn("⚠️ Failed to verify SplitMoney schema in PostgreSQL: {}", e.getMessage());
-            }
-        }
     }
 
     @Override
@@ -81,7 +69,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         Optional<List<SplitUser>> cachedUsers = cache.getAndDeserialize(
                 REDIS_KEY_SPLIT_USERS, raw -> objectMapper.readValue(raw, new TypeReference<List<SplitUser>>() {}));
         if (cachedUsers.isPresent() && !cachedUsers.get().isEmpty()) {
-            log.debug("⚡ [Redis Cache HIT] Retrieved {} squad users in <1ms", cachedUsers.get().size());
+            log.debug("[Redis Cache HIT] Retrieved {} squad users in <1ms", cachedUsers.get().size());
             return cachedUsers.get();
         }
 
@@ -93,7 +81,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             cache.serializeAndSet(REDIS_KEY_SPLIT_USERS, users, objectMapper::writeValueAsString, SPLIT_CATALOG_TTL);
             return users;
         } catch (Exception e) {
-            log.warn("⚠️ Error listing users from PostgreSQL: {}", e.getMessage());
+            log.warn("Error listing users from PostgreSQL: {}", e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -105,7 +93,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             List<SplitUser> users = jdbcTemplate.query(SELECT_USER_BY_ID, this::mapRowToUser, id);
             if (!users.isEmpty()) return Optional.of(users.get(0));
         } catch (Exception e) {
-            log.warn("⚠️ Error getting user {} from PostgreSQL: {}", id, e.getMessage());
+            log.warn("Error getting user {} from PostgreSQL: {}", id, e.getMessage());
         }
         return Optional.empty();
     }
@@ -115,7 +103,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         Optional<List<SplitGroup>> cachedGroups = cache.getAndDeserialize(
                 REDIS_KEY_SPLIT_GROUPS, raw -> objectMapper.readValue(raw, new TypeReference<List<SplitGroup>>() {}));
         if (cachedGroups.isPresent() && !cachedGroups.get().isEmpty()) {
-            log.debug("⚡ [Redis Cache HIT] Retrieved {} squad groups in <1ms", cachedGroups.get().size());
+            log.debug("[RedisCache] Cache HIT: retrieved {} squad groups", cachedGroups.get().size());
             return cachedGroups.get();
         }
 
@@ -140,7 +128,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             cache.serializeAndSet(REDIS_KEY_SPLIT_GROUPS, groups, objectMapper::writeValueAsString, SPLIT_CATALOG_TTL);
             return groups;
         } catch (Exception e) {
-            log.warn("⚠️ Error listing groups from PostgreSQL: {}", e.getMessage());
+            log.warn("Error listing groups from PostgreSQL: {}", e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -165,7 +153,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             }, id);
             if (!list.isEmpty()) return Optional.of(list.get(0));
         } catch (Exception e) {
-            log.warn("⚠️ Error getting group {} from PostgreSQL: {}", id, e.getMessage());
+            log.warn("Error getting group {} from PostgreSQL: {}", id, e.getMessage());
         }
         return Optional.empty();
     }
@@ -199,7 +187,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
                     groupId, u.id()
             );
         }
-        log.info("👥 [Distributed] Created group '{}' (id={}) with {} members in PostgreSQL", name, groupId, members.size());
+        log.info("Created split group '{}' (id={}) with {} members", name, groupId, members.size());
         cache.evict(REDIS_KEY_SPLIT_GROUPS);
         return new SplitGroup(groupId, name, description, members, now);
     }
@@ -265,7 +253,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             );
         }
 
-        log.info("💸 [Distributed] Split expense '{}' (${}) among {} patrons in PostgreSQL. Share: ${} each",
+        log.info("Split expense '{}' (${}) among {} participants (share: ${})",
                 name, totalAmount, count, equalShare);
         cache.evict(REDIS_KEY_SPLIT_EXPENSES);
         for (SplitUser user : participants) {
@@ -280,7 +268,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         Optional<List<SplitExpense>> cachedExpenses = cache.getAndDeserialize(
                 REDIS_KEY_SPLIT_EXPENSES, raw -> objectMapper.readValue(raw, new TypeReference<List<SplitExpense>>() {}));
         if (cachedExpenses.isPresent() && !cachedExpenses.get().isEmpty()) {
-            log.debug("⚡ [Redis Cache HIT] Retrieved {} split expenses in <1ms", cachedExpenses.get().size());
+            log.debug("[RedisCache] Cache HIT: retrieved {} split expenses", cachedExpenses.get().size());
             return cachedExpenses.get();
         }
 
@@ -332,7 +320,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             cache.serializeAndSet(REDIS_KEY_SPLIT_EXPENSES, expenses, objectMapper::writeValueAsString, SPLIT_LEDGER_TTL);
             return expenses;
         } catch (Exception e) {
-            log.warn("⚠️ Error reading expenses from PostgreSQL: {}", e.getMessage());
+            log.warn("Error reading expenses from PostgreSQL: {}", e.getMessage());
             return Collections.emptyList();
         }
     }
@@ -367,7 +355,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             );
             if (!list.isEmpty()) return Optional.of(list.get(0));
         } catch (Exception e) {
-            log.warn("⚠️ Error getting expense {} from PostgreSQL: {}", id, e.getMessage());
+            log.warn("Error getting expense {} from PostgreSQL: {}", id, e.getMessage());
         }
         return Optional.empty();
     }
@@ -400,7 +388,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (!paymentResult.success()) {
             throw new IllegalStateException("Settlement Gateway Error: " + paymentResult.message());
         }
-        log.info("💳 Settled ${} for {} via PaymentGatewayAdapter [{}] (txn={})",
+        log.info("Settled share ${} for {} via adapter [{}] (txn={})",
                 targetShare.shareAmount(), targetShare.userName(), adapter.getProviderName(), paymentResult.transactionId());
 
         String method = adapter.getProviderName().contains("WALLET") ? "WALLET" : "STRIPE_CARD";
@@ -410,7 +398,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
                 UPDATE_SHARE_SETTLED,
                 method, Timestamp.from(now), expenseId, debtorUserId
         );
-        log.info("💳 [Distributed] Share settled in PostgreSQL: expense={}, user={}, method={}", expenseId, debtorUserId, method);
+        log.info("Share settled: expense={}, user={}, method={}", expenseId, debtorUserId, method);
         cache.evict(REDIS_KEY_SPLIT_EXPENSES,
                 REDIS_KEY_SPLIT_BALANCES_PREFIX + debtorUserId,
                 REDIS_KEY_SPLIT_BALANCES_PREFIX + expense.paidByUserId());
@@ -427,7 +415,7 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         Optional<SplitBalanceSummary> cachedBalance = cache.getAndDeserialize(
                 REDIS_KEY_SPLIT_BALANCES_PREFIX + userId, raw -> objectMapper.readValue(raw, SplitBalanceSummary.class));
         if (cachedBalance.isPresent()) {
-            log.debug("⚡ [Redis Cache HIT] Retrieved balance summary for user {} in <1ms", userId);
+            log.debug("[RedisCache] Cache HIT: balance summary for user {}", userId);
             return cachedBalance.get();
         }
 

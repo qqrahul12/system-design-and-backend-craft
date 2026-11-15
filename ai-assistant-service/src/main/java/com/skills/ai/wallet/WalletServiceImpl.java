@@ -64,10 +64,10 @@ public class WalletServiceImpl implements WalletService {
             Integer count = jdbcTemplate.queryForObject(COUNT_WALLET_BY_ID, Integer.class, walletId);
             if (count == null || count == 0) {
                 jdbcTemplate.update(INSERT_WALLET, walletId);
-                log.info("💳 Provisioned new CineCash wallet {} with $0.00 balance in PostgreSQL (SSOT)", walletId);
+                log.info("Provisioned new wallet: id={}", walletId);
             }
         } catch (Exception e) {
-            log.warn("⚠️ Failed ensuring wallet exists for {}: {}", walletId, e.getMessage());
+            log.warn("Failed ensuring wallet exists for {}: {}", walletId, e.getMessage());
         }
     }
 
@@ -143,7 +143,7 @@ public class WalletServiceImpl implements WalletService {
         String targetWalletId = (walletId != null && !walletId.isBlank()) ? walletId : resolveCurrentWalletId();
         ensureWalletExists(targetWalletId);
         jdbcTemplate.update(UPDATE_WALLET_CURRENCY, cleanCurrency, Timestamp.from(Instant.now()), targetWalletId);
-        log.info("💱 Updated currency for wallet {} to {} in PostgreSQL (SSOT)", targetWalletId, cleanCurrency);
+        log.info("Updated currency for wallet {}: {}", targetWalletId, cleanCurrency);
         return getWalletSummary(targetWalletId);
     }
 
@@ -188,7 +188,7 @@ public class WalletServiceImpl implements WalletService {
         );
 
         updateRedisCache(targetWalletId, updated);
-        log.info("💳 [Distributed] Wallet {} topped up in PostgreSQL (SSOT): amount={}, newBalance={}", targetWalletId, amount, updated);
+        log.info("Wallet {} credited: amount={}, balance={}", targetWalletId, amount, updated);
         return new WalletTransaction(txnId, "TOP_UP", amount, updated, desc, now);
     }
 
@@ -237,7 +237,7 @@ public class WalletServiceImpl implements WalletService {
         );
 
         updateRedisCache(targetWalletId, updated);
-        log.info("💸 [Distributed] Wallet {} debited in PostgreSQL (SSOT): amount={}, newBalance={}, desc='{}'", targetWalletId, amount, updated, desc);
+        log.info("Wallet {} debited: amount={}, balance={}, desc='{}'", targetWalletId, amount, updated, desc);
         return new WalletTransaction(txnId, txnType, amount, updated, desc, now);
     }
 
@@ -281,7 +281,7 @@ public class WalletServiceImpl implements WalletService {
         );
 
         updateRedisCache(targetWalletId, updated);
-        log.info("💰 [Distributed] Wallet {} refund credited in PostgreSQL (SSOT): amount={}, newBalance={}", targetWalletId, amount, updated);
+        log.info("Wallet {} refund credited: amount={}, balance={}", targetWalletId, amount, updated);
         return new WalletTransaction(txnId, "REFUND", amount, updated, desc, now);
     }
 

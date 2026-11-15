@@ -71,6 +71,6 @@ public class ConcessionOrderProcessor extends OrderProcessingTemplate<Concession
 
     @Override
     protected void publishLifecycleEvent(ConcessionOrder artifact) {
-        log.info("🍿 [ConcessionOrderProcessor] Kitchen order dispatched: id={}, seat={}", artifact.orderId(), artifact.deliverySeat());
+        log.info("[ConcessionOrderProcessor] Kitchen order dispatched: id={}, seat={}", artifact.orderId(), artifact.deliverySeat());
     }
 }

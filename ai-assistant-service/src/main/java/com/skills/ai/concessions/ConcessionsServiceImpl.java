@@ -54,19 +54,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
-        logStartupInventory();
         initClusterPubSubListener(listenerContainer, orderEventsTopic);
-    }
-
-    private void logStartupInventory() {
-        if (jdbcTemplate != null) {
-            try {
-                Integer count = jdbcTemplate.queryForObject(COUNT_ITEMS, Integer.class);
-                log.info("🍿 Found {} persisted gourmet concession items in PostgreSQL (SSOT). Zero hardcoded startup seeding in code.", count != null ? count : 0);
-            } catch (Exception e) {
-                log.warn("⚠️ Failed to query concession_items count from PostgreSQL: {}", e.getMessage());
-            }
-        }
     }
 
     private void initClusterPubSubListener(RedisMessageListenerContainer container, ChannelTopic topic) {
@@ -81,16 +69,16 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                             ConcessionOrder order = objectMapper.convertValue(payload.get("order"), ConcessionOrder.class);
                             if (order != null) {
                                 orderEventSink.tryEmitNext(order);
-                                log.debug("📡 [Cluster Pub/Sub] Received remote concession order event on node {}: {}", nodeId, order.orderId());
+                                log.debug("[Cluster Pub/Sub] Received remote concession order event on node {}: {}", nodeId, order.orderId());
                             }
                         }
                     } catch (Exception e) {
                         log.debug("Failed to deserialize cluster order event: {}", e.getMessage());
                     }
                 }, topic);
-                log.info("📡 Subscribed node {} to distributed Redis order topic: {}", nodeId, topic.getTopic());
+                log.info("Subscribed node {} to distributed Redis order topic: {}", nodeId, topic.getTopic());
             } catch (Exception e) {
-                log.warn("⚠️ Failed to register Redis Pub/Sub listener for concession orders: {}", e.getMessage());
+                log.warn("Failed to register Redis Pub/Sub listener for concession orders: {}", e.getMessage());
             }
         }
     }
@@ -144,7 +132,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                     return items;
                 }
             } catch (Exception e) {
-                log.warn("⚠️ Error loading concession items from PostgreSQL: {}", e.getMessage());
+                log.warn("Error loading concession items from PostgreSQL: {}", e.getMessage());
             }
         }
         return Collections.emptyList();
@@ -185,7 +173,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                 dietaryCsv, genreCsv, item.description(), inStock
         );
         invalidateConcessionsCache();
-        log.info("🍿 Persisted concession item to PostgreSQL (SSOT): id={}, name={}, price={}", id, item.name(), item.price());
+        log.info("Saved concession item: id={}, name={}, price={}", id, item.name(), item.price());
         return new ConcessionItem(id, item.name(), item.category(), item.price(), item.calories(),
                 item.icon() != null ? item.icon() : "🍿", item.dietary(), item.genrePairings(), item.description(), inStock);
     }
@@ -204,7 +192,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         int rows = jdbcTemplate.update(UPDATE_ITEM_STOCK, inStock, itemId);
         if (rows > 0) {
             invalidateConcessionsCache();
-            log.info("📦 Toggled stock for concession item {} to {}", itemId, inStock);
+            log.info("Updated stock status for item {}: inStock={}", itemId, inStock);
             return getItem(itemId);
         }
         return Optional.empty();
@@ -217,7 +205,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         int rows = jdbcTemplate.update(DELETE_ITEM, itemId);
         if (rows > 0) {
             invalidateConcessionsCache();
-            log.info("🗑️ Deleted concession item {} from PostgreSQL", itemId);
+            log.info("Deleted concession item: id={}", itemId);
             return true;
         }
         return false;
@@ -272,7 +260,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                 if (cached != null && !cached.isBlank()) {
                     List<ConcessionCombo> cachedCombos = objectMapper.readValue(cached, new TypeReference<List<ConcessionCombo>>() {});
                     if (cachedCombos != null && !cachedCombos.isEmpty()) {
-                        log.debug("⚡ [Redis Cache HIT] Retrieved combos for genre={}, size={} in <1ms", genre, size);
+                        log.debug("[Redis Cache HIT] Retrieved combos for genre={}, size={} in <1ms", genre, size);
                         return cachedCombos;
                     }
                 }
@@ -353,7 +341,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         if (redisTemplate != null && !combos.isEmpty()) {
             try {
                 redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(combos), CONCESSIONS_CACHE_TTL);
-                log.debug("⚡ [Redis Cache SET] Cached combos for genre={}, size={} with 30m TTL", genre, size);
+                log.debug("[Redis Cache SET] Cached combos for genre={}, size={} with 30m TTL", genre, size);
             } catch (Exception e) {
                 log.debug("Redis combos cache store skipped: {}", e.getMessage());
             }
@@ -395,7 +383,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                 .build();
 
         broadcastOrderEvent(order);
-        log.info("🍿 Placed concessions order in DB: id={}, total={}, deliverySeat={}", orderId, orderTotal, seat);
+        log.info("Placed concessions order: id={}, total={}, deliverySeat={}", orderId, orderTotal, seat);
         return order;
     }
 
@@ -435,7 +423,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                 .build();
 
         broadcastOrderEvent(updated);
-        log.info("🍽️ Order status advanced in DB: orderId={}, status={}, remainingMinutes={}", orderId, cleanStatus, newEst);
+        log.info("Order status updated: orderId={}, status={}, remainingMinutes={}", orderId, cleanStatus, newEst);
         return Optional.of(updated);
     }
 

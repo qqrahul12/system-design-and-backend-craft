@@ -96,7 +96,7 @@ public final class RedisCache {
             String value = redis.opsForValue().get(key);
             return (value != null && !value.isBlank()) ? Optional.of(value) : Optional.empty();
         } catch (Exception e) {
-            log.debug("⚡ [RedisCache] GET skipped for key='{}': {}", key, e.getMessage());
+            log.debug("[RedisCache] GET skipped for key='{}': {}", key, e.getMessage());
             return Optional.empty();
         }
     }
@@ -118,7 +118,7 @@ public final class RedisCache {
                 T value = deserializer.apply(raw);
                 return Optional.ofNullable(value);
             } catch (Exception e) {
-                log.debug("⚡ [RedisCache] Deserialization failed for key='{}': {}", key, e.getMessage());
+                log.debug("[RedisCache] Deserialization failed for key='{}': {}", key, e.getMessage());
                 return Optional.empty();
             }
         });
@@ -136,9 +136,9 @@ public final class RedisCache {
         if (redis == null || value == null) return;
         try {
             redis.opsForValue().set(key, value, ttl);
-            log.debug("⚡ [RedisCache] SET key='{}' TTL={}", key, ttl);
+            log.debug("[RedisCache] SET key='{}' TTL={}", key, ttl);
         } catch (Exception e) {
-            log.debug("⚡ [RedisCache] SET skipped for key='{}': {}", key, e.getMessage());
+            log.debug("[RedisCache] SET skipped for key='{}': {}", key, e.getMessage());
         }
     }
 
@@ -158,10 +158,10 @@ public final class RedisCache {
             String serialized = serializer.apply(value);
             if (serialized != null && !serialized.isBlank()) {
                 redis.opsForValue().set(key, serialized, ttl);
-                log.debug("⚡ [RedisCache] SET (serialized) key='{}' TTL={}", key, ttl);
+                log.debug("[RedisCache] SET (serialized) key='{}' TTL={}", key, ttl);
             }
         } catch (Exception e) {
-            log.debug("⚡ [RedisCache] Serialization/SET skipped for key='{}': {}", key, e.getMessage());
+            log.debug("[RedisCache] Serialization/SET skipped for key='{}': {}", key, e.getMessage());
         }
     }
 
@@ -183,9 +183,9 @@ public final class RedisCache {
                     redis.delete(key);
                 }
             }
-            log.debug("⚡ [RedisCache] EVICT keys={}", (Object) keys);
+            log.debug("[RedisCache] EVICT keys={}", (Object) keys);
         } catch (Exception e) {
-            log.debug("⚡ [RedisCache] EVICT skipped: {}", e.getMessage());
+            log.debug("[RedisCache] EVICT skipped: {}", e.getMessage());
         }
     }
 
@@ -212,7 +212,7 @@ public final class RedisCache {
         try {
             operation.accept(redis);
         } catch (Exception e) {
-            log.debug("⚡ [RedisCache] run() operation skipped: {}", e.getMessage());
+            log.debug("[RedisCache] run() operation skipped: {}", e.getMessage());
         }
     }
 
@@ -234,7 +234,7 @@ public final class RedisCache {
         try {
             return Optional.ofNullable(operation.apply(redis));
         } catch (Exception e) {
-            log.debug("⚡ [RedisCache] call() operation skipped: {}", e.getMessage());
+            log.debug("[RedisCache] call() operation skipped: {}", e.getMessage());
             return Optional.empty();
         }
     }
@@ -283,7 +283,7 @@ public final class RedisCache {
         // 1. Try cache
         Optional<T> cached = getAndDeserialize(key, deserializer);
         if (cached.isPresent()) {
-            log.debug("⚡ [RedisCache] Cache HIT for key='{}'", key);
+            log.debug("[RedisCache] Cache HIT for key='{}'", key);
             return cached.get();
         }
 

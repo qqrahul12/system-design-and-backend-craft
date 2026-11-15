@@ -46,7 +46,7 @@ public class PromptGuardService {
         if (securityFilterChain != null) {
             PromptSecurityFilter.FilterResult chainResult = securityFilterChain.evaluate(message);
             if (!chainResult.allowed()) {
-                log.warn("🚨 [CHAIN OF RESPONSIBILITY BLOCKED] Category: {}, Reason: {}",
+                log.warn("[CHAIN OF RESPONSIBILITY BLOCKED] Category: {}, Reason: {}",
                         chainResult.violationCategory(), chainResult.reason());
                 return new GuardResult(false, "PROMPT_INJECTION_DETECTED: " + chainResult.reason());
             }
@@ -55,7 +55,7 @@ public class PromptGuardService {
         // 2. Direct regex inspection backup
         for (Pattern p : INJECTION_PATTERNS) {
             if (p.matcher(message).find()) {
-                log.warn("🚨 [PROMPT INJECTION DETECTED] Blocked pattern: {}", p.pattern());
+                log.warn("[PROMPT INJECTION DETECTED] Blocked pattern: {}", p.pattern());
                 return new GuardResult(false, "PROMPT_INJECTION_DETECTED: Malicious instruction override detected.");
             }
         }

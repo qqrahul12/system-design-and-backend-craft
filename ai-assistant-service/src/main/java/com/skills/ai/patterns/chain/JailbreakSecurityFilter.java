@@ -28,7 +28,7 @@ public class JailbreakSecurityFilter extends PromptSecurityFilter {
         String lower = prompt.toLowerCase();
         for (String pattern : JAILBREAK_PATTERNS) {
             if (lower.contains(pattern)) {
-                log.warn("🛡️ [Chain:JailbreakFilter] Adversarial prompt blocked: '{}'", pattern);
+                log.warn("[Chain:JailbreakFilter] Adversarial prompt blocked: '{}'", pattern);
                 return FilterResult.block("JAILBREAK_ATTEMPT", "Adversarial system override detected matching pattern: " + pattern);
             }
         }

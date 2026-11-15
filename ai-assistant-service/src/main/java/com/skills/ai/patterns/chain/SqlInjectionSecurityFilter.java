@@ -29,7 +29,7 @@ public class SqlInjectionSecurityFilter extends PromptSecurityFilter {
         String lower = prompt.toLowerCase();
         for (String pattern : SQL_PATTERNS) {
             if (lower.contains(pattern)) {
-                log.warn("🛡️ [Chain:SqlFilter] Unauthorized SQL probing blocked: '{}'", pattern);
+                log.warn("[Chain:SqlFilter] Unauthorized SQL probing blocked: '{}'", pattern);
                 return FilterResult.block("SQL_INJECTION", "Database probing or SQL manipulation blocked: " + pattern);
             }
         }

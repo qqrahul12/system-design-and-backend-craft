@@ -26,7 +26,7 @@ public class PricingEngine {
     public double computeTicketPrice(double basePrice, String format, boolean isSurgeActive) {
         PricingStrategy strategy = resolveStrategy(format);
         double finalPrice = strategy.calculatePrice(basePrice, format, isSurgeActive);
-        log.debug("🎯 [PricingEngine:Strategy={}] Base=${}, Format={}, Surge={} -> Final=${}",
+        log.debug("[PricingEngine:Strategy={}] Base=${}, Format={}, Surge={} -> Final=${}",
                 strategy.getStrategyName(), basePrice, format, isSurgeActive, finalPrice);
         return finalPrice;
     }

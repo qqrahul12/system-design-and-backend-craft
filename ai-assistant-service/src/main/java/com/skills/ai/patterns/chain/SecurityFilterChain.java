@@ -25,7 +25,7 @@ public class SecurityFilterChain {
         // Link: Jailbreak -> SQL Injection -> PII Redaction
         jailbreakFilter.linkWith(sqlFilter).linkWith(piiFilter);
         this.headFilter = jailbreakFilter;
-        log.info("⛓️ [SecurityFilterChain] Successfully assembled 3-stage Chain of Responsibility for prompt protection");
+        log.info("[SecurityFilterChain] Assembled prompt defense filter chain");
     }
 
     public PromptSecurityFilter.FilterResult evaluate(String prompt) {
