@@ -25,6 +25,9 @@ import {
   AlertCircle,
   Copy,
   ChevronRight,
+  Coins,
+  Building,
+  Check,
 } from 'lucide-react'
 import { walletService, formatCurrency, getCurrencySymbol } from '@/services/walletService'
 import { authService, UserPersona } from '@/services/authService'
@@ -60,6 +63,58 @@ interface CircuitBreakerStatus {
   simulateFailure: boolean
 }
 
+interface RegisterStatus {
+  registerId: string
+  name: string
+  operator: string
+  openingCash: number
+  cashSales: number
+  cardSales: number
+  walletSales: number
+  totalSales: number
+  currentCashDrawer: number
+  status: 'BALANCED' | 'PENDING_COUNT' | 'VARIANCE'
+}
+
+const CIRCUIT_REGISTERS: RegisterStatus[] = [
+  {
+    registerId: 'REG-01',
+    name: 'Main Box Office Terminal 1',
+    operator: 'Shift Manager (Box Office)',
+    openingCash: 250.0,
+    cashSales: 412.5,
+    cardSales: 1340.0,
+    walletSales: 495.0,
+    totalSales: 2247.5,
+    currentCashDrawer: 662.5,
+    status: 'BALANCED',
+  },
+  {
+    registerId: 'REG-02',
+    name: 'Concessions Fast Counter 2',
+    operator: 'Auditorium Usher Staff',
+    openingCash: 300.0,
+    cashSales: 540.0,
+    cardSales: 1120.0,
+    walletSales: 310.0,
+    totalSales: 1970.0,
+    currentCashDrawer: 840.0,
+    status: 'BALANCED',
+  },
+  {
+    registerId: 'REG-03',
+    name: 'VIP Mezzanine Lounge Bar',
+    operator: 'Lead Bartender',
+    openingCash: 200.0,
+    cashSales: 185.0,
+    cardSales: 960.0,
+    walletSales: 420.0,
+    totalSales: 1565.0,
+    currentCashDrawer: 385.0,
+    status: 'BALANCED',
+  },
+]
+
 export default function WalletPage() {
   const [wallet, setWallet] = useState<WalletSummary | null>(null)
   const [isLoading, setIsLoading] = useState(true)
@@ -78,14 +133,76 @@ export default function WalletPage() {
   const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
   const [isLoadingAuth, setIsLoadingAuth] = useState(true)
 
+  // Cinema Manager Reconciliation & Comp Vault State
+  const [managerViewMode, setManagerViewMode] = useState<'REGISTER_VAULT' | 'PERSONAL_WALLET'>('REGISTER_VAULT')
+  const [personas, setPersonas] = useState<any[]>([])
+  const [compRecipient, setCompRecipient] = useState<string>('Guest Patron')
+  const [compReason, setCompReason] = useState<string>('Service Recovery: Projection Glitch ($25)')
+  const [compAmount, setCompAmount] = useState<number>(25)
+  const [isCompLoading, setIsCompLoading] = useState<boolean>(false)
+  const [reconciledRegisters, setReconciledRegisters] = useState<Record<string, boolean>>({
+    'REG-01': true,
+    'REG-02': true,
+    'REG-03': true,
+  })
+
   useEffect(() => {
     authService.getCurrentUser()
       .then((u) => {
         setCurrentUser(u)
         setIsLoadingAuth(false)
+        if (u && (u.role === 'CINEMA_MANAGER' || u.role === 'EXECUTIVE_ADMIN')) {
+          setManagerViewMode('REGISTER_VAULT')
+        } else {
+          setManagerViewMode('PERSONAL_WALLET')
+        }
       })
       .catch(() => setIsLoadingAuth(false))
+
+    authService.getPersonas()
+      .then((p) => {
+        if (p && Array.isArray(p)) setPersonas(p)
+      })
+      .catch(() => {})
   }, [])
+
+  const isManager = Boolean(
+    currentUser &&
+    (currentUser.role === 'CINEMA_MANAGER' || currentUser.role === 'EXECUTIVE_ADMIN')
+  )
+
+  const handleIssueCustomerComp = async () => {
+    if (!compAmount || compAmount <= 0) {
+      showNotification('Please enter a valid compensation credit amount.', 'warning', 'Invalid Amount')
+      return
+    }
+
+    setIsCompLoading(true)
+    try {
+      await walletService.topUp(
+        compAmount,
+        `Customer Goodwill Comp: ${compRecipient} (${compReason})`
+      )
+      showNotification(
+        `Authorized +$${compAmount.toFixed(2)} Customer Comp Credit for ${compRecipient}!`,
+        'success',
+        'Goodwill Vault Dispatched'
+      )
+      await fetchWallet()
+    } catch {
+      showNotification('Failed to authorize comp credit. Please verify permissions.', 'error', 'Comp Dispatch Failed')
+    } finally {
+      setIsCompLoading(false)
+    }
+  }
+
+  const handleReconcileRegister = (regId: string) => {
+    setReconciledRegisters((prev) => ({
+      ...prev,
+      [regId]: !prev[regId],
+    }))
+    showNotification(`Register ${regId} drawer count verified and reconciled with circuit vault.`, 'success', 'Drawer Reconciled')
+  }
 
   const showNotification = (
     msg: string,
@@ -198,8 +315,330 @@ export default function WalletPage() {
       {/* Toast Notification */}
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      {/* Page Header */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/80 pb-6">
+      {/* Cinema Manager Mode Switcher Pill */}
+      {isManager && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-purple-950/20 border border-purple-500/30 p-2.5 rounded-2xl">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-semibold text-purple-200">
+              {managerViewMode === 'REGISTER_VAULT'
+                ? 'Circuit Register Reconciliation & Customer Comp Vault'
+                : 'Manager Personal CineCash Stored Balance'}
+            </span>
+            <span className="text-[10px] font-mono text-purple-300 bg-purple-900/50 px-2 py-0.5 rounded border border-purple-500/40">
+              Role: {currentUser?.roleDisplayName || currentUser?.role}
+            </span>
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+            <button
+              onClick={() => setManagerViewMode('REGISTER_VAULT')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                managerViewMode === 'REGISTER_VAULT'
+                  ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 font-bold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Receipt className="h-3.5 w-3.5" />
+              <span>Register Vault & Comps</span>
+            </button>
+
+            <button
+              onClick={() => setManagerViewMode('PERSONAL_WALLET')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                managerViewMode === 'PERSONAL_WALLET'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 font-bold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Wallet className="h-3.5 w-3.5" />
+              <span>Personal Wallet</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {isManager && managerViewMode === 'REGISTER_VAULT' ? (
+        <div className="space-y-8 animate-fade-in">
+          {/* Manager Vault Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/80 pb-6">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-tr from-purple-600 to-indigo-600 text-white shadow-lg shadow-purple-600/30">
+                <Building className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-xl sm:text-2xl font-extrabold text-white tracking-tight flex items-center gap-2">
+                  <span>Cash Register Reconciliation & Customer Comp Vault</span>
+                  <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-bold text-emerald-400 uppercase tracking-wider">
+                    All Drawers Balanced
+                  </span>
+                </h1>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Circuit Box Office cash balancing, terminal drawer close-outs, and customer goodwill compensation credits.
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchWallet}
+                disabled={isLoading}
+                className="flex items-center gap-1.5 rounded-xl border border-zinc-800 bg-zinc-900/80 px-3.5 py-2 text-xs font-semibold text-zinc-300 hover:bg-zinc-800 transition active:scale-95 disabled:opacity-50"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 text-zinc-400 ${isLoading ? 'animate-spin' : ''}`} />
+                <span>Re-Audit Circuit Vault</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 4 Metric Summary Cards */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-1">
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                Total Circuit Receipts Today
+              </span>
+              <div className="font-mono text-2xl font-extrabold text-white">
+                $5,782.50
+              </div>
+              <p className="text-[10px] text-emerald-400 font-medium">+14.2% vs weekday target</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-1">
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                Physical Cash in Drawers
+              </span>
+              <div className="font-mono text-2xl font-extrabold text-amber-300">
+                $1,887.50
+              </div>
+              <p className="text-[10px] text-zinc-400">3 Terminals counted & verified</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-1">
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                Digital & Card Ingest
+              </span>
+              <div className="font-mono text-2xl font-extrabold text-purple-300">
+                $3,895.00
+              </div>
+              <p className="text-[10px] text-zinc-400">Direct stripe & wallet settlement</p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 space-y-1">
+              <span className="text-[10px] uppercase font-bold text-zinc-500 tracking-wider">
+                Goodwill Comp Vault Balance
+              </span>
+              <div className="font-mono text-2xl font-extrabold text-emerald-400">
+                ${(wallet?.balance ?? 175.0).toFixed(2)}
+              </div>
+              <p className="text-[10px] text-zinc-400">Manager discretionary reserve</p>
+            </div>
+          </div>
+
+          {/* 2-Column Section: Circuit Registers (7 Cols) + Customer Comp Vault (5 Cols) */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left 7 Columns: Circuit Cash Registers Reconciliation Table */}
+            <div className="lg:col-span-7 space-y-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-5 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Receipt className="h-4 w-4 text-purple-400" />
+                      Circuit Register Drawers & Shift Balancing
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Verify expected cash drawer balances against live box office & concession tenders
+                    </p>
+                  </div>
+                  <span className="text-[10px] font-mono font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    $0.00 Variance
+                  </span>
+                </div>
+
+                <div className="space-y-3">
+                  {CIRCUIT_REGISTERS.map((reg) => {
+                    const isReconciled = Boolean(reconciledRegisters[reg.registerId])
+                    return (
+                      <div
+                        key={reg.registerId}
+                        className="p-3.5 rounded-xl bg-zinc-900/90 border border-zinc-800 hover:border-zinc-700 transition space-y-2.5 text-xs"
+                      >
+                        <div className="flex items-start justify-between">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-mono font-bold text-purple-300 bg-purple-500/10 px-1.5 py-0.5 rounded border border-purple-500/30 text-[10px]">
+                                {reg.registerId}
+                              </span>
+                              <h4 className="font-bold text-white">{reg.name}</h4>
+                            </div>
+                            <p className="text-[11px] text-zinc-400 mt-0.5">
+                              Operator: <strong className="text-zinc-300">{reg.operator}</strong>
+                            </p>
+                          </div>
+                          <span
+                            className={`px-2 py-0.5 rounded font-mono font-bold text-[10px] border ${
+                              isReconciled
+                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+                                : 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+                            }`}
+                          >
+                            {isReconciled ? '✓ RECONCILED' : 'COUNT PENDING'}
+                          </span>
+                        </div>
+
+                        {/* Breakdown Grid */}
+                        <div className="grid grid-cols-4 gap-2 p-2 rounded-lg bg-zinc-950/80 font-mono text-[10px]">
+                          <div>
+                            <span className="text-zinc-500 block">Opening:</span>
+                            <span className="text-zinc-300">${reg.openingCash.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500 block">Cash Ingest:</span>
+                            <span className="text-amber-400">${reg.cashSales.toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500 block">Digital Ingest:</span>
+                            <span className="text-purple-300">${(reg.cardSales + reg.walletSales).toFixed(2)}</span>
+                          </div>
+                          <div>
+                            <span className="text-zinc-500 block">Expected Drawer:</span>
+                            <span className="text-emerald-400 font-bold">${reg.currentCashDrawer.toFixed(2)}</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-1">
+                          <span className="text-[10px] text-zinc-500">
+                            Variance: <strong className="text-emerald-400 font-mono">$0.00</strong> (Count exact)
+                          </span>
+                          <button
+                            onClick={() => handleReconcileRegister(reg.registerId)}
+                            className={`px-3 py-1 rounded-lg text-[11px] font-semibold transition ${
+                              isReconciled
+                                ? 'bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700'
+                                : 'bg-emerald-600 text-white shadow-sm shadow-emerald-600/30 font-bold'
+                            }`}
+                          >
+                            {isReconciled ? 'Lock Reconciled Drawer' : 'Reconcile Drawer Count'}
+                          </button>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            </div>
+
+            {/* Right 5 Columns: Customer Comp & Loyalty Vault */}
+            <div className="lg:col-span-5 space-y-4">
+              <div className="rounded-2xl border border-purple-500/30 bg-zinc-950 p-5 space-y-4 shadow-xl">
+                <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
+                  <div>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                      <Sparkles className="h-4 w-4 text-amber-400" />
+                      Customer Comp & Goodwill Vault
+                    </h3>
+                    <p className="text-[11px] text-zinc-400 mt-0.5">
+                      Issue instantaneous goodwill credits or hospitality comps for customer service recovery
+                    </p>
+                  </div>
+                </div>
+
+                {/* Recipient Patron Selector */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300 block">
+                    Recipient Customer / Patron:
+                  </label>
+                  <div className="flex flex-wrap gap-1.5">
+                    {(personas.length > 0
+                      ? personas.map((p) => p.fullName || p.name || p.email)
+                      : ['Patron Guest A', 'Patron Guest B', 'Patron Guest C']
+                    ).map((pName) => {
+                      const isSelected = compRecipient === pName
+                      return (
+                        <button
+                          key={pName}
+                          type="button"
+                          onClick={() => setCompRecipient(pName)}
+                          className={`text-xs px-2.5 py-1 rounded-lg border transition ${
+                            isSelected
+                              ? 'bg-purple-600 text-white border-purple-500 font-bold'
+                              : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
+                          }`}
+                        >
+                          {pName}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+
+                {/* Service Recovery Reason Presets */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300 block">
+                    Compensation Justification:
+                  </label>
+                  <div className="space-y-1.5 text-xs">
+                    {[
+                      { reason: 'Service Recovery: Projection Sync Glitch', defaultAmt: 25 },
+                      { reason: 'Late Seating / Aisle Navigation Apology', defaultAmt: 15 },
+                      { reason: 'Spilled F&B Item Replacement Goodwill', defaultAmt: 15 },
+                      { reason: 'VIP Gold Member Hospitality Credit', defaultAmt: 50 },
+                    ].map((item) => (
+                      <button
+                        key={item.reason}
+                        type="button"
+                        onClick={() => {
+                          setCompReason(item.reason)
+                          setCompAmount(item.defaultAmt)
+                        }}
+                        className={`w-full text-left p-2 rounded-xl border text-[11px] transition flex justify-between items-center ${
+                          compReason === item.reason
+                            ? 'bg-purple-950/40 border-purple-500/60 text-purple-200 font-semibold'
+                            : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:text-white'
+                        }`}
+                      >
+                        <span>{item.reason}</span>
+                        <span className="font-mono font-bold text-amber-400">+${item.defaultAmt}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Custom Amount */}
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-zinc-300 block">
+                    Comp Credit Amount:
+                  </label>
+                  <div className="relative">
+                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-zinc-500 font-bold">$</span>
+                    <input
+                      type="number"
+                      min="5"
+                      max="250"
+                      value={compAmount}
+                      onChange={(e) => setCompAmount(parseFloat(e.target.value) || 0)}
+                      className="w-full pl-7 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-white font-mono font-bold text-sm focus:outline-none focus:border-purple-500"
+                    />
+                  </div>
+                </div>
+
+                {/* Dispatch Comp Button */}
+                <button
+                  onClick={handleIssueCustomerComp}
+                  disabled={isCompLoading || compAmount <= 0}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-rose-600 hover:from-amber-400 hover:to-rose-500 text-black font-extrabold text-xs shadow-lg shadow-amber-500/20 transition active:scale-95 disabled:opacity-50"
+                >
+                  {isCompLoading
+                    ? 'Transmitting Goodwill Credit...'
+                    : `⚡ Authorize +$${compAmount.toFixed(2)} Comp to ${compRecipient}`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Page Header */}
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/80 pb-6">
         <div>
           <div className="flex items-center gap-2.5">
             <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-600/20 text-purple-400 border border-purple-500/30">
@@ -628,6 +1067,8 @@ export default function WalletPage() {
           )}
         </div>
       </div>
+      </>
+    )}
 
       {/* Transaction Receipt Modal */}
       {selectedTxn && (

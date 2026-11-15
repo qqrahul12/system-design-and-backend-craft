@@ -31,6 +31,16 @@ import {
   RefreshCw,
   Users,
   Wallet,
+  MapPin,
+  Eye,
+  Volume2,
+  Tv,
+  ChevronDown,
+  ChevronUp,
+  Sliders,
+  Check,
+  Unlock,
+  ShieldAlert,
 } from 'lucide-react'
 import {
   splitService,
@@ -145,6 +155,293 @@ function getFormatMultiplier(fmt: string): number {
   return 1.0
 }
 
+interface CinemaVenue {
+  id: string
+  name: string
+  shortName: string
+  neighborhood: string
+  distance: string
+  address: string
+  features: string[]
+  screens: {
+    id: string
+    name: string
+    format: string
+    tech: string
+    aspectRatio: string
+    soundSystem: string
+    baseMultiplier: number
+    capacity: number
+  }[]
+}
+
+const CINEMA_VENUES: CinemaVenue[] = [
+  {
+    id: 'flagship-lincoln',
+    name: 'CineMind Flagship — Lincoln Square',
+    shortName: 'Lincoln Square',
+    neighborhood: 'Upper West Side',
+    distance: '1.8 mi',
+    address: '1998 Broadway, New York, NY',
+    features: ['IMAX 70mm Dual Laser', 'Dolby Atmos 128-ch', 'VIP Heated Recliners', 'Craft Dining Bar'],
+    screens: [
+      {
+        id: 'screen-ls-1',
+        name: 'Auditorium 1 — Grand GT Laser',
+        format: 'IMAX 70mm',
+        tech: 'Dual 4K Commercial Laser',
+        aspectRatio: '1.43:1 Giant Dome',
+        soundSystem: '12-Channel IMAX Immersion',
+        baseMultiplier: 1.15,
+        capacity: 30,
+      },
+      {
+        id: 'screen-ls-2',
+        name: 'Auditorium 2 — Dolby Prime Stage',
+        format: 'Dolby Cinema',
+        tech: 'Dual Christie 6P 4K Laser HDR',
+        aspectRatio: '2.39:1 CinemaScope',
+        soundSystem: '128-Channel Dolby Atmos',
+        baseMultiplier: 1.05,
+        capacity: 30,
+      },
+      {
+        id: 'screen-ls-3',
+        name: 'Auditorium 3 — Laser Studio A',
+        format: 'Standard 4K Laser',
+        tech: 'Barco Series 4 Laser',
+        aspectRatio: '2.39:1 Scope',
+        soundSystem: '7.1 Studio Surround',
+        baseMultiplier: 1.0,
+        capacity: 30,
+      },
+    ],
+  },
+  {
+    id: 'west-end-pavilion',
+    name: 'CineMind West End Pavilion',
+    shortName: 'West End',
+    neighborhood: "Hell's Kitchen",
+    distance: '4.2 mi',
+    address: '610 W 54th St, New York, NY',
+    features: ['Dolby Cinema Reference', 'In-Seat Chef Dining', 'Artisan Cocktail Lounge'],
+    screens: [
+      {
+        id: 'screen-we-1',
+        name: 'Auditorium A — Pavilion Dolby 1',
+        format: 'Dolby Cinema',
+        tech: 'Dual Dolby 4K Laser HDR',
+        aspectRatio: '2.39:1 CinemaScope',
+        soundSystem: 'Dolby Atmos Spatial Audio',
+        baseMultiplier: 1.05,
+        capacity: 30,
+      },
+      {
+        id: 'screen-we-2',
+        name: 'Auditorium B — Classic Laser 2',
+        format: 'Standard 4K Laser',
+        tech: 'Christie 4K Laser',
+        aspectRatio: '1.85:1 Flat',
+        soundSystem: '5.1 Surround',
+        baseMultiplier: 1.0,
+        capacity: 30,
+      },
+    ],
+  },
+  {
+    id: 'uptown-arts-center',
+    name: 'CineMind Uptown IMAX Arts Center',
+    shortName: 'Uptown Arts',
+    neighborhood: 'Carnegie Hill',
+    distance: '6.5 mi',
+    address: '1220 Lexington Ave, New York, NY',
+    features: ['Curated Art Repertory', 'Sommelier Wine Bar', 'Acoustic Wool Baffling'],
+    screens: [
+      {
+        id: 'screen-up-1',
+        name: 'Auditorium I — Arts IMAX Dome',
+        format: 'IMAX 70mm',
+        tech: 'Single IMAX Laser Curved Arc',
+        aspectRatio: '1.90:1 Expanded',
+        soundSystem: '12-Channel Immersive',
+        baseMultiplier: 1.15,
+        capacity: 30,
+      },
+      {
+        id: 'screen-up-2',
+        name: 'Auditorium II — Intimate Studio B',
+        format: 'Standard 4K Laser',
+        tech: 'Barco 4K Laser',
+        aspectRatio: '1.85:1 Flat',
+        soundSystem: 'Dolby Atmos 64-ch',
+        baseMultiplier: 1.0,
+        capacity: 30,
+      },
+    ],
+  },
+]
+
+interface SeatSightline {
+  seatId: string
+  row: string
+  col: number
+  tier: SeatTier
+  tierName: string
+  horizontalAngle: number
+  horizontalDescription: string
+  verticalTilt: number
+  verticalDescription: string
+  fieldOfView: number
+  fovDescription: string
+  acousticScore: number
+  acousticDescription: string
+  overallExperienceScore: number
+}
+
+function getSeatSightline(seatId: string): SeatSightline {
+  const row = seatId[0] || 'C'
+  const col = parseInt(seatId.slice(1), 10) || 3
+  const tier = getSeatTier(seatId)
+  const tierConfig = SEAT_TIERS[tier]
+
+  const colOffset = Math.abs(col - 3.5)
+
+  let hDeg = 0
+  let vDeg = 0
+  let fovDeg = 0
+  let hDesc = ''
+  let vDesc = ''
+  let fovDesc = ''
+  let acousticScore = 90
+  let acousticDesc = ''
+
+  if (row === 'A') {
+    hDeg = Math.round(colOffset * 14 * 10) / 10
+    vDeg = 28
+    fovDeg = 58
+    hDesc = colOffset <= 0.5 ? 'Center Axis' : colOffset <= 1.5 ? 'Moderate Angle' : 'Acute Side Angle'
+    vDesc = 'High Neck Incline (Front Row)'
+    fovDesc = 'Full IMAX Peripheral Immersion'
+    acousticScore = colOffset <= 0.5 ? 82 : 74
+    acousticDesc = 'Direct Screen Baffle Sound'
+  } else if (row === 'B') {
+    hDeg = Math.round(colOffset * 10 * 10) / 10
+    vDeg = 20
+    fovDeg = 49
+    hDesc = colOffset <= 0.5 ? 'Center Sightline' : colOffset <= 1.5 ? 'Comfortable Angle' : 'Wide Angle'
+    vDesc = 'Slight Neck Tilt'
+    fovDesc = 'Wide Panoramic Field'
+    acousticScore = colOffset <= 0.5 ? 90 : 83
+    acousticDesc = 'Clear Left/Right Separation'
+  } else if (row === 'C') {
+    hDeg = Math.round(colOffset * 7 * 10) / 10
+    vDeg = 14
+    fovDeg = 43
+    hDesc = colOffset <= 0.5 ? '0° Dead Center Reference' : colOffset <= 1.5 ? 'Subtle 10° Offset' : '17° Peripheral'
+    vDesc = 'SMPTE Master Standard (<15° Ideal)'
+    fovDesc = 'THX Reference 43° Optical Sweet Spot'
+    acousticScore = colOffset <= 0.5 ? 99 : 92
+    acousticDesc = colOffset <= 0.5 ? 'Dolby Atmos Spatial Calibration Center' : 'Balanced Surround Matrix'
+  } else if (row === 'D') {
+    hDeg = Math.round(colOffset * 5.5 * 10) / 10
+    vDeg = 9
+    fovDeg = 36
+    hDesc = colOffset <= 0.5 ? 'Center Axis Alignment' : colOffset <= 1.5 ? 'Gentle 8° Angle' : '14° Soft Angle'
+    vDesc = 'Relaxed Recliner Eye-Level'
+    fovDesc = 'SMPTE Standard 36° Cinematic FOV'
+    acousticScore = colOffset <= 0.5 ? 98 : 91
+    acousticDesc = colOffset <= 0.5 ? 'Atmos Focal Core with Sub-Bass Presence' : 'Rich Spatial Acoustic Envelope'
+  } else {
+    hDeg = Math.round(colOffset * 4.5 * 10) / 10
+    vDeg = 5
+    fovDeg = 29
+    hDesc = colOffset <= 0.5 ? 'Level Center' : colOffset <= 1.5 ? '7° Offset' : '11° Offset'
+    vDesc = 'Level Horizontal Viewing'
+    fovDesc = 'Standard Theatrical Framing'
+    acousticScore = colOffset <= 0.5 ? 86 : 78
+    acousticDesc = 'Rear Surround Proximity'
+  }
+
+  const anglePenalty = hDeg * 0.8
+  const overallScore = Math.max(65, Math.min(99, Math.round(acousticScore * 0.5 + (50 - anglePenalty) * 0.5 + (vDeg <= 15 ? 10 : 0))))
+
+  return {
+    seatId,
+    row,
+    col,
+    tier,
+    tierName: tierConfig.name,
+    horizontalAngle: hDeg,
+    horizontalDescription: hDesc,
+    verticalTilt: vDeg,
+    verticalDescription: vDesc,
+    fieldOfView: fovDeg,
+    fovDescription: fovDesc,
+    acousticScore,
+    acousticDescription: acousticDesc,
+    overallExperienceScore: overallScore,
+  }
+}
+
+function getSeatPhysicalRotation(seatId: string): number {
+  const row = seatId[0] || 'C'
+  const col = parseInt(seatId.slice(1), 10) || 3
+  const offset = col - 3.5
+
+  const rowMultiplier = row === 'A' ? 3.6 : row === 'B' ? 2.8 : row === 'C' ? 2.2 : row === 'D' ? 1.6 : 1.2
+  return Math.round(-offset * rowMultiplier * 10) / 10
+}
+
+interface SmartExperienceRecommendation {
+  venueId: string
+  venueName: string
+  shortName: string
+  distance: string
+  format: string
+  auditorium: string
+  sweetSpotSeats: string[]
+  headline: string
+  reasoning: string
+  tags: string[]
+  matchScore: number
+}
+
+function getSmartExperienceRecommendation(movie: Movie): SmartExperienceRecommendation {
+  const isLargeFormatEpic =
+    ['Sci-Fi', 'Action', 'Epic'].includes(movie.genre) ||
+    /dune|avatar|mickey|oppenheimer|interstellar|blade runner|mad max|matrix/i.test(movie.title)
+
+  if (isLargeFormatEpic) {
+    return {
+      venueId: 'flagship-lincoln',
+      venueName: 'CineMind Flagship — Lincoln Square',
+      shortName: 'Lincoln Square',
+      distance: '1.8 mi',
+      format: 'IMAX 70mm',
+      auditorium: 'Auditorium 1 — Grand GT Laser',
+      sweetSpotSeats: ['C3', 'C4'],
+      headline: 'IMAX 70mm GT Laser • Optical & Acoustic Reference',
+      reasoning: `${movie.title} features epic visual sequences captured for giant 1.43:1 aspect ratio. Lincoln Square's Dual GT Laser delivers 40% expanded vertical imagery with 128-channel Dolby Atmos tuned directly to Center Rows C & D.`,
+      tags: ['1.43:1 Expanded Aspect', 'Dual 4K Commercial Laser', 'Row C Optical Sweet Spot'],
+      matchScore: 99,
+    }
+  }
+
+  return {
+    venueId: 'west-end-pavilion',
+    venueName: 'CineMind West End Pavilion',
+    shortName: 'West End',
+    distance: '4.2 mi',
+    format: 'Dolby Cinema',
+    auditorium: 'Auditorium A — Pavilion Dolby 1',
+    sweetSpotSeats: ['C3', 'C4'],
+    headline: 'Dolby Cinema Dual Laser • Intimate Acoustic Stage',
+    reasoning: `Intimate drama in ${movie.title} benefits from Dolby Vision's 1,000,000:1 contrast ratio, deep true blacks, and pin-drop acoustic clarity at Center Heated Recliners C3 & C4.`,
+    tags: ['Dolby Vision HDR', 'Sub-bass Transducer Recliners', 'In-Seat Chef Dining'],
+    matchScore: 97,
+  }
+}
+
 export default function BookingPage() {
   const [movies, setMovies] = useState<Movie[]>([])
 
@@ -159,7 +456,12 @@ export default function BookingPage() {
 
     authService.getCurrentUser()
       .then((u) => {
-        if (u) setCurrentUser(u as any)
+        if (u) {
+          setCurrentUser(u as any)
+          if (u.role === 'CINEMA_MANAGER' || u.role === 'EXECUTIVE_ADMIN') {
+            setManagerHouseReserveMode(true)
+          }
+        }
       })
       .catch(() => {})
 
@@ -212,6 +514,38 @@ export default function BookingPage() {
   const [selectedShowtime, setSelectedShowtime] = useState<string>('7:30 PM')
   const [selectedFormat, setSelectedFormat] = useState<string>('IMAX 70mm')
   const [selectedDate, setSelectedDate] = useState<string>('today')
+  const [selectedCinemaId, setSelectedCinemaId] = useState<string>('flagship-lincoln')
+  const [hoveredSeat, setHoveredSeat] = useState<string | null>(null)
+  const [showAllVenues, setShowAllVenues] = useState<boolean>(false)
+
+  const selectedCinema = useMemo(() => {
+    return CINEMA_VENUES.find((c) => c.id === selectedCinemaId) || CINEMA_VENUES[0]
+  }, [selectedCinemaId])
+
+  const smartRecommendation = useMemo(() => {
+    if (!selectedMovie) return null
+    return getSmartExperienceRecommendation(selectedMovie)
+  }, [selectedMovie])
+
+  const activeSightlineSeatId = hoveredSeat || (selectedSeats.length > 0 ? selectedSeats[0] : 'C3')
+  const activeSightline = useMemo(() => getSeatSightline(activeSightlineSeatId), [activeSightlineSeatId])
+
+  const handleApplyRecommendation = () => {
+    if (!smartRecommendation) return
+    setSelectedCinemaId(smartRecommendation.venueId)
+    setSelectedFormat(smartRecommendation.format)
+    setSelectedSeats([...smartRecommendation.sweetSpotSeats])
+    setToast({
+      id: Date.now().toString(),
+      type: 'success',
+      title: 'AI Curator Applied',
+      message: `Switched to ${smartRecommendation.venueName} • ${smartRecommendation.format} • Sweet Spot (${smartRecommendation.sweetSpotSeats.join(', ')})`,
+    })
+    playSound('success')
+  }
+
+  const [showAnglesOnSeats, setShowAnglesOnSeats] = useState<boolean>(true)
+  const [seatMapViewMode, setSeatMapViewMode] = useState<'CURVED' | 'GRID'>('CURVED')
   const [liveStreamConnected, setLiveStreamConnected] = useState<boolean>(false)
   const [liveBroadcastToast, setLiveBroadcastToast] = useState<string | null>(null)
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
@@ -220,6 +554,71 @@ export default function BookingPage() {
   const [isAuthModalOpen, setIsAuthModalOpen] = useState<boolean>(false)
   const [isGuestCheckout, setIsGuestCheckout] = useState<boolean>(false)
   const [isAuthLoading, setIsAuthLoading] = useState<boolean>(false)
+
+  // Cinema Manager House Reserve State
+  const [managerHouseReserveMode, setManagerHouseReserveMode] = useState<boolean>(false)
+  const [houseHoldReason, setHouseHoldReason] = useState<'VIP_PRESS' | 'COMPANION' | 'CALIBRATION' | 'MAINTENANCE'>('VIP_PRESS')
+
+  const handleManagerLockSeats = async () => {
+    if (!selectedMovie || selectedSeats.length === 0) return
+    setIsProcessing(true)
+    try {
+      const lockRes = await ticketService.lockSeats({
+        movieTitle: selectedMovie.title,
+        showTime: selectedShowtime,
+        seats: selectedSeats,
+      })
+      if (lockRes && lockRes.lockToken) {
+        setActiveLockToken(lockRes.lockToken)
+        setLockedSeats((prev) => Array.from(new Set([...prev, ...selectedSeats])))
+        setToast({
+          id: Date.now().toString(),
+          type: 'success',
+          title: 'House Reserve Engaged',
+          message: `Held seats ${selectedSeats.join(', ')} under ${houseHoldReason} for ${selectedMovie.title} (${selectedShowtime}).`,
+        })
+        playSound('lock')
+        setSelectedSeats([])
+      }
+    } catch (err: any) {
+      setToast({
+        id: Date.now().toString(),
+        type: 'error',
+        title: 'House Hold Failed',
+        message: err.message || 'Could not acquire distributed hold.',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
+  const handleManagerReleaseSeats = async () => {
+    if (!selectedMovie || selectedSeats.length === 0) return
+    setIsProcessing(true)
+    try {
+      if (activeLockToken) {
+        await ticketService.unlockSeats({ lockToken: activeLockToken })
+      }
+      setLockedSeats((prev) => prev.filter((s) => !selectedSeats.includes(s)))
+      setToast({
+        id: Date.now().toString(),
+        type: 'success',
+        title: 'House Reserve Released',
+        message: `Released hold on seats ${selectedSeats.join(', ')}. Returned to public inventory.`,
+      })
+      playSound('success')
+      setSelectedSeats([])
+    } catch (err: any) {
+      setToast({
+        id: Date.now().toString(),
+        type: 'error',
+        title: 'Release Failed',
+        message: err.message || 'Could not release seat hold.',
+      })
+    } finally {
+      setIsProcessing(false)
+    }
+  }
 
   // SplitMoney Integration State
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false)
@@ -433,16 +832,20 @@ REASON: <1 sentence why it matches>`
     })
   }, [movies, searchQuery, selectedGenre, filterAiPicksOnly])
 
-  // Refetch seat inventory whenever selected movie or showtime changes
+  // Refetch seat inventory whenever selected movie, showtime, date, format, or cinema changes
   useEffect(() => {
     if (!selectedMovie) return
 
     let isMounted = true
     const fetchInventory = async () => {
       try {
+        const activeAud = `${selectedCinema.shortName} • ${selectedFormat}`
         const data = await ticketService.getAuditoriumSeats(
           selectedMovie.title,
-          selectedShowtime
+          selectedShowtime,
+          selectedFormat,
+          activeAud,
+          selectedDate
         )
         if (data && isMounted) {
           setOccupiedSeats(data.occupiedSeats || [])
@@ -455,11 +858,21 @@ REASON: <1 sentence why it matches>`
       }
     }
 
+    // Reset user's active seat pick when changing screening slot (date, screen, or showtime)
+    // so patron doesn't carry old seat selection across different screens/dates
+    setSelectedSeats([])
+    if (activeLockToken) {
+      ticketService.unlockSeats({ lockToken: activeLockToken }).catch(() => {})
+      setActiveLockToken(null)
+      setLockExpiresAt(null)
+      setSecondsRemaining(0)
+    }
+
     fetchInventory()
     return () => {
       isMounted = false
     }
-  }, [selectedMovie, selectedShowtime])
+  }, [selectedMovie, selectedShowtime, selectedDate, selectedFormat, selectedCinemaId])
 
   // Real-Time SSE Distributed Seat Synchronizer across concurrent patrons
   useEffect(() => {
@@ -581,12 +994,16 @@ REASON: <1 sentence why it matches>`
     setBookingConfirmation(null)
     setLockWarning(null)
 
+    const rec = getSmartExperienceRecommendation(movie)
+    setSelectedCinemaId(rec.venueId)
+
     const times = movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : ['7:30 PM']
     const time = customShowtime || times[0] || '7:30 PM'
     setSelectedShowtime(time)
 
     const defaultFmt =
       customFormat ||
+      rec.format ||
       (movie.auditorium?.includes('IMAX')
         ? 'IMAX 70mm'
         : movie.auditorium?.includes('Dolby')
@@ -641,7 +1058,7 @@ REASON: <1 sentence why it matches>`
 
   const toggleSeat = async (seatId: string) => {
     if (occupiedSeats.includes(seatId)) return
-    if (lockedSeats.includes(seatId) && !selectedSeats.includes(seatId)) return
+    if (lockedSeats.includes(seatId) && !selectedSeats.includes(seatId) && !managerHouseReserveMode) return
 
     const newSeats = selectedSeats.includes(seatId)
       ? selectedSeats.filter((s) => s !== seatId)
@@ -651,7 +1068,7 @@ REASON: <1 sentence why it matches>`
     setLockWarning(null)
     playSound('click')
 
-    if (!selectedMovie) return
+    if (!selectedMovie || managerHouseReserveMode) return
 
     if (newSeats.length > 0) {
       setIsLocking(true)
@@ -726,7 +1143,7 @@ REASON: <1 sentence why it matches>`
 
     const totalAmount = priceBreakdown.total
     const showTime = selectedShowtime
-    const auditorium = `${selectedFormat} (${selectedMovie.auditorium || 'Screen 1'})`
+    const auditorium = `${selectedFormat} (${selectedCinema.shortName} • ${selectedMovie.auditorium || 'Auditorium 1'})`
 
     try {
       if (paymentMethod === 'WALLET') {
@@ -1243,38 +1660,229 @@ REASON: <1 sentence why it matches>`
                 <span className="h-3 w-3 rounded-sm bg-zinc-900 border border-zinc-800 text-zinc-600 text-[9px] flex items-center justify-center">✕</span>
                 <span className="text-zinc-500">Occupied</span>
               </div>
+
+              {/* Configurable Seat Map & Angle Controls */}
+              <div className="flex items-center gap-2 sm:ml-auto pt-1 sm:pt-0 sm:pl-3 sm:border-l sm:border-zinc-800">
+                <button
+                  onClick={() => setShowAnglesOnSeats(!showAnglesOnSeats)}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition border ${
+                    showAnglesOnSeats
+                      ? 'bg-cyan-500/10 text-cyan-300 border-cyan-500/40 shadow-sm'
+                      : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                  }`}
+                  title="Toggle displaying off-axis viewing angles on each seat badge"
+                >
+                  <Eye className="h-3 w-3" />
+                  <span>{showAnglesOnSeats ? 'Angles On' : 'Angles Off'}</span>
+                </button>
+
+                <button
+                  onClick={() => setSeatMapViewMode(seatMapViewMode === 'CURVED' ? 'GRID' : 'CURVED')}
+                  className={`flex items-center gap-1 px-2.5 py-1 rounded-md text-[11px] font-medium transition border ${
+                    seatMapViewMode === 'CURVED'
+                      ? 'bg-purple-500/10 text-purple-300 border-purple-500/40 shadow-sm'
+                      : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                  }`}
+                  title="Toggle between physical curved theater arc and flat grid view"
+                >
+                  <Compass className="h-3 w-3" />
+                  <span>{seatMapViewMode === 'CURVED' ? 'Curved Arc' : 'Flat Grid'}</span>
+                </button>
+              </div>
             </div>
           )}
         </div>
 
         {selectedMovie ? (
           <div className="space-y-6">
-            {/* Theatrical Date, Format & Showtime Bar */}
-            <div className="space-y-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
-              {/* Screening Date Selector */}
-              <div className="space-y-1.5">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
-                  <Calendar className="h-3 w-3" />
-                  Screening Date
-                </div>
-                <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  {SCREENING_DATES.map((d) => (
+            {/* AI Experience Curator & Cinema Venue Recommendation Card */}
+            {smartRecommendation && (
+              <div className="relative overflow-hidden rounded-2xl border border-purple-500/30 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 shadow-xl">
+                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="flex items-center gap-1.5 rounded-full bg-gradient-to-r from-purple-600 to-indigo-600 px-3 py-0.5 text-[10px] font-bold uppercase tracking-wider text-white shadow-sm">
+                        <Sparkles className="h-3 w-3" />
+                        AI Screen & Venue Curator
+                      </span>
+                      <span className="rounded-full bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-0.5 text-[10px] font-mono font-bold text-emerald-400">
+                        {smartRecommendation.matchScore}% Audiovisual Match
+                      </span>
+                      <span className="rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 px-2 py-0.5 text-[10px] flex items-center gap-1">
+                        <MapPin className="h-2.5 w-2.5 text-zinc-400" />
+                        {smartRecommendation.venueName} ({smartRecommendation.distance})
+                      </span>
+                    </div>
+
+                    <div>
+                      <h4 className="text-sm sm:text-base font-bold text-white flex items-center gap-2">
+                        <span>{smartRecommendation.headline}</span>
+                      </h4>
+                      <p className="text-xs text-zinc-300 mt-1 leading-relaxed max-w-3xl">
+                        {smartRecommendation.reasoning}
+                      </p>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap pt-1">
+                      {smartRecommendation.tags.map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-md bg-purple-950/60 border border-purple-500/30 px-2 py-0.5 text-[10px] font-medium text-purple-300"
+                        >
+                          ✦ {tag}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row lg:flex-col gap-2 shrink-0">
                     <button
-                      key={d.id}
-                      onClick={() => {
-                        setSelectedDate(d.id)
-                        playSound('click')
-                      }}
-                      className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
-                        selectedDate === d.id
-                          ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 ring-1 ring-amber-400 font-bold'
-                          : 'bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80'
-                      }`}
+                      onClick={handleApplyRecommendation}
+                      className="flex items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-purple-600 hover:from-purple-500 to-indigo-600 hover:to-indigo-500 px-4 py-2.5 text-xs font-bold text-white shadow-lg shadow-purple-600/30 transition-all active:scale-95"
                     >
-                      <span className="text-[10px] uppercase opacity-75">{d.dayName}</span>
-                      <span className="font-mono">{d.date}</span>
+                      <Sparkles className="h-3.5 w-3.5" />
+                      <span>Select Sweet Spot ({smartRecommendation.sweetSpotSeats.join(', ')})</span>
                     </button>
-                  ))}
+
+                    <button
+                      onClick={() => setShowAllVenues(!showAllVenues)}
+                      className="flex items-center justify-center gap-1.5 rounded-xl bg-zinc-800/80 hover:bg-zinc-700 text-zinc-300 hover:text-white px-3 py-2 text-xs font-medium border border-zinc-700/80 transition-all"
+                    >
+                      <Compass className="h-3.5 w-3.5 text-purple-400" />
+                      <span>{showAllVenues ? 'Hide Venues & Screens' : 'Compare Venues & Screens (3 Locations)'}</span>
+                      {showAllVenues ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Venues & Screens Browser Drawer */}
+                {showAllVenues && (
+                  <div className="mt-4 pt-4 border-t border-zinc-800/80 space-y-3 animate-fade-in">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-bold uppercase tracking-wider text-zinc-400 flex items-center gap-1.5">
+                        <MapPin className="h-3.5 w-3.5 text-amber-400" />
+                        Explore CineMind Circuit Venues & Auditoriums
+                      </span>
+                      <span className="text-[10px] text-zinc-500 font-mono">
+                        Instant 1-Click Screen Transfer
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                      {CINEMA_VENUES.map((venue) => {
+                        const isVenueActive = selectedCinemaId === venue.id
+                        return (
+                          <div
+                            key={venue.id}
+                            className={`rounded-xl p-3 transition-all border ${
+                              isVenueActive
+                                ? 'bg-purple-950/20 border-purple-500/60 shadow-md ring-1 ring-purple-500/40'
+                                : 'bg-zinc-900/60 border-zinc-800 hover:border-zinc-700'
+                            }`}
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
+                                  <span>{venue.name}</span>
+                                  {venue.id === smartRecommendation.venueId && (
+                                    <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded border border-purple-500/40">
+                                      AI Pick
+                                    </span>
+                                  )}
+                                </h5>
+                                <p className="text-[10px] text-zinc-400 flex items-center gap-1 mt-0.5">
+                                  <MapPin className="h-2.5 w-2.5 text-zinc-500" />
+                                  {venue.neighborhood} • {venue.distance}
+                                </p>
+                              </div>
+                              {isVenueActive && (
+                                <span className="h-4 w-4 rounded-full bg-emerald-500 text-black flex items-center justify-center text-[10px] font-bold">
+                                  ✓
+                                </span>
+                              )}
+                            </div>
+
+                            {/* Screen options for this venue */}
+                            <div className="mt-2.5 space-y-1.5">
+                              {venue.screens.map((screen) => {
+                                const isScreenActive = isVenueActive && selectedFormat === screen.format
+                                return (
+                                  <button
+                                    key={screen.id}
+                                    onClick={() => {
+                                      setSelectedCinemaId(venue.id)
+                                      setSelectedFormat(screen.format)
+                                      playSound('click')
+                                    }}
+                                    className={`w-full text-left p-1.5 rounded-lg text-[11px] transition-all flex items-center justify-between border ${
+                                      isScreenActive
+                                        ? 'bg-purple-600/30 border-purple-500 text-purple-200 font-semibold'
+                                        : 'bg-zinc-800/40 border-zinc-800 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800'
+                                    }`}
+                                  >
+                                    <div>
+                                      <div className="font-semibold">{screen.name}</div>
+                                      <div className="text-[9px] text-zinc-500 font-mono">{screen.tech}</div>
+                                    </div>
+                                    <span className="font-mono text-[10px] text-zinc-400">
+                                      {screen.format}
+                                    </span>
+                                  </button>
+                                )
+                              })}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* Theatrical Date, Venue, Format & Showtime Bar */}
+            <div className="space-y-4 p-4 rounded-xl bg-zinc-900/80 border border-zinc-800">
+              {/* Screening Date & Venue Selector */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="space-y-1.5 flex-1">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-amber-400 flex items-center gap-1.5">
+                    <Calendar className="h-3 w-3" />
+                    Screening Date
+                  </div>
+                  <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                    {SCREENING_DATES.map((d) => (
+                      <button
+                        key={d.id}
+                        onClick={() => {
+                          setSelectedDate(d.id)
+                          playSound('click')
+                        }}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all flex items-center gap-1.5 shrink-0 ${
+                          selectedDate === d.id
+                            ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 ring-1 ring-amber-400 font-bold'
+                            : 'bg-zinc-800 text-zinc-300 hover:text-white border border-zinc-700/80'
+                        }`}
+                      >
+                        <span className="text-[10px] uppercase opacity-75">{d.dayName}</span>
+                        <span className="font-mono">{d.date}</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Selected Venue Badge & Switcher */}
+                <div className="space-y-1.5 shrink-0">
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-cyan-400 flex items-center gap-1.5">
+                    <MapPin className="h-3 w-3" />
+                    Selected Cinema Venue
+                  </div>
+                  <button
+                    onClick={() => setShowAllVenues(!showAllVenues)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-zinc-800 hover:bg-zinc-700 border border-zinc-700 text-xs font-semibold text-zinc-200 transition"
+                  >
+                    <span>{selectedCinema.shortName} ({selectedCinema.distance})</span>
+                    <ChevronDown className="h-3 w-3 text-zinc-400" />
+                  </button>
                 </div>
               </div>
 
@@ -1390,8 +1998,120 @@ REASON: <1 sentence why it matches>`
               </div>
             )}
 
+            {/* Manager House Reserve & Seating Control Panel (CINEMA_MANAGER / EXECUTIVE_ADMIN) */}
+            {(currentUser?.role === 'CINEMA_MANAGER' || currentUser?.role === 'EXECUTIVE_ADMIN') && (
+              <div className="rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 shadow-xl space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="h-9 w-9 rounded-xl bg-indigo-500/20 border border-indigo-500/30 flex items-center justify-center text-indigo-400">
+                      <ShieldAlert className="h-5 w-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <span>Cinema Manager House Reserve & Inventory Control</span>
+                        <span className="text-[10px] bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 px-2 py-0.5 rounded font-mono">
+                          Staff Override
+                        </span>
+                      </h3>
+                      <p className="text-[11px] text-zinc-400 mt-0.5">
+                        Hold or release blocks of seats for VIP press, acoustic calibration, ADA companions, or maintenance.
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Mode Toggle Button */}
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setManagerHouseReserveMode(!managerHouseReserveMode)}
+                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                        managerHouseReserveMode
+                          ? 'bg-indigo-600 text-white border-indigo-500 shadow-md shadow-indigo-600/30'
+                          : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                      }`}
+                    >
+                      <Lock className="h-3.5 w-3.5" />
+                      <span>{managerHouseReserveMode ? 'House Reserve Mode ON' : 'Patron Booking Mode'}</span>
+                    </button>
+                  </div>
+                </div>
+
+                {managerHouseReserveMode && (
+                  <div className="space-y-4 animate-fade-in">
+                    <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+                      <div className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Total Capacity</span>
+                        <span className="text-base font-bold text-white font-mono mt-0.5 block">30 Seats</span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Available</span>
+                        <span className="text-base font-bold text-emerald-400 font-mono mt-0.5 block">
+                          {Math.max(0, 30 - occupiedSeats.length - lockedSeats.length)}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">House Holds</span>
+                        <span className="text-base font-bold text-amber-400 font-mono mt-0.5 block">
+                          {lockedSeats.length}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Sold / Admitted</span>
+                        <span className="text-base font-bold text-purple-400 font-mono mt-0.5 block">
+                          {occupiedSeats.length}
+                        </span>
+                      </div>
+                      <div className="p-2.5 rounded-xl bg-zinc-900/80 border border-zinc-800 col-span-2 sm:col-span-1">
+                        <span className="text-[10px] text-zinc-500 uppercase tracking-wider block font-semibold">Occupancy</span>
+                        <span className="text-base font-bold text-teal-400 font-mono mt-0.5 block">
+                          {Math.round((occupiedSeats.length / 30) * 100)}%
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3 rounded-xl bg-zinc-950/70 border border-zinc-800">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="text-xs font-semibold text-zinc-300">Reserve Reason:</span>
+                        <select
+                          value={houseHoldReason}
+                          onChange={(e: any) => setHouseHoldReason(e.target.value)}
+                          className="rounded-lg border border-zinc-700 bg-zinc-900 px-2.5 py-1 text-xs text-white focus:outline-none focus:border-indigo-500"
+                        >
+                          <option value="VIP_PRESS">Studio / Press VIP Hold</option>
+                          <option value="COMPANION">Wheelchair ADA Companion Hold</option>
+                          <option value="CALIBRATION">Acoustic / Projection Calibration</option>
+                          <option value="MAINTENANCE">Maintenance: Recliner Out of Service</option>
+                        </select>
+                        <span className="text-[11px] text-indigo-300 font-mono">
+                          Selected ({selectedSeats.length}): {selectedSeats.length > 0 ? selectedSeats.join(', ') : 'None'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={handleManagerLockSeats}
+                          disabled={isProcessing || selectedSeats.length === 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white disabled:opacity-40 transition shadow-sm"
+                        >
+                          <Lock className="h-3 w-3" />
+                          <span>Lock House Hold</span>
+                        </button>
+                        <button
+                          onClick={handleManagerReleaseSeats}
+                          disabled={isProcessing || selectedSeats.length === 0}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-zinc-800 hover:bg-zinc-700 text-zinc-300 hover:text-white disabled:opacity-40 transition border border-zinc-700"
+                        >
+                          <Unlock className="h-3 w-3" />
+                          <span>Release Hold</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Realistic Curved Theatrical Screen Arc */}
-            <div className="w-full text-center space-y-2 py-2">
+            <div className="relative w-full text-center space-y-2 py-2">
               <div className="relative mx-auto w-4/5 max-w-xl">
                 <div
                   className="h-2 w-full rounded-t-full bg-gradient-to-r from-purple-500/20 via-purple-400 to-purple-500/20 shadow-lg shadow-purple-500/30"
@@ -1406,10 +2126,113 @@ REASON: <1 sentence why it matches>`
                       'radial-gradient(ellipse at 50% 0%, rgba(168,85,247,0.18) 0%, transparent 70%)',
                   }}
                 />
+
+                {/* Dynamic Screen Sightline Ray to Active Seat */}
+                {activeSightline && (
+                  <div className="pointer-events-none absolute inset-0 overflow-hidden">
+                    <svg className="h-full w-full opacity-70 transition-all duration-300">
+                      <line
+                        x1="50%"
+                        y1="2"
+                        x2={`${
+                          activeSightline.col === 1
+                            ? 12
+                            : activeSightline.col === 2
+                            ? 26
+                            : activeSightline.col === 3
+                            ? 42
+                            : activeSightline.col === 4
+                            ? 58
+                            : activeSightline.col === 5
+                            ? 74
+                            : 88
+                        }%`}
+                        y2="100%"
+                        stroke="rgba(6, 182, 212, 0.75)"
+                        strokeWidth="1.5"
+                        strokeDasharray="4 3"
+                        className="animate-pulse"
+                      />
+                    </svg>
+                  </div>
+                )}
               </div>
               <p className="text-[10px] uppercase font-bold tracking-[0.25em] text-zinc-500">
-                ⚡ 70MM DUAL LASER CURVED CINEMA SCREEN
+                ⚡ 70MM DUAL LASER CURVED CINEMA SCREEN • {selectedCinema.shortName.toUpperCase()}
               </p>
+            </div>
+
+            {/* Spatial Sightline & Viewing Angle HUD Bar */}
+            <div className="rounded-xl border border-zinc-800 bg-zinc-950/80 p-3.5 space-y-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-zinc-800/60 pb-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="font-mono text-xs font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/30">
+                    Seat {activeSightline.seatId}
+                  </span>
+                  <span className="text-xs font-semibold text-zinc-300">
+                    {activeSightline.tierName}
+                  </span>
+                  <span className="text-[10px] text-zinc-500 font-mono">
+                    {hoveredSeat ? '(Live Sightline & Angle HUD)' : selectedSeats.includes(activeSightline.seatId) ? '(Selected Seat Sightline)' : '(Master Sweet Spot Reference • Hover any seat)'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 text-xs font-mono font-bold">
+                  <span className="text-zinc-400">Experience Rating:</span>
+                  <span className="text-emerald-400 text-sm bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                    {activeSightline.overallExperienceScore}%
+                  </span>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                {/* Horizontal Off-Axis */}
+                <div className="rounded-lg bg-zinc-900/80 p-2.5 border border-zinc-800/80">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1.5">
+                    <Eye className="h-3 w-3 text-cyan-400" />
+                    Viewing Angle
+                  </div>
+                  <div className="font-mono text-sm font-bold text-white mt-1">
+                    {activeSightline.horizontalAngle}° <span className="text-[10px] font-normal text-zinc-400">off-center</span>
+                  </div>
+                  <div className="text-[10px] text-cyan-300/80 truncate mt-0.5">{activeSightline.horizontalDescription}</div>
+                </div>
+
+                {/* Vertical Neck Tilt */}
+                <div className="rounded-lg bg-zinc-900/80 p-2.5 border border-zinc-800/80">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1.5">
+                    <Sliders className="h-3 w-3 text-amber-400" />
+                    Vertical Neck Tilt
+                  </div>
+                  <div className="font-mono text-sm font-bold text-white mt-1">
+                    {activeSightline.verticalTilt}° <span className="text-[10px] font-normal text-zinc-400">elevation</span>
+                  </div>
+                  <div className="text-[10px] text-amber-300/80 truncate mt-0.5">{activeSightline.verticalDescription}</div>
+                </div>
+
+                {/* SMPTE FOV */}
+                <div className="rounded-lg bg-zinc-900/80 p-2.5 border border-zinc-800/80">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1.5">
+                    <Tv className="h-3 w-3 text-purple-400" />
+                    Field of View (FOV)
+                  </div>
+                  <div className="font-mono text-sm font-bold text-white mt-1">
+                    {activeSightline.fieldOfView}° <span className="text-[10px] font-normal text-zinc-400">SMPTE</span>
+                  </div>
+                  <div className="text-[10px] text-purple-300/80 truncate mt-0.5">{activeSightline.fovDescription}</div>
+                </div>
+
+                {/* Dolby Atmos Sweet Spot */}
+                <div className="rounded-lg bg-zinc-900/80 p-2.5 border border-zinc-800/80">
+                  <div className="text-[10px] uppercase font-bold text-zinc-400 flex items-center gap-1.5">
+                    <Volume2 className="h-3 w-3 text-emerald-400" />
+                    Dolby Atmos Sweet Spot
+                  </div>
+                  <div className="font-mono text-sm font-bold text-white mt-1">
+                    {activeSightline.acousticScore}% <span className="text-[10px] font-normal text-zinc-400">spatial</span>
+                  </div>
+                  <div className="text-[10px] text-emerald-300/80 truncate mt-0.5">{activeSightline.acousticDescription}</div>
+                </div>
+              </div>
             </div>
 
             {/* Realistic Seating Layout with Center Aisle */}
@@ -1436,15 +2259,24 @@ REASON: <1 sentence why it matches>`
                       return (
                         <button
                           key={seatId}
-                          disabled={isOccupied || isLocked}
+                          disabled={isOccupied || (isLocked && !managerHouseReserveMode)}
                           onClick={() => toggleSeat(seatId)}
+                          onMouseEnter={() => setHoveredSeat(seatId)}
+                          onMouseLeave={() => setHoveredSeat(null)}
+                          style={
+                            seatMapViewMode === 'CURVED'
+                              ? { transform: `rotate(${getSeatPhysicalRotation(seatId)}deg)` }
+                              : undefined
+                          }
                           className={`relative h-10 w-10 sm:h-11 sm:w-11 rounded-lg flex flex-col items-center justify-center text-xs font-mono font-bold transition-all active:scale-95 ${
                             isSelected
                               ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 z-10'
                               : isOccupied
                               ? 'bg-zinc-900/60 text-zinc-700 border border-zinc-800/80 cursor-not-allowed opacity-60'
                               : isLocked
-                              ? 'bg-purple-950/40 text-purple-400 border border-purple-500/40 cursor-not-allowed'
+                              ? managerHouseReserveMode
+                                ? 'bg-amber-950/40 text-amber-300 border border-amber-500/60 ring-1 ring-amber-500/40 cursor-pointer'
+                                : 'bg-purple-950/40 text-purple-400 border border-purple-500/40 cursor-not-allowed'
                               : tier === 'VIP_RECLINER'
                               ? 'bg-amber-950/20 text-amber-300 border border-amber-400/80 hover:bg-amber-900/40 shadow-sm shadow-amber-500/10'
                               : tier === 'PRIME_RESERVED'
@@ -1474,6 +2306,10 @@ REASON: <1 sentence why it matches>`
                           </div>
                           {isOccupied ? (
                             <span className="text-[9px] text-zinc-600 leading-none">✕</span>
+                          ) : showAnglesOnSeats ? (
+                            <span className="text-[9px] font-mono text-cyan-300 leading-none">
+                              {getSeatSightline(seatId).horizontalAngle}°
+                            </span>
                           ) : (
                             <span className="text-[9px] opacity-70 leading-none">${price}</span>
                           )}
@@ -1504,15 +2340,24 @@ REASON: <1 sentence why it matches>`
                       return (
                         <button
                           key={seatId}
-                          disabled={isOccupied || isLocked}
+                          disabled={isOccupied || (isLocked && !managerHouseReserveMode)}
                           onClick={() => toggleSeat(seatId)}
+                          onMouseEnter={() => setHoveredSeat(seatId)}
+                          onMouseLeave={() => setHoveredSeat(null)}
+                          style={
+                            seatMapViewMode === 'CURVED'
+                              ? { transform: `rotate(${getSeatPhysicalRotation(seatId)}deg)` }
+                              : undefined
+                          }
                           className={`relative h-10 w-10 sm:h-11 sm:w-11 rounded-lg flex flex-col items-center justify-center text-xs font-mono font-bold transition-all active:scale-95 ${
                             isSelected
                               ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/40 ring-2 ring-emerald-300 scale-105 z-10'
                               : isOccupied
                               ? 'bg-zinc-900/60 text-zinc-700 border border-zinc-800/80 cursor-not-allowed opacity-60'
                               : isLocked
-                              ? 'bg-purple-950/40 text-purple-400 border border-purple-500/40 cursor-not-allowed'
+                              ? managerHouseReserveMode
+                                ? 'bg-amber-950/40 text-amber-300 border border-amber-500/60 ring-1 ring-amber-500/40 cursor-pointer'
+                                : 'bg-purple-950/40 text-purple-400 border border-purple-500/40 cursor-not-allowed'
                               : tier === 'VIP_RECLINER'
                               ? 'bg-amber-950/20 text-amber-300 border border-amber-400/80 hover:bg-amber-900/40 shadow-sm shadow-amber-500/10'
                               : tier === 'PRIME_RESERVED'
@@ -1542,6 +2387,10 @@ REASON: <1 sentence why it matches>`
                           </div>
                           {isOccupied ? (
                             <span className="text-[9px] text-zinc-600 leading-none">✕</span>
+                          ) : showAnglesOnSeats ? (
+                            <span className="text-[9px] font-mono text-cyan-300 leading-none">
+                              {getSeatSightline(seatId).horizontalAngle}°
+                            </span>
                           ) : (
                             <span className="text-[9px] opacity-70 leading-none">${price}</span>
                           )}

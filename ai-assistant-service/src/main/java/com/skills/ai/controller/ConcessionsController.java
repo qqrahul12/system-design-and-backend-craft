@@ -106,7 +106,7 @@ public class ConcessionsController {
         return ResponseEntity.status(HttpStatus.CREATED).body(concessionsService.saveItems(items));
     }
 
-    @PatchMapping("/items/{id}/stock")
+    @RequestMapping(value = "/items/{id}/stock", method = {RequestMethod.PATCH, RequestMethod.POST, RequestMethod.PUT})
     public ResponseEntity<ConcessionItem> toggleStock(@PathVariable String id, @RequestBody Map<String, Boolean> body) {
         authService.requirePermission("MANAGE_FNB_MENU");
         boolean inStock = body != null && body.getOrDefault("inStock", true);

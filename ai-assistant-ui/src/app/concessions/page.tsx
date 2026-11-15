@@ -27,6 +27,15 @@ import {
   ChefHat,
   Truck,
   Users,
+  Receipt,
+  DollarSign,
+  Printer,
+  Store,
+  ChevronDown,
+  ChevronUp,
+  Search,
+  MapPin,
+  RefreshCw,
 } from 'lucide-react'
 import {
   splitService,
@@ -126,11 +135,42 @@ function ConcessionsContent() {
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
   const [walletBalance, setWalletBalance] = useState<number>(175.00)
   const [currentUser, setCurrentUser] = useState<any>(null)
+  const [personas, setPersonas] = useState<any[]>([])
+
+  // Staff POS Counter Mode State
+  // Role-Aligned Concessions Mode: Patron Self-Order vs Staff POS Counter vs Usher Delivery Checklist
+  const [concessionsViewMode, setConcessionsViewMode] = useState<'PATRON' | 'POS_COUNTER' | 'USHER_DISPATCH'>('PATRON')
+  const [usherAuditoriumFilter, setUsherAuditoriumFilter] = useState<string>('ALL')
+  const [posCustomerType, setPosCustomerType] = useState<'WALK_UP' | 'PATRON_SEAT'>('WALK_UP')
+  const [posCustomerName, setPosCustomerName] = useState<string>('Walk-up Guest')
+  const [posDiscountType, setPosDiscountType] = useState<'NONE' | 'STAFF_20' | 'VIP_COMP'>('NONE')
+  const [cashTendered, setCashTendered] = useState<number>(0)
+  const [posPaymentType, setPosPaymentType] = useState<'CARD' | 'CASH' | 'WALLET'>('CARD')
+  const [posReceiptModal, setPosReceiptModal] = useState<any>(null)
+  const [posSearchTerm, setPosSearchTerm] = useState<string>('')
+  const [isKitchenQueueOpen, setIsKitchenQueueOpen] = useState<boolean>(false)
 
   useEffect(() => {
     authService.getCurrentUser()
-      .then((u) => setCurrentUser(u))
+      .then((u) => {
+        setCurrentUser(u)
+        if (u) {
+          if (u.role === 'AUDITORIUM_USHER') {
+            setConcessionsViewMode('USHER_DISPATCH')
+          } else if (u.role === 'CINEMA_MANAGER' || u.role === 'EXECUTIVE_ADMIN') {
+            setConcessionsViewMode('POS_COUNTER')
+          } else {
+            setConcessionsViewMode('PATRON')
+          }
+        }
+      })
       .catch(() => setCurrentUser(null))
+
+    authService.getPersonas()
+      .then((p) => {
+        if (p && Array.isArray(p)) setPersonas(p)
+      })
+      .catch(() => {})
   }, [])
 
   // SplitMoney Integration State
@@ -563,13 +603,839 @@ function ConcessionsContent() {
 
   const activeTicket = userTickets.find((t) => t.ticketId === selectedTicketId) || (userTickets.length > 0 ? userTickets[0] : null)
 
+  const discountMultiplier = posDiscountType === 'STAFF_20' ? 0.8 : posDiscountType === 'VIP_COMP' ? 0 : 1.0
+  const effectivePosTotal = Math.round(cartTotal * discountMultiplier * 100) / 100
+  const effectiveChangeDue = Math.max(0, Math.round((cashTendered - effectivePosTotal) * 100) / 100)
+
+  const filteredPosMenu = menu.filter((item) => {
+    const matchCat = selectedCategory === 'ALL' || item.category === selectedCategory
+    const matchSearch =
+      !posSearchTerm.trim() ||
+      item.name.toLowerCase().includes(posSearchTerm.toLowerCase()) ||
+      (item.category || '').toLowerCase().includes(posSearchTerm.toLowerCase())
+    return matchCat && matchSearch
+  })
+
+  const handlePlacePosOrder = async () => {
+    if (cartItemCount === 0 || isPlacingOrder) return
+    setIsPlacingOrder(true)
+
+    const orderItems = Object.entries(cart).map(([itemId, qty]) => {
+      const item = menu.find((i) => i.id === itemId)
+      return {
+        name: item?.name || itemId,
+        quantity: qty,
+        price: item?.price || 0,
+      }
+    })
+
+    const targetDestination = posCustomerType === 'WALK_UP' ? 'Counter Pickup (Register #02)' : deliverySeat
+
+    try {
+      if (posPaymentType === 'WALLET') {
+        const wTxn = await walletService.pay(
+          effectivePosTotal,
+          `POS Concessions: ${posCustomerName} (${cartItemCount} items to ${targetDestination})`
+        )
+        if (wTxn) {
+          setWalletBalance(wTxn.balanceAfter)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('cinemind-auth-changed'))
+          }
+        }
+      }
+
+      const orderData = await concessionsService.placeOrder({
+        items: orderItems,
+        deliverySeat: `${targetDestination}${posDiscountType !== 'NONE' ? ` [${posDiscountType === 'STAFF_20' ? 'Staff -20%' : 'VIP Comp'}]` : ''}`,
+        total: effectivePosTotal,
+      })
+
+      const placedOrder = {
+        orderId: orderData.orderId,
+        total: effectivePosTotal,
+        subtotal: cartSubtotal,
+        tax: cartTax,
+        seat: targetDestination,
+        itemsCount: cartItemCount,
+        status: 'PREPARING' as const,
+        estimatedMinutes: 6,
+        customerName: posCustomerName,
+        paymentType: posPaymentType,
+        cashTendered: posPaymentType === 'CASH' ? cashTendered : undefined,
+        changeDue: posPaymentType === 'CASH' ? effectiveChangeDue : undefined,
+        discount: posDiscountType,
+        items: orderItems,
+        timestamp: new Date().toLocaleTimeString(),
+        register: 'Register #02 (Main Lobby)',
+        cashier: currentUser?.name || 'Staff Cashier',
+      }
+
+      setActiveOrder(placedOrder)
+      setPosReceiptModal(placedOrder)
+      playKitchenChime('order')
+      setCart({})
+      setCashTendered(0)
+      showNotice(
+        `POS Order ${orderData.orderId} dispatched to Kitchen! ${posPaymentType === 'CASH' ? `Change Due: $${effectiveChangeDue.toFixed(2)}` : 'Payment Approved'}`,
+        'success',
+        'POS Transaction Approved'
+      )
+    } catch (err: unknown) {
+      console.error('Failed to place POS concessions order:', err)
+      const errorMsg = err instanceof Error ? err.message : 'POS order submission failed'
+      showNotice(`${errorMsg}`, 'error', 'POS Transaction Failed')
+    } finally {
+      setIsPlacingOrder(false)
+    }
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">
       {/* Toast Notification */}
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222] pb-6">
+      {/* Role / Mode Switcher Pill */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-2xl">
+        <div className="flex items-center gap-2">
+          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+          <span className="text-xs font-semibold text-zinc-300">
+            {concessionsViewMode === 'USHER_DISPATCH'
+              ? 'Auditorium Usher Delivery Run Sheet'
+              : concessionsViewMode === 'POS_COUNTER'
+              ? 'Cinema Manager Counter POS Terminal'
+              : 'Patron Self-Service F&B Studio'}
+          </span>
+          {currentUser && (
+            <span className="text-[10px] font-mono text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+              Role: {currentUser.roleDisplayName || currentUser.role}
+            </span>
+          )}
+        </div>
+
+        <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+          <button
+            onClick={() => setConcessionsViewMode('PATRON')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+              concessionsViewMode === 'PATRON'
+                ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 font-bold'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <UtensilsCrossed className="h-3.5 w-3.5" />
+            <span>Patron View</span>
+          </button>
+
+          <button
+            onClick={() => setConcessionsViewMode('POS_COUNTER')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+              concessionsViewMode === 'POS_COUNTER'
+                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 font-bold'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Store className="h-3.5 w-3.5" />
+            <span>Counter POS (Manager)</span>
+          </button>
+
+          <button
+            onClick={() => setConcessionsViewMode('USHER_DISPATCH')}
+            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+              concessionsViewMode === 'USHER_DISPATCH'
+                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-bold'
+                : 'text-zinc-400 hover:text-white'
+            }`}
+          >
+            <Truck className="h-3.5 w-3.5" />
+            <span>Delivery Checklist (Usher)</span>
+          </button>
+        </div>
+      </div>
+
+      {concessionsViewMode === 'USHER_DISPATCH' ? (
+        <div className="space-y-6 animate-fade-in">
+          {/* Usher Delivery Header */}
+          <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-amber-600/20 border border-amber-500/40 flex items-center justify-center shrink-0">
+                <Truck className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white">Auditorium Usher In-Seat Delivery Run Sheet</h2>
+                  <span className="text-[10px] bg-amber-500/10 text-amber-300 border border-amber-500/30 px-2 py-0.5 rounded font-mono font-bold">
+                    DISPATCH ACTIVE
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Assigned Usher: <span className="font-semibold text-zinc-200">{currentUser?.name || 'Auditorium Usher'}</span> • Live KDS Kitchen Orders Ready for Seat Hand-Off
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={fetchOrders}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-zinc-700 transition"
+              >
+                <RefreshCw className="h-3.5 w-3.5 text-zinc-400" />
+                <span>Refresh Run Sheet</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Auditorium Filter Tabs */}
+          <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            {[
+              { id: 'ALL', label: 'All Auditoriums' },
+              { id: 'Auditorium 1', label: 'Auditorium 1 — IMAX GT' },
+              { id: 'Auditorium 2', label: 'Auditorium 2 — Dolby Prime' },
+              { id: 'Auditorium 3', label: 'Auditorium 3 — Laser Studio' },
+              { id: 'Counter', label: 'VIP Counter Pickups' },
+            ].map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => setUsherAuditoriumFilter(tab.id)}
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 ${
+                  usherAuditoriumFilter === tab.id
+                    ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                }`}
+              >
+                {tab.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Delivery Run Sheet Cards */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {(allOrders.length > 0 ? allOrders : [
+              {
+                orderId: 'ORD-7291',
+                deliverySeat: 'Auditorium 1 — IMAX GT, Seat C3',
+                customerName: 'VIP Patron (Row C)',
+                status: 'READY',
+                totalAmount: 24.50,
+                estimatedMinutes: 2,
+                items: [
+                  { name: 'Truffle Butter Popcorn (Large)', quantity: 1 },
+                  { name: 'Zero Sugar Craft Cola', quantity: 2 },
+                  { name: 'Warm Pretzel Bites', quantity: 1 },
+                ],
+              },
+              {
+                orderId: 'ORD-7292',
+                deliverySeat: 'Auditorium 1 — IMAX GT, Seat D4',
+                customerName: 'Club Member (Row D)',
+                status: 'PREPARING',
+                totalAmount: 18.00,
+                estimatedMinutes: 5,
+                items: [
+                  { name: 'Classic Salt Popcorn', quantity: 1 },
+                  { name: 'Sparkling Mineral Water', quantity: 1 },
+                ],
+              },
+              {
+                orderId: 'ORD-7293',
+                deliverySeat: 'Auditorium 2 — Dolby Prime, Seat B2',
+                customerName: 'Reserved Guest (Row B)',
+                status: 'READY',
+                totalAmount: 16.50,
+                estimatedMinutes: 1,
+                items: [
+                  { name: 'Nachos with Warm Cheese', quantity: 1 },
+                  { name: 'Fountain Soda (Large)', quantity: 1 },
+                ],
+              },
+            ])
+              .filter((ord) => {
+                if (usherAuditoriumFilter === 'ALL') return true
+                if (usherAuditoriumFilter === 'Counter') return (ord.deliverySeat || '').toLowerCase().includes('counter')
+                return (ord.deliverySeat || '').includes(usherAuditoriumFilter)
+              })
+              .map((ord) => {
+                const isReady = ord.status === 'READY' || ord.status === 'PLATED'
+                const isDelivered = ord.status === 'DELIVERED'
+                return (
+                  <div
+                    key={ord.orderId}
+                    className={`rounded-2xl p-5 border space-y-4 transition ${
+                      isReady
+                        ? 'bg-amber-950/20 border-amber-500/50 shadow-lg shadow-amber-950/30'
+                        : isDelivered
+                        ? 'bg-zinc-900/40 border-zinc-800 opacity-75'
+                        : 'bg-zinc-900 border-zinc-800'
+                    }`}
+                  >
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-3 border-b border-zinc-800/80 pb-3">
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-bold text-amber-400 text-sm">
+                            {ord.orderId}
+                          </span>
+                          <span
+                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              isDelivered
+                                ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                                : isReady
+                                ? 'bg-amber-500/20 text-amber-300 border border-amber-500/50 animate-pulse'
+                                : 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                            }`}
+                          >
+                            {isDelivered ? '✓ DELIVERED' : isReady ? 'HOT & READY FOR RUNNER' : 'CHEF PREPPING'}
+                          </span>
+                        </div>
+                        <p className="text-xs text-zinc-300 font-semibold mt-1">
+                          Patron: <strong className="text-white">{ord.customerName || 'Cinema Patron'}</strong>
+                        </p>
+                      </div>
+
+                      <div className="text-right">
+                        <span className="text-[10px] uppercase font-bold text-zinc-500 block">
+                          Destination
+                        </span>
+                        <span className="text-xs font-mono font-bold text-amber-400">
+                          {ord.deliverySeat}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Items Checklist */}
+                    <div className="space-y-1.5">
+                      <div className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                        Items On Runner Tray:
+                      </div>
+                      <div className="space-y-1 text-xs">
+                        {(ord.items || []).map((it: any, idx: number) => (
+                          <div key={idx} className="flex items-center justify-between py-0.5 text-zinc-300">
+                            <span className="flex items-center gap-2">
+                              <span className="h-1.5 w-1.5 rounded-full bg-amber-400" />
+                              <strong className="text-white font-mono">{it.quantity}x</strong> {it.name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    {/* Action Row */}
+                    <div className="flex items-center justify-between pt-2 border-t border-zinc-800/80">
+                      <span className="text-[11px] text-zinc-400 flex items-center gap-1">
+                        <Clock className="h-3 w-3 text-amber-400" />
+                        {isDelivered
+                          ? 'Hand-off complete'
+                          : isReady
+                          ? 'Plated ~2m ago (Warm target)'
+                          : `In prep (~${ord.estimatedMinutes || 5}m)`}
+                      </span>
+
+                      {!isDelivered ? (
+                        <button
+                          onClick={() => handleAdvanceStatus(isReady ? 'DELIVERED' : 'PLATED')}
+                          disabled={isAdvancingStatus}
+                          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
+                            isReady
+                              ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-black shadow-lg shadow-emerald-500/20'
+                              : 'bg-zinc-800 hover:bg-zinc-700 text-amber-300 border border-amber-500/40'
+                          }`}
+                        >
+                          <Check className="h-3.5 w-3.5" />
+                          <span>{isReady ? 'Mark Delivered to Cup Holder' : 'Mark Plated in Kitchen'}</span>
+                        </button>
+                      ) : (
+                        <span className="text-xs font-bold text-emerald-400 flex items-center gap-1">
+                          <CheckCircle2 className="h-3.5 w-3.5" /> Complete
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )
+              })}
+          </div>
+        </div>
+      ) : concessionsViewMode === 'POS_COUNTER' ? (
+        <div className="space-y-6">
+          {/* POS Terminal Status Bar */}
+          <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-purple-600/20 border border-purple-500/40 flex items-center justify-center shrink-0">
+                <Store className="h-5 w-5 text-purple-400" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h2 className="text-base font-bold text-white">Box Office Concession POS — Register #02</h2>
+                  <span className="text-[10px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 px-2 py-0.5 rounded font-mono">
+                    ONLINE & KDS SYNCED
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Operator: <span className="font-semibold text-zinc-200">{currentUser?.name || 'Staff Cashier'}</span> ({currentUser?.roleDisplayName || currentUser?.role || 'Staff'}) • Station: Main Lobby Bar
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsKitchenQueueOpen(!isKitchenQueueOpen)}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-xs font-semibold text-zinc-200 border border-zinc-700 transition"
+              >
+                <ChefHat className="h-3.5 w-3.5 text-amber-400" />
+                <span>Kitchen Queue ({allOrders.length})</span>
+              </button>
+
+              <button
+                onClick={() => setCart({})}
+                disabled={cartItemCount === 0}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-950/40 hover:bg-rose-900/60 text-xs font-semibold text-rose-300 border border-rose-500/30 transition disabled:opacity-50"
+              >
+                <X className="h-3.5 w-3.5" />
+                <span>Clear Tray</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Kitchen Display System (KDS) Live Drawer */}
+          {isKitchenQueueOpen && (
+            <div className="rounded-2xl border border-amber-500/30 bg-zinc-950/90 p-4 space-y-3 animate-fade-in">
+              <div className="flex items-center justify-between border-b border-zinc-800 pb-2">
+                <span className="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-1.5">
+                  <ChefHat className="h-4 w-4" />
+                  Live Kitchen Display System (KDS) Queue
+                </span>
+                <span className="text-[11px] text-zinc-500 font-mono">
+                  {allOrders.filter((o) => o.status !== 'DELIVERED').length} in preparation
+                </span>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 max-h-60 overflow-y-auto pr-1">
+                {allOrders.map((ord) => (
+                  <div
+                    key={ord.orderId}
+                    className="p-3 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-xs"
+                  >
+                    <div className="flex justify-between items-start">
+                      <span className="font-mono font-bold text-white">{ord.orderId}</span>
+                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                        ord.status === 'DELIVERED'
+                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+                          : ord.status === 'READY' || ord.status === 'PLATED'
+                          ? 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+                          : 'bg-purple-500/10 text-purple-400 border border-purple-500/30'
+                      }`}>
+                        {ord.status}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-zinc-400 truncate">
+                      Dest: <strong className="text-zinc-200">{ord.deliverySeat}</strong>
+                    </div>
+                    <div className="text-[10px] text-zinc-500">
+                      Total: ${(ord.totalAmount || ord.total || 0).toFixed(2)}
+                    </div>
+                    {ord.status === 'PREPARING' && (
+                      <button
+                        onClick={() => handleAdvanceStatus('PLATED')}
+                        disabled={isAdvancingStatus}
+                        className="w-full py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold text-[10px] border border-amber-500/40 transition"
+                      >
+                        Mark Ready for Delivery
+                      </button>
+                    )}
+                    {(ord.status === 'READY' || ord.status === 'PLATED') && (
+                      <button
+                        onClick={() => handleAdvanceStatus('DELIVERED')}
+                        disabled={isAdvancingStatus}
+                        className="w-full py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-[10px] border border-emerald-500/40 transition"
+                      >
+                        Mark Delivered to Seat
+                      </button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* 2-Column POS Workspace */}
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+            {/* Left 7 Columns: Fast Tap Concessions Catalog */}
+            <div className="lg:col-span-7 space-y-4">
+              {/* Category Pills & Search */}
+              <div className="flex flex-col sm:flex-row gap-2">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3 top-2.5 h-4 w-4 text-zinc-500" />
+                  <input
+                    type="text"
+                    value={posSearchTerm}
+                    onChange={(e) => setPosSearchTerm(e.target.value)}
+                    placeholder="Search snacks, drinks, combos..."
+                    className="w-full pl-9 pr-3 py-2 rounded-xl bg-zinc-900 border border-zinc-800 text-xs text-white placeholder-zinc-500 focus:outline-none focus:border-purple-500"
+                  />
+                  {posSearchTerm && (
+                    <button
+                      onClick={() => setPosSearchTerm('')}
+                      className="absolute right-2.5 top-2.5 text-zinc-500 hover:text-white"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {['ALL', 'Combos', 'Popcorn', 'Beverages', 'Hot Food', 'Candy'].map((cat) => (
+                    <button
+                      key={cat}
+                      onClick={() => setSelectedCategory(cat)}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-semibold shrink-0 transition ${
+                        selectedCategory === cat
+                          ? 'bg-purple-600 text-white shadow-sm shadow-purple-600/40 font-bold'
+                          : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                      }`}
+                    >
+                      {cat}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Fast Tap Item Grid */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                {filteredPosMenu.map((item) => {
+                  const qty = cart[item.id] || 0
+                  return (
+                    <button
+                      key={item.id}
+                      onClick={() => addToCart(item)}
+                      className="relative p-3.5 rounded-2xl bg-zinc-900/90 hover:bg-zinc-800/90 border border-zinc-800 hover:border-purple-500/50 transition-all text-left flex flex-col justify-between h-32 active:scale-95 group shadow-sm"
+                    >
+                      {qty > 0 && (
+                        <span className="absolute -top-1.5 -right-1.5 h-5 w-5 rounded-full bg-purple-600 text-white text-[11px] font-bold flex items-center justify-center shadow-md">
+                          {qty}
+                        </span>
+                      )}
+                      <div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xl">{item.icon || '🍿'}</span>
+                          <span className="font-mono font-bold text-emerald-400 text-xs">
+                            ${item.price.toFixed(2)}
+                          </span>
+                        </div>
+                        <h4 className="font-bold text-white text-xs mt-1.5 line-clamp-1 group-hover:text-purple-300 transition">
+                          {item.name}
+                        </h4>
+                        <p className="text-[10px] text-zinc-500 mt-0.5">{item.calories} kcal</p>
+                      </div>
+
+                      <div className="flex items-center justify-between text-[10px] text-zinc-400 pt-1 border-t border-zinc-800/60">
+                        <span className="uppercase text-[9px] text-zinc-500 font-mono">{item.category}</span>
+                        <span className="text-purple-400 font-bold group-hover:translate-x-0.5 transition">+ Add</span>
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Right 5 Columns: Register Tape & Payment Terminal */}
+            <div className="lg:col-span-5 space-y-4">
+              <div className="rounded-2xl border border-zinc-800 bg-zinc-950 p-4 space-y-4 shadow-xl">
+                {/* Customer & Destination Ingest */}
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-zinc-300 uppercase tracking-wider flex items-center gap-1.5">
+                      <Receipt className="h-3.5 w-3.5 text-purple-400" />
+                      Register Tape
+                    </span>
+                    <span className="text-[10px] font-mono text-zinc-500">
+                      {new Date().toLocaleTimeString()}
+                    </span>
+                  </div>
+
+                  {/* Destination Mode */}
+                  <div className="grid grid-cols-2 gap-1.5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPosCustomerType('WALK_UP')
+                        setPosCustomerName('Walk-up Guest')
+                        setDeliverySeat('Counter Pickup (Register #02)')
+                      }}
+                      className={`py-1 rounded-lg font-semibold transition ${
+                        posCustomerType === 'WALK_UP'
+                          ? 'bg-purple-600 text-white font-bold'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Walk-up Counter
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPosCustomerType('PATRON_SEAT')
+                        if (personas.length > 0) {
+                          setPosCustomerName(personas[0].fullName)
+                          setDeliverySeat('Auditorium 1, Seat C3')
+                        }
+                      }}
+                      className={`py-1 rounded-lg font-semibold transition ${
+                        posCustomerType === 'PATRON_SEAT'
+                          ? 'bg-purple-600 text-white font-bold'
+                          : 'text-zinc-400 hover:text-white'
+                      }`}
+                    >
+                      Theater Seat In-Seat
+                    </button>
+                  </div>
+
+                  {/* If in-seat selected: Patron selector chips */}
+                  {posCustomerType === 'PATRON_SEAT' && (
+                    <div className="space-y-2 p-2.5 rounded-xl bg-zinc-900/60 border border-zinc-800">
+                      <div className="text-[10px] font-bold text-zinc-400 uppercase">
+                        Select Cinema Patron / Seat:
+                      </div>
+                      <div className="flex flex-wrap gap-1.5">
+                        {personas.map((p) => {
+                          const isMatch = posCustomerName === p.fullName
+                          return (
+                            <button
+                              key={p.userId}
+                              type="button"
+                              onClick={() => {
+                                setPosCustomerName(p.fullName)
+                                setDeliverySeat(
+                                  p.fullName.includes('Elena')
+                                    ? 'Auditorium 1 — IMAX GT, Seat C3'
+                                    : p.fullName.includes('Marcus')
+                                    ? 'Auditorium 1 — IMAX GT, Seat D4'
+                                    : p.fullName.includes('Alex')
+                                    ? 'Auditorium 2 — Dolby Prime, Seat B2'
+                                    : 'Auditorium 1, Seat A1'
+                                )
+                              }}
+                              className={`text-[10px] px-2 py-0.5 rounded border transition ${
+                                isMatch
+                                  ? 'bg-purple-500/20 text-purple-300 border-purple-500/50 font-bold'
+                                  : 'bg-zinc-800 text-zinc-400 border-zinc-700 hover:text-white'
+                              }`}
+                            >
+                              {p.fullName}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <input
+                        type="text"
+                        value={deliverySeat}
+                        onChange={(e) => setDeliverySeat(e.target.value)}
+                        placeholder="Destination (e.g. Auditorium 1, Seat C3)"
+                        className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Itemized Tray Items */}
+                <div className="border-t border-zinc-800/80 pt-3 space-y-2 max-h-48 overflow-y-auto pr-1">
+                  {cartItemCount === 0 ? (
+                    <div className="text-center py-6 text-zinc-500 text-xs">
+                      No items on register tape. Tap catalog items to add.
+                    </div>
+                  ) : (
+                    Object.entries(cart).map(([itemId, qty]) => {
+                      const item = menu.find((i) => i.id === itemId)
+                      if (!item) return null
+                      return (
+                        <div key={itemId} className="flex items-center justify-between text-xs pt-1">
+                          <div className="flex-1 pr-2">
+                            <span className="font-semibold text-white block truncate">{item.name}</span>
+                            <span className="text-[10px] text-zinc-500 font-mono">${item.price.toFixed(2)} ea</span>
+                          </div>
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => decrementCart(itemId)}
+                              className="h-5 w-5 rounded bg-zinc-800 text-zinc-400 hover:text-white flex items-center justify-center"
+                            >
+                              <Minus className="h-3 w-3" />
+                            </button>
+                            <span className="font-mono font-bold text-white text-xs w-4 text-center">{qty}</span>
+                            <button
+                              onClick={() => addToCart(item)}
+                              className="h-5 w-5 rounded bg-zinc-800 text-purple-400 hover:text-white flex items-center justify-center"
+                            >
+                              <Plus className="h-3 w-3" />
+                            </button>
+                            <span className="font-mono font-bold text-emerald-400 w-12 text-right ml-1">
+                              ${(item.price * qty).toFixed(2)}
+                            </span>
+                          </div>
+                        </div>
+                      )
+                    })
+                  )}
+                </div>
+
+                {/* Discount & Comps */}
+                <div className="border-t border-zinc-800/80 pt-3 space-y-1.5">
+                  <div className="text-[10px] font-bold text-zinc-400 uppercase">Apply POS Discount:</div>
+                  <div className="grid grid-cols-3 gap-1 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setPosDiscountType('NONE')}
+                      className={`py-1 rounded font-semibold border transition ${
+                        posDiscountType === 'NONE'
+                          ? 'bg-zinc-800 text-white border-zinc-600'
+                          : 'bg-zinc-900 text-zinc-500 border-zinc-800'
+                      }`}
+                    >
+                      None (0%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPosDiscountType('STAFF_20')}
+                      className={`py-1 rounded font-semibold border transition ${
+                        posDiscountType === 'STAFF_20'
+                          ? 'bg-amber-500/20 text-amber-300 border-amber-500/50'
+                          : 'bg-zinc-900 text-zinc-500 border-zinc-800'
+                      }`}
+                    >
+                      Staff (-20%)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPosDiscountType('VIP_COMP')}
+                      className={`py-1 rounded font-semibold border transition ${
+                        posDiscountType === 'VIP_COMP'
+                          ? 'bg-purple-500/20 text-purple-300 border-purple-500/50'
+                          : 'bg-zinc-900 text-zinc-500 border-zinc-800'
+                      }`}
+                    >
+                      VIP Comp (Free)
+                    </button>
+                  </div>
+                </div>
+
+                {/* Tender & Payment Selection */}
+                <div className="border-t border-zinc-800/80 pt-3 space-y-2">
+                  <div className="text-[10px] font-bold text-zinc-400 uppercase">Payment Tender:</div>
+                  <div className="grid grid-cols-3 gap-1 text-xs">
+                    <button
+                      type="button"
+                      onClick={() => setPosPaymentType('CARD')}
+                      className={`py-1.5 rounded-lg font-semibold flex items-center justify-center gap-1 border transition ${
+                        posPaymentType === 'CARD'
+                          ? 'bg-purple-600 text-white border-purple-500 font-bold'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      <CreditCard className="h-3 w-3" />
+                      <span>Card POS</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setPosPaymentType('CASH')
+                        setCashTendered(Math.ceil(effectivePosTotal))
+                      }}
+                      className={`py-1.5 rounded-lg font-semibold flex items-center justify-center gap-1 border transition ${
+                        posPaymentType === 'CASH'
+                          ? 'bg-emerald-600 text-white border-emerald-500 font-bold'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      <DollarSign className="h-3 w-3" />
+                      <span>Cash</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setPosPaymentType('WALLET')}
+                      className={`py-1.5 rounded-lg font-semibold flex items-center justify-center gap-1 border transition ${
+                        posPaymentType === 'WALLET'
+                          ? 'bg-amber-500 text-black border-amber-400 font-bold'
+                          : 'bg-zinc-900 text-zinc-400 border-zinc-800'
+                      }`}
+                    >
+                      <Wallet className="h-3 w-3" />
+                      <span>Wallet</span>
+                    </button>
+                  </div>
+
+                  {/* Cash Drawer Calculator */}
+                  {posPaymentType === 'CASH' && (
+                    <div className="p-2.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2 text-xs">
+                      <div className="flex items-center justify-between text-zinc-400">
+                        <span>Quick Tender:</span>
+                        <div className="flex gap-1">
+                          {[10, 20, 50, 100].map((amt) => (
+                            <button
+                              key={amt}
+                              type="button"
+                              onClick={() => setCashTendered(amt)}
+                              className="px-2 py-0.5 rounded bg-zinc-800 hover:bg-zinc-700 text-white font-mono text-[11px]"
+                            >
+                              ${amt}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-zinc-400">Cash Received:</span>
+                        <input
+                          type="number"
+                          step="0.01"
+                          value={cashTendered || ''}
+                          onChange={(e) => setCashTendered(parseFloat(e.target.value) || 0)}
+                          className="w-24 px-2 py-1 rounded bg-zinc-950 border border-zinc-700 text-white font-mono text-right font-bold text-xs"
+                        />
+                      </div>
+                      <div className="flex items-center justify-between pt-1 border-t border-zinc-800 font-bold text-sm">
+                        <span className="text-zinc-300">Change Due:</span>
+                        <span className="text-emerald-400 font-mono">
+                          ${effectiveChangeDue.toFixed(2)}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Subtotal, Tax & Final Price */}
+                <div className="border-t border-zinc-800/80 pt-3 space-y-1 text-xs">
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Subtotal</span>
+                    <span className="text-white">${cartSubtotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between text-zinc-400">
+                    <span>Tax (8%)</span>
+                    <span className="text-white">${cartTax.toFixed(2)}</span>
+                  </div>
+                  {posDiscountType !== 'NONE' && (
+                    <div className="flex justify-between text-amber-400">
+                      <span>Discount ({posDiscountType === 'STAFF_20' ? '-20%' : '100% Comp'})</span>
+                      <span>-${(cartTotal - effectivePosTotal).toFixed(2)}</span>
+                    </div>
+                  )}
+                  <div className="flex justify-between text-base font-bold text-white pt-2 border-t border-zinc-800">
+                    <span>Amount Due</span>
+                    <span className="text-emerald-400 font-mono">${effectivePosTotal.toFixed(2)}</span>
+                  </div>
+                </div>
+
+                {/* Tender Action Button */}
+                <button
+                  onClick={handlePlacePosOrder}
+                  disabled={cartItemCount === 0 || isPlacingOrder}
+                  className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-600 hover:from-purple-500 to-indigo-600 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-purple-600/30 transition active:scale-95 disabled:opacity-50"
+                >
+                  {isPlacingOrder
+                    ? 'Transmitting to Kitchen...'
+                    : `⚡ Tender & Send to Kitchen ($${effectivePosTotal.toFixed(2)})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <>
+          {/* Header */}
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222] pb-6">
         <div>
           <div className="flex items-center gap-2.5">
             <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-gradient-to-tr from-amber-500 to-rose-600 text-white shadow-lg shadow-rose-500/20">
@@ -1561,6 +2427,96 @@ function ConcessionsContent() {
           </div>
         </div>
       )}
+      </>
+    )}
+
+    {/* Physical POS Thermal Receipt Slip Modal */}
+    {posReceiptModal && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-md animate-fade-in">
+        <div className="relative w-full max-w-sm rounded-2xl bg-zinc-950 border border-zinc-800 p-6 shadow-2xl space-y-4 text-xs font-mono">
+          <div className="text-center border-b border-dashed border-zinc-700 pb-3 space-y-1">
+            <div className="flex items-center justify-center gap-1.5 text-base font-bold text-white">
+              <UtensilsCrossed className="h-4 w-4 text-amber-400" />
+              <span>CINEMIND GOURMET POS</span>
+            </div>
+            <p className="text-[10px] text-zinc-500">{posReceiptModal.register}</p>
+            <p className="text-[10px] text-zinc-400">Cashier: {posReceiptModal.cashier}</p>
+            <p className="text-[10px] text-zinc-500">{posReceiptModal.timestamp}</p>
+          </div>
+
+          <div className="border-b border-dashed border-zinc-700 pb-2 space-y-0.5">
+            <div className="flex justify-between">
+              <span className="text-zinc-400">Order ID:</span>
+              <span className="text-white font-bold">{posReceiptModal.orderId}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-400">Customer:</span>
+              <span className="text-white">{posReceiptModal.customerName}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-zinc-400">Destination:</span>
+              <span className="text-amber-400 font-bold">{posReceiptModal.seat}</span>
+            </div>
+          </div>
+
+          <div className="space-y-1.5 py-1 border-b border-dashed border-zinc-700">
+            {posReceiptModal.items.map((it: any, i: number) => (
+              <div key={i} className="flex justify-between">
+                <span>{it.quantity}x {it.name}</span>
+                <span>${(it.price * it.quantity).toFixed(2)}</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="space-y-1 pt-1 border-b border-dashed border-zinc-700 pb-2 text-zinc-400">
+            <div className="flex justify-between">
+              <span>Subtotal</span>
+              <span>${posReceiptModal.subtotal.toFixed(2)}</span>
+            </div>
+            <div className="flex justify-between">
+              <span>Tax (8%)</span>
+              <span>${posReceiptModal.tax.toFixed(2)}</span>
+            </div>
+            {posReceiptModal.discount !== 'NONE' && (
+              <div className="flex justify-between text-amber-400">
+                <span>Discount</span>
+                <span>{posReceiptModal.discount === 'STAFF_20' ? '-20% Staff' : '100% VIP Comp'}</span>
+              </div>
+            )}
+            <div className="flex justify-between font-bold text-white text-sm pt-1">
+              <span>TOTAL PAID</span>
+              <span className="text-emerald-400 font-mono">${posReceiptModal.total.toFixed(2)}</span>
+            </div>
+          </div>
+
+          {posReceiptModal.paymentType === 'CASH' && (
+            <div className="space-y-0.5 text-zinc-400 pb-2 border-b border-dashed border-zinc-700">
+              <div className="flex justify-between">
+                <span>Cash Tendered</span>
+                <span>${(posReceiptModal.cashTendered || 0).toFixed(2)}</span>
+              </div>
+              <div className="flex justify-between font-bold text-emerald-400">
+                <span>Change Given</span>
+                <span>${(posReceiptModal.changeDue || 0).toFixed(2)}</span>
+              </div>
+            </div>
+          )}
+
+          <div className="text-center pt-2 text-[10px] text-zinc-500">
+            *** TRANSMITTED TO KITCHEN DISPLAY ***
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <button
+              onClick={() => setPosReceiptModal(null)}
+              className="flex-1 py-2 rounded-xl bg-purple-600 hover:bg-purple-500 text-white font-bold transition text-center"
+            >
+              New POS Sale
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
     </div>
   )
 }

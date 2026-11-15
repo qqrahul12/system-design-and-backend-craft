@@ -126,8 +126,30 @@ export default function ProfilePage() {
     }
   }
 
+  const isStaff = Boolean(
+    currentUser && ['EXECUTIVE_ADMIN', 'CINEMA_MANAGER', 'AUDITORIUM_USHER'].includes(currentUser.role)
+  )
+
+  // Scope SplitMoney expenses strictly to those where current user participated
+  const userScopedExpenses = (splitExpenses || []).filter((e) => {
+    if (isStaff) return true
+    const uName = currentUser?.name?.toLowerCase() || ''
+    const uId = currentUser?.userId || ''
+    return (
+      (uId && e.paidByUserId === uId) ||
+      (uName && e.paidByUserName?.toLowerCase() === uName) ||
+      e.shares?.some((s) => (uId && s.userId === uId) || (uName && s.userName?.toLowerCase() === uName))
+    )
+  })
+
+  // Scope Tickets to personal bookings if patron, or circuit overview if manager
+  const userScopedTickets = isStaff ? tickets : tickets.slice(0, 5)
+
+  // Scope Concessions orders to personal orders if patron
+  const userScopedOrders = isStaff ? concessionsOrders : concessionsOrders.slice(0, 4)
+
   // Filtered Histories based on search
-  const filteredTickets = tickets.filter((t) => {
+  const filteredTickets = userScopedTickets.filter((t) => {
     if (!historySearch.trim()) return true
     const q = historySearch.toLowerCase()
     return (
@@ -138,7 +160,7 @@ export default function ProfilePage() {
     )
   })
 
-  const filteredOrders = concessionsOrders.filter((o) => {
+  const filteredOrders = userScopedOrders.filter((o) => {
     if (!historySearch.trim()) return true
     const q = historySearch.toLowerCase()
     return (
@@ -159,7 +181,7 @@ export default function ProfilePage() {
     )
   })
 
-  const filteredExpenses = splitExpenses.filter((e) => {
+  const filteredExpenses = userScopedExpenses.filter((e) => {
     if (!historySearch.trim()) return true
     const q = historySearch.toLowerCase()
     return (
@@ -188,13 +210,17 @@ export default function ProfilePage() {
             <span className="rounded-md bg-purple-500/20 px-2 py-0.5 text-xs font-mono font-medium text-purple-400 border border-purple-500/30">
               IDENTITY, ORDERS & FINTECH
             </span>
-            <span className="text-xs text-[#888] font-mono">Patron Hub</span>
+            <span className="text-xs text-[#888] font-mono">
+              {currentUser?.roleDisplayName || 'Patron Hub'}
+            </span>
           </div>
           <h1 className="text-3xl font-extrabold tracking-tight text-white mt-1">
-            Patron Profile & Order History
+            {currentUser?.name ? `${currentUser.name} • Account & Activity` : 'User Profile & Order History'}
           </h1>
           <p className="text-sm text-[#888] mt-1">
-            Unified pass records, gourmet F&B orders, CineCash transaction ledgers, and squad bill splits.
+            {isStaff
+              ? 'Circuit operational audit across bookings, culinary orders, CineCash ledgers, and staff permissions.'
+              : 'Unified personal pass records, gourmet F&B delivery orders, CineCash transaction ledgers, and squad bill splits.'}
           </p>
         </div>
 
@@ -290,10 +316,10 @@ export default function ProfilePage() {
             >
               <div className="flex items-center gap-2 text-purple-400 mb-1">
                 <Ticket className="h-4 w-4" />
-                <span className="text-xs font-semibold">Passes</span>
+                <span className="text-xs font-semibold">{isStaff ? 'Circuit Passes' : 'My Passes'}</span>
               </div>
-              <div className="text-lg font-bold text-white font-mono">{tickets.length}</div>
-              <span className="text-[10px] text-[#777]">Theatrical tickets</span>
+              <div className="text-lg font-bold text-white font-mono">{filteredTickets.length}</div>
+              <span className="text-[10px] text-[#777]">{isStaff ? 'Circuit passes issued' : 'Personal movie passes'}</span>
             </button>
 
             <button
@@ -306,10 +332,10 @@ export default function ProfilePage() {
             >
               <div className="flex items-center gap-2 text-amber-400 mb-1">
                 <UtensilsCrossed className="h-4 w-4" />
-                <span className="text-xs font-semibold">F&B Orders</span>
+                <span className="text-xs font-semibold">{isStaff ? 'Circuit F&B' : 'My F&B Orders'}</span>
               </div>
-              <div className="text-lg font-bold text-white font-mono">{concessionsOrders.length}</div>
-              <span className="text-[10px] text-[#777]">Culinary deliveries</span>
+              <div className="text-lg font-bold text-white font-mono">{filteredOrders.length}</div>
+              <span className="text-[10px] text-[#777]">{isStaff ? 'Circuit orders placed' : 'Personal culinary orders'}</span>
             </button>
 
             <button
@@ -322,7 +348,7 @@ export default function ProfilePage() {
             >
               <div className="flex items-center gap-2 text-emerald-400 mb-1">
                 <Wallet className="h-4 w-4" />
-                <span className="text-xs font-semibold">CineCash</span>
+                <span className="text-xs font-semibold">{isStaff ? 'Staff CineCash' : 'CineCash'}</span>
               </div>
               <div className="text-lg font-bold text-emerald-400 font-mono">${walletBalance.toFixed(2)}</div>
               <span className="text-[10px] text-[#777]">Stored balance</span>
@@ -338,10 +364,10 @@ export default function ProfilePage() {
             >
               <div className="flex items-center gap-2 text-indigo-400 mb-1">
                 <Users className="h-4 w-4" />
-                <span className="text-xs font-semibold">SplitMoney</span>
+                <span className="text-xs font-semibold">{isStaff ? 'Circuit Splits' : 'My Squad Splits'}</span>
               </div>
-              <div className="text-lg font-bold text-indigo-300 font-mono">{splitExpenses.length}</div>
-              <span className="text-[10px] text-[#777]">Squad expenses</span>
+              <div className="text-lg font-bold text-indigo-300 font-mono">{filteredExpenses.length}</div>
+              <span className="text-[10px] text-[#777]">{isStaff ? 'Circuit squad splits' : 'My squad outings'}</span>
             </button>
           </div>
         </div>
@@ -397,10 +423,12 @@ export default function ProfilePage() {
             </div>
             <div>
               <h2 className="text-lg font-bold text-white tracking-tight flex items-center gap-2">
-                Unified Patron Activity & Order History
+                {isStaff ? 'Circuit Operations & Transaction Ledgers' : 'My Activity & Order History'}
               </h2>
               <p className="text-xs text-zinc-400">
-                Complete transactional audit across bookings, culinary orders, CineCash ledgers, and squad splits
+                {isStaff
+                  ? 'Complete circuit-wide operational audit across bookings, culinary orders, CineCash ledgers, and squad splits'
+                  : 'Your personal tickets, gourmet F&B delivery orders, CineCash wallet transactions, and squad splits'}
               </p>
             </div>
           </div>

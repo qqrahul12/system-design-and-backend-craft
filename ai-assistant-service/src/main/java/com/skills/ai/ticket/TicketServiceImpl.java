@@ -205,49 +205,45 @@ public class TicketServiceImpl implements TicketService {
     }
 
     @Override
-    public Map<String, Object> getAuditoriumSeats(String movieTitle, String showTime) {
+    public Map<String, Object> getAuditoriumSeats(String movieTitle, String showTime, String format, String auditorium, String date) {
         Instant now = Instant.now();
         activeLocks.entrySet().removeIf(e -> e.getValue().expiresAt().isBefore(now));
 
-        // Get booked seats from active tickets in DB
         Set<String> bookedSeats = new HashSet<>();
+
+        // 1. Authoritative tickets from PostgreSQL (SSOT) matching this movie, showtime, and format
         for (DigitalTicket t : listTickets()) {
             if (movieTitle == null || t.movieTitle().equalsIgnoreCase(movieTitle)) {
-                if (t.seats() != null) {
-                    bookedSeats.addAll(t.seats());
+                boolean matchShow = showTime == null || showTime.isBlank() || (t.showTime() != null && t.showTime().equalsIgnoreCase(showTime));
+                boolean matchFormat = format == null || format.isBlank() || (t.format() != null && t.format().equalsIgnoreCase(format));
+                if (matchShow && matchFormat) {
+                    if (t.seats() != null) {
+                        bookedSeats.addAll(t.seats());
+                    }
                 }
             }
         }
 
-        // Get locked seats from active locks
+        // 2. Active distributed locks for this movie & showtime
+        String safeMovie = movieTitle != null ? movieTitle.trim().toLowerCase() : "default";
+        String safeShow = showTime != null ? showTime.trim().toLowerCase() : "7:30 pm";
         Set<String> lockedSeats = new HashSet<>();
         for (SeatLock lock : activeLocks.values()) {
             if (movieTitle == null || lock.movieTitle().equalsIgnoreCase(movieTitle)) {
-                lockedSeats.addAll(lock.seats());
+                if (showTime == null || showTime.isBlank() || (lock.showTime() != null && lock.showTime().equalsIgnoreCase(showTime))) {
+                    lockedSeats.addAll(lock.seats());
+                }
             }
         }
 
         if (redisTemplate != null) {
             try {
-                String safeMovie = movieTitle != null ? movieTitle.replaceAll("\\s+", "_") : "ANY";
-                String safeShow = showTime != null ? showTime.replaceAll("\\s+", "_") : "ANY";
-                if (!"ANY".equals(safeMovie) && !"ANY".equals(safeShow)) {
-                    String showtimeSetKey = "cinemind:showtime:locked_seats:" + safeMovie + ":" + safeShow;
-                    Set<String> setMembers = redisTemplate.opsForSet().members(showtimeSetKey);
-                    if (setMembers != null && !setMembers.isEmpty()) {
-                        lockedSeats.addAll(setMembers);
-                    }
-                } else {
-                    // Non-blocking O(1) set member retrieval instead of keys()
-                    Set<String> activeShowtimes = redisTemplate.opsForSet().members(REDIS_ACTIVE_SHOWTIMES_KEY);
-                    if (activeShowtimes != null) {
-                        for (String stKey : activeShowtimes) {
-                            Set<String> seats = redisTemplate.opsForSet().members(stKey);
-                            if (seats != null) {
-                                lockedSeats.addAll(seats);
-                            }
-                        }
-                    }
+                String rMovie = safeMovie.replaceAll("\\s+", "_");
+                String rShow = safeShow.replaceAll("\\s+", "_");
+                String showtimeSetKey = "cinemind:showtime:locked_seats:" + rMovie + ":" + rShow;
+                Set<String> setMembers = redisTemplate.opsForSet().members(showtimeSetKey);
+                if (setMembers != null && !setMembers.isEmpty()) {
+                    lockedSeats.addAll(setMembers);
                 }
             } catch (Exception e) {
                 log.debug("Redis lookup for locked seats skipped: {}", e.getMessage());

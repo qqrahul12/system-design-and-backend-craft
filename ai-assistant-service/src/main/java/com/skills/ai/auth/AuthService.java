@@ -181,21 +181,8 @@ public class AuthService {
             }
         }
 
-        // Minimal default fallback shell if database table hasn't been migrated yet
-        return UserProfile.builder()
-                .userId("usr-" + role.name().toLowerCase().replace("_", "-"))
-                .fullName(role.name().replace("_", " "))
-                .email(role.name().toLowerCase() + "@cinemind.io")
-                .passwordHash("$2a$10$nb893xmrMDBoH8VRVIEr1Olwal7qhPjXZZFn1vYI1DOINoBWZ4ruK")
-                .role(role)
-                .roleDisplayName(role.name().replace("_", " "))
-                .membershipTier("Standard")
-                .discountRate(0.0)
-                .avatarUrl("")
-                .permissions(getDefaultPermissionsForRole(role))
-                .lastLogin(Instant.now())
-                .isAuthenticated(true)
-                .build();
+        // Return null if persona does not exist in PostgreSQL (SSOT)
+        return null;
     }
 
     public static List<String> getDefaultPermissionsForRole(UserRole role) {
@@ -329,17 +316,7 @@ public class AuthService {
 
     public List<UserProfile> getAvailablePersonas() {
         refreshPersonasFromDatabase();
-        if (!personaCatalog.isEmpty()) {
-            return new ArrayList<>(personaCatalog.values());
-        }
-        // If DB table is empty, return supported roles
-        List<UserProfile> defaults = new ArrayList<>();
-        for (UserRole role : UserRole.values()) {
-            if (role != UserRole.ANONYMOUS) {
-                defaults.add(findProfileByRole(role));
-            }
-        }
-        return defaults;
+        return new ArrayList<>(personaCatalog.values());
     }
 
     public UserProfile switchRole(UserRole role) {

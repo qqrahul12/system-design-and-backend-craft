@@ -23,7 +23,11 @@ public interface TicketService {
 
     boolean releaseSeatLock(String lockToken);
 
-    Map<String, Object> getAuditoriumSeats(String movieTitle, String showTime);
+    default Map<String, Object> getAuditoriumSeats(String movieTitle, String showTime) {
+        return getAuditoriumSeats(movieTitle, showTime, null, null, null);
+    }
+
+    Map<String, Object> getAuditoriumSeats(String movieTitle, String showTime, String format, String auditorium, String date);
 
     DigitalTicket issueTicket(String movieTitle, String showTime, String format, String auditorium, List<String> seats, double totalPaid);
 

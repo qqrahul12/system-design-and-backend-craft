@@ -39,10 +39,20 @@ export const ticketService = {
 
   getTicket: (id: string): Promise<Ticket> => apiClient.get<Ticket>(`/api/v1/tickets/${id}`),
 
-  getAuditoriumSeats: (movieTitle: string, showtime?: string): Promise<AuditoriumSeatsData> => {
-    const qMovie = encodeURIComponent(movieTitle || 'Interstellar');
-    const qShow = encodeURIComponent(showtime || '7:30 PM');
-    return apiClient.get<AuditoriumSeatsData>(`/api/v1/tickets/seats?movie=${qMovie}&showtime=${qShow}`);
+  getAuditoriumSeats: (
+    movieTitle: string,
+    showtime?: string,
+    format?: string,
+    auditorium?: string,
+    date?: string
+  ): Promise<AuditoriumSeatsData> => {
+    const params = new URLSearchParams();
+    if (movieTitle) params.set('movie', movieTitle);
+    if (showtime) params.set('showtime', showtime);
+    if (format) params.set('format', format);
+    if (auditorium) params.set('auditorium', auditorium);
+    if (date) params.set('date', date);
+    return apiClient.get<AuditoriumSeatsData>(`/api/v1/tickets/seats?${params.toString()}`);
   },
 
   getLockedSeats: (movieTitle: string, showtime?: string): Promise<{ lockedSeats: string[] }> => {

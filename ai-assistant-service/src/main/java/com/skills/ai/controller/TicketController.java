@@ -48,9 +48,12 @@ public class TicketController {
     @GetMapping("/seats")
     public ResponseEntity<Map<String, Object>> getAuditoriumSeats(
             @RequestParam(required = false) String movie,
-            @RequestParam(required = false) String showtime
+            @RequestParam(required = false) String showtime,
+            @RequestParam(required = false) String format,
+            @RequestParam(required = false) String auditorium,
+            @RequestParam(required = false) String date
     ) {
-        return ResponseEntity.ok(ticketService.getAuditoriumSeats(movie, showtime));
+        return ResponseEntity.ok(ticketService.getAuditoriumSeats(movie, showtime, format, auditorium, date));
     }
 
     @GetMapping(value = "/seats/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)

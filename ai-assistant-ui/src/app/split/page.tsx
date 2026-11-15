@@ -110,11 +110,11 @@ export default function SplitPage() {
       const activePatron = userList.find(
         (u) =>
           u.email?.toLowerCase() === fetchedUser?.email?.toLowerCase() ||
-          u.name?.toLowerCase() === fetchedUser?.name?.toLowerCase() ||
-          u.fullName?.toLowerCase() === fetchedUser?.name?.toLowerCase()
-      ) || userList[0]
+          u.name?.toLowerCase() === fetchedUser?.fullName?.toLowerCase() ||
+          u.name?.toLowerCase() === fetchedUser?.roleDisplayName?.toLowerCase()
+      ) || null
 
-      const activePatronId = activePatron?.id
+      const activePatronId = activePatron?.id || ''
 
       if (activePatronId) {
         setSelectedPayerId((prev) => (prev ? prev : activePatronId))
@@ -122,6 +122,8 @@ export default function SplitPage() {
         if (fetchedBalances) {
           setBalanceSummary(fetchedBalances)
         }
+      } else {
+        setBalanceSummary(null)
       }
 
       // Initialize selected members from dynamic user list if not already configured
@@ -290,9 +292,9 @@ export default function SplitPage() {
     const activePatron = users.find(
       (u) =>
         u.email?.toLowerCase() === currentUser?.email?.toLowerCase() ||
-        u.name?.toLowerCase() === currentUser?.name?.toLowerCase() ||
-        u.fullName?.toLowerCase() === currentUser?.name?.toLowerCase()
-    ) || users[0]
+        u.name?.toLowerCase() === currentUser?.fullName?.toLowerCase() ||
+        u.name?.toLowerCase() === currentUser?.roleDisplayName?.toLowerCase()
+    ) || null
     return activePatron?.id || ''
   }, [currentUser, users])
 
@@ -371,6 +373,24 @@ export default function SplitPage() {
           </button>
         </div>
       </div>
+
+      {/* Staff View Notice Banner */}
+      {currentUser && ['CINEMA_MANAGER', 'AUDITORIUM_USHER', 'EXECUTIVE_ADMIN'].includes(currentUser.role) && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-4 flex items-center justify-between gap-3 text-xs">
+          <div className="flex items-center gap-2.5 text-amber-300">
+            <ShieldCheck className="h-4 w-4 text-amber-400 shrink-0" />
+            <span>
+              <strong>Operations Staff Ledger View ({currentUser.roleDisplayName})</strong>: You are viewing consumer squad outing ledgers. Individual bill settlements are personal patron transactions.
+            </span>
+          </div>
+          <Link
+            href="/manager"
+            className="rounded-lg bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-200 px-3 py-1.5 font-bold transition whitespace-nowrap"
+          >
+            Go to Theater Ops &rarr;
+          </Link>
+        </div>
+      )}
 
       {/* Net Balance & Squad Summary Banner */}
       <div className="grid grid-cols-1 gap-5 md:grid-cols-3">
@@ -773,21 +793,28 @@ export default function SplitPage() {
                   <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {exp.shares.map((share) => {
                       const isPayer = share.userId === exp.paidByUserId
+                      const isMyShare = Boolean(activePatronId && share.userId === activePatronId)
                       const settleKey = `${exp.id}-${share.userId}`
                       const isCurrentlySettling = isSettling === settleKey
 
                       return (
                         <div
                           key={share.userId}
-                          className="flex items-center justify-between rounded-2xl border border-zinc-800/80 bg-zinc-950/60 p-3.5 hover:border-zinc-700 transition"
+                          className={`flex items-center justify-between rounded-2xl border p-3.5 transition ${
+                            isMyShare
+                              ? 'border-indigo-500/50 bg-indigo-950/30 ring-1 ring-indigo-500/20 shadow-md shadow-indigo-500/5'
+                              : 'border-zinc-800/80 bg-zinc-950/60 hover:border-zinc-700'
+                          }`}
                         >
                           <div className="flex items-center gap-2.5 min-w-0">
                             <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-tr from-indigo-600 to-purple-600 text-xs font-bold text-white shrink-0">
                               {share.userName.charAt(0)}
                             </div>
                             <div className="truncate">
-                              <p className="text-xs font-bold text-white truncate">
-                                {share.userName} {isPayer ? '(Host)' : ''}
+                              <p className="text-xs font-bold text-white truncate flex items-center gap-1">
+                                <span>{share.userName}</span>
+                                {isPayer && <span className="text-[10px] text-amber-400 font-semibold">(Host)</span>}
+                                {isMyShare && !isPayer && <span className="text-[10px] text-indigo-300 font-semibold">(You)</span>}
                               </p>
                               <span className="text-[11px] font-mono text-zinc-400 font-semibold">
                                 ${share.shareAmount.toFixed(2)}
@@ -804,27 +831,31 @@ export default function SplitPage() {
                               <span className="flex items-center gap-1 rounded-lg bg-emerald-950/40 border border-emerald-500/20 px-2 py-1 text-[10px] font-bold text-emerald-400">
                                 <CheckCircle2 className="h-3 w-3" /> Settled
                               </span>
-                            ) : (
+                            ) : isMyShare ? (
                               <div className="flex items-center gap-1">
                                 <button
                                   type="button"
                                   onClick={() => handleSettle(exp.id, share.userId, 'WALLET')}
                                   disabled={isCurrentlySettling}
-                                  className="flex items-center gap-1 rounded-lg bg-emerald-600/20 border border-emerald-500/30 px-2.5 py-1 text-[10px] font-bold text-emerald-300 hover:bg-emerald-600/30 transition active:scale-95 disabled:opacity-50"
-                                  title="Settle with CineCash Wallet"
+                                  className="flex items-center gap-1 rounded-lg bg-emerald-600 px-2.5 py-1 text-[10px] font-bold text-white hover:bg-emerald-500 transition active:scale-95 disabled:opacity-50 shadow-md shadow-emerald-600/20"
+                                  title="Settle your share with CineCash Wallet"
                                 >
-                                  <Wallet className="h-3 w-3" /> Pay
+                                  <Wallet className="h-3 w-3" /> Pay My Share
                                 </button>
                                 <button
                                   type="button"
                                   onClick={() => handleSettle(exp.id, share.userId, 'STRIPE_CARD')}
                                   disabled={isCurrentlySettling}
-                                  className="flex items-center gap-1 rounded-lg bg-indigo-600/20 border border-indigo-500/30 px-2.5 py-1 text-[10px] font-bold text-indigo-300 hover:bg-indigo-600/30 transition active:scale-95 disabled:opacity-50"
+                                  className="flex items-center gap-1 rounded-lg bg-indigo-600/30 border border-indigo-500/40 px-2 py-1 text-[10px] font-bold text-indigo-200 hover:bg-indigo-600/50 transition active:scale-95 disabled:opacity-50"
                                   title="Settle with Stripe Card"
                                 >
                                   <CreditCard className="h-3 w-3" /> Card
                                 </button>
                               </div>
+                            ) : (
+                              <span className="flex items-center gap-1 rounded-lg bg-zinc-800/80 border border-zinc-700/60 px-2 py-1 text-[10px] font-semibold text-zinc-400">
+                                <Clock className="h-3 w-3 text-amber-400" /> Pending
+                              </span>
                             )}
                           </div>
                         </div>

@@ -210,17 +210,23 @@ function ManagerPortalContent() {
     const current = menuItems.find((i) => i.id === dishId)
     const nextStock = current ? current.inStock === false : false
     try {
-      await concessionsService.toggleStock(dishId, nextStock)
+      const updated = await concessionsService.toggleStock(dishId, nextStock)
       setMenuItems((prev) =>
         prev.map((item) =>
           item.id === dishId
-            ? { ...item, inStock: nextStock }
+            ? { ...item, inStock: updated?.inStock ?? nextStock }
             : item
         )
       )
-      showToast(`Kitchen inventory status persisted to PostgreSQL: ${nextStock ? 'In Stock' : 'Sold Out'}`)
-    } catch {
-      showToast('Failed to update stock status in backend', 'error')
+      showToast(`Kitchen inventory status persisted to PostgreSQL: ${(updated?.inStock ?? nextStock) ? 'In Stock' : 'Sold Out'}`)
+    } catch (err: any) {
+      const errMsg = err?.message || ''
+      showToast(
+        errMsg.includes('403')
+          ? 'Access Denied: Requires CINEMA_MANAGER or EXECUTIVE_ADMIN role with MANAGE_FNB_MENU permission'
+          : 'Failed to update stock status in backend',
+        'error'
+      )
     }
   }
 
