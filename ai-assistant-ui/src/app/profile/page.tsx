@@ -249,24 +249,24 @@ export default function ProfilePage() {
             <div className="flex-1 space-y-1.5">
               <div className="flex flex-wrap items-center gap-2">
                 <h2 className="text-2xl font-bold text-white tracking-tight">
-                  {currentUser?.name || 'Jordan Lee'}
+                  {currentUser?.name || 'Patron'}
                 </h2>
                 <span className="inline-flex items-center gap-1 rounded-full bg-purple-500/15 border border-purple-500/30 px-2.5 py-0.5 text-xs font-bold text-purple-300">
                   <Crown className="h-3 w-3 text-amber-400" />
-                  {currentUser?.badge || currentUser?.role || 'VIP Patron'}
+                  {currentUser?.badge || currentUser?.role || 'Guest'}
                 </span>
               </div>
 
-              <p className="text-sm text-[#888] font-mono">{currentUser?.email || 'jordan.lee@cinemind.io'}</p>
+              <p className="text-sm text-[#888] font-mono">{currentUser?.email || 'Not registered'}</p>
 
               <div className="flex flex-wrap gap-4 pt-2 text-xs text-[#aaa]">
                 <div>
                   <span className="text-[#666] block text-[10px] uppercase font-mono">Tier</span>
-                  <span className="font-semibold text-white">{currentUser?.tier || 'Founder Gold'}</span>
+                  <span className="font-semibold text-white">{currentUser?.tier || 'General'}</span>
                 </div>
                 <div className="border-l border-[#333] pl-4">
                   <span className="text-[#666] block text-[10px] uppercase font-mono">Role Key</span>
-                  <span className="font-mono text-purple-400">{currentUser?.role || 'VIP_PATRON'}</span>
+                  <span className="font-mono text-purple-400">{currentUser?.role || 'STANDARD_GUEST'}</span>
                 </div>
                 <div className="border-l border-[#333] pl-4">
                   <span className="text-[#666] block text-[10px] uppercase font-mono">Auth Status</span>

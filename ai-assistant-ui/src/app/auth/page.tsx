@@ -55,8 +55,8 @@ const DEMO_ACCOUNTS = [
 
 export default function AuthPage() {
   const router = useRouter()
-  const [email, setEmail] = useState('alex.vance@cinemind.vip')
-  const [password, setPassword] = useState('••••••••••••')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
 
@@ -212,9 +212,6 @@ export default function AuthPage() {
                   />
                   <span>Keep session active</span>
                 </label>
-                <a href="#demo" onClick={(e) => { e.preventDefault(); setEmail('alex.vance@cinemind.vip') }} className="text-purple-400 hover:underline">
-                  Auto-fill VIP
-                </a>
               </div>
 
               <button

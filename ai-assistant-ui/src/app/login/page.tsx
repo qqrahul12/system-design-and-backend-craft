@@ -55,8 +55,8 @@ const DEMO_PERSONAS = [
 export default function LoginPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'signin' | 'register'>('signin')
-  const [email, setEmail] = useState('alex.vance@cinemind.vip')
-  const [password, setPassword] = useState('••••••••••••')
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
   const [loading, setLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
@@ -250,13 +250,6 @@ export default function LoginPage() {
                 />
                 <span>Remember session</span>
               </label>
-              <button
-                type="button"
-                onClick={() => setEmail('alex.vance@cinemind.vip')}
-                className="text-purple-400 hover:underline"
-              >
-                Auto-fill VIP
-              </button>
             </div>
 
             <button

@@ -24,7 +24,7 @@ export const authService = {
 
   login: async (email?: string, role?: string, name?: string): Promise<UserPersona> => {
     const user = await apiClient.post<UserPersona>('/api/v1/auth/login', {
-      email: email ?? 'alex.vance@cinemind.vip',
+      email: email ?? '',
       role: role ?? '',
       name: name ?? ''
     });

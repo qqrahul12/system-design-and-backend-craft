@@ -1119,7 +1119,7 @@ REASON: <1 sentence why it matches>`
                         )}
                       </div>
                       <div className="flex items-center gap-1.5 flex-wrap">
-                        {(movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => {
+                        {(movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : []).map((time) => {
                           const isTimeSelected = isSelected && selectedShowtime === time
                           return (
                             <button
@@ -1301,7 +1301,7 @@ REASON: <1 sentence why it matches>`
                     Auditorium Showtime
                   </div>
                   <div className="flex items-center gap-2 flex-wrap">
-                    {(selectedMovie.showtimes ? selectedMovie.showtimes.split(',').map((s) => s.trim()) : ['1:30 PM', '5:00 PM', '8:45 PM']).map((time) => (
+                    {(selectedMovie.showtimes ? selectedMovie.showtimes.split(',').map((s) => s.trim()) : []).map((time) => (
                       <button
                         key={time}
                         onClick={() => {
@@ -1803,24 +1803,28 @@ REASON: <1 sentence why it matches>`
             </div>
 
             {/* Critical Consensus Banner */}
-            <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3.5 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
-                Critical Consensus
-              </span>
-              <p className="text-xs text-zinc-300 leading-relaxed font-medium">
-                "{inspectingReviewMovie.criticConsensus ?? 'Critically acclaimed theatrical presentation with landmark visual design and storytelling.'}"
-              </p>
-            </div>
+            {inspectingReviewMovie.criticConsensus && (
+              <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-3.5 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-purple-400">
+                  Critical Consensus
+                </span>
+                <p className="text-xs text-zinc-300 leading-relaxed font-medium">
+                  "{inspectingReviewMovie.criticConsensus}"
+                </p>
+              </div>
+            )}
 
             {/* Featured Publication Critic Quote */}
-            <div className="rounded-xl border border-purple-500/20 bg-gradient-to-r from-purple-950/20 via-zinc-900/60 to-transparent p-3.5 space-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
-                Featured Critic Spotlight
-              </span>
-              <blockquote className="text-xs text-purple-200 italic leading-relaxed">
-                {inspectingReviewMovie.topCriticQuote ?? '"An exceptional cinematic feat that demands theater viewing." — Variety'}
-              </blockquote>
-            </div>
+            {inspectingReviewMovie.topCriticQuote && (
+              <div className="rounded-xl border border-purple-500/20 bg-gradient-to-r from-purple-950/20 via-zinc-900/60 to-transparent p-3.5 space-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-zinc-400">
+                  Featured Critic Spotlight
+                </span>
+                <blockquote className="text-xs text-purple-200 italic leading-relaxed">
+                  {inspectingReviewMovie.topCriticQuote}
+                </blockquote>
+              </div>
+            )}
 
             {/* Select Showtime Pill Row inside Modal */}
             <div className="p-3.5 rounded-xl bg-zinc-900 border border-zinc-800 space-y-2">
@@ -1830,7 +1834,7 @@ REASON: <1 sentence why it matches>`
               <div className="flex items-center gap-2 flex-wrap">
                 {(inspectingReviewMovie.showtimes
                   ? inspectingReviewMovie.showtimes.split(',').map((s) => s.trim())
-                  : ['1:30 PM', '5:00 PM', '8:45 PM']
+                  : []
                 ).map((time) => (
                   <button
                     key={time}

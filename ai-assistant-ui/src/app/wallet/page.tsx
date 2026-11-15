@@ -122,10 +122,11 @@ export default function WalletPage() {
   }
 
   const copyCardNumber = () => {
-    navigator.clipboard.writeText('4829 9102 3844 8842')
+    const textToCopy = wallet?.walletId || 'CINEMIND-WALLET'
+    navigator.clipboard.writeText(textToCopy)
     setCopiedCard(true)
     setTimeout(() => setCopiedCard(false), 2500)
-    showNotification('📋 Virtual Card number copied to clipboard')
+    showNotification(`📋 Wallet ID (${textToCopy}) copied to clipboard`)
   }
 
   const filteredTransactions = (wallet?.recentTransactions ?? []).filter((tx) => {
@@ -253,11 +254,13 @@ export default function WalletPage() {
             <div className="relative z-10 flex items-end justify-between pt-2 border-t border-zinc-800/80">
               <div>
                 <span className="text-[9px] font-mono text-zinc-500 uppercase tracking-widest block">
-                  Card Number
+                  Virtual Account / Card
                 </span>
                 <div className="flex items-center gap-2 mt-0.5">
                   <span className="font-mono text-xs tracking-wider text-zinc-200">
-                    {showCardNumber ? '4829 9102 3844 8842' : '•••• •••• •••• 8842'}
+                    {showCardNumber
+                      ? (wallet?.walletId || 'No Wallet Active')
+                      : (wallet?.walletId ? `•••• •••• ${wallet.walletId.slice(-4)}` : '•••• ••••')}
                   </span>
                   <button
                     onClick={() => setShowCardNumber(!showCardNumber)}

@@ -43,8 +43,15 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthService.UserProfile> login(@RequestBody Map<String, String> req) {
-        // Idempotent login for demo session
-        String email = req.getOrDefault("email", "alex.vance@cinemind.vip");
+        String roleStr = req.get("role");
+        if (roleStr != null && !roleStr.isBlank()) {
+            try {
+                AuthService.UserRole targetRole = AuthService.UserRole.valueOf(roleStr.toUpperCase().trim());
+                return ResponseEntity.ok(authService.switchRole(targetRole));
+            } catch (IllegalArgumentException ignored) {
+            }
+        }
+        String email = req.getOrDefault("email", "").toLowerCase().trim();
         AuthService.UserRole role = email.contains("admin") ? AuthService.UserRole.EXECUTIVE_ADMIN
                 : email.contains("usher") ? AuthService.UserRole.AUDITORIUM_USHER
                 : AuthService.UserRole.VIP_PATRON;
