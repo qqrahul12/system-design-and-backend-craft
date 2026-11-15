@@ -109,6 +109,7 @@ function ManagerPortalContent() {
 
   // Theatre & Seating State
   const [movies, setMovies] = useState<any[]>([])
+  const [circuitAuditoriums, setCircuitAuditoriums] = useState<any[]>([])
   const [selectedAuditorium, setSelectedAuditorium] = useState<string>('')
   const [dynamicSurge, setDynamicSurge] = useState<number>(2.5)
   const [activeSeatLocks, setActiveSeatLocks] = useState<string[]>(['C3', 'C4', 'D3'])
@@ -118,10 +119,10 @@ function ManagerPortalContent() {
   const [targetAuditorium, setTargetAuditorium] = useState<string>('')
   const [isReallocating, setIsReallocating] = useState<boolean>(false)
 
-  // Dynamic Auditoriums derived directly from database movies (SSOT) - zero hardcoded arrays
-  const availableAuditoriums = Array.from(
-    new Set(movies.map((m) => m.auditorium).filter(Boolean) as string[])
-  )
+  // Dynamic Auditoriums derived directly from database movies & auditoriums table (SSOT)
+  const availableAuditoriums = circuitAuditoriums.length > 0
+    ? circuitAuditoriums.map((a) => a.name)
+    : Array.from(new Set(movies.map((m) => m.auditorium).filter(Boolean) as string[]))
 
   const effectiveAuditorium = selectedAuditorium || availableAuditoriums[0] || 'Auditorium 1 — Grand GT Laser'
 
@@ -193,14 +194,18 @@ function ManagerPortalContent() {
         )
       }
 
-      const menu = await concessionsService.getMenu().catch(() => [])
+      const [menu, orders, movieList, audList] = await Promise.all([
+        concessionsService.getMenu().catch(() => []),
+        concessionsService.getOrders().catch(() => []),
+        movieService.getMovies().catch(() => []),
+        movieService.getAuditoriums().catch(() => []),
+      ])
       setMenuItems(menu)
-
-      const orders = await concessionsService.getOrders().catch(() => [])
       setKitchenOrders(orders.slice(0, 8))
-
-      const movieList = await movieService.getMovies().catch(() => [])
       setMovies(movieList)
+      if (audList && Array.isArray(audList) && audList.length > 0) {
+        setCircuitAuditoriums(audList)
+      }
 
       const seatData = await ticketService.getAuditoriumSeats('Interstellar', '7:30 PM').catch(() => null)
       if (seatData?.lockedSeats) {
@@ -978,30 +983,49 @@ function ManagerPortalContent() {
                 Select Target Auditorium & Projection Format:
               </label>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {availableAuditoriums.map((audName) => {
-                  const isSelected = targetAuditorium === audName
-                  const matchingMovies = movies.filter((m) => m.auditorium === audName)
+                {(circuitAuditoriums.length > 0
+                  ? circuitAuditoriums
+                  : availableAuditoriums.map((name) => ({
+                      id: name,
+                      name,
+                      format: name.includes('IMAX') ? 'IMAX 70mm' : name.includes('Dolby') ? 'Dolby Cinema' : 'Standard Digital',
+                      capacity: 30,
+                      surgeMultiplier: 1.0,
+                      perk: 'Precision Laser Projection',
+                      soundSystem: 'Dolby Atmos',
+                    }))
+                ).map((aud) => {
+                  const isSelected = targetAuditorium === aud.name
+                  const matchingMovies = movies.filter((m) => m.auditorium === aud.name)
                   const avgOccupancy = matchingMovies.length > 0
                     ? Math.round(matchingMovies.reduce((acc, curr) => acc + (curr.occupancyRate || 80), 0) / matchingMovies.length)
                     : 80
                   return (
                     <div
-                      key={audName}
-                      onClick={() => setTargetAuditorium(audName)}
+                      key={aud.id || aud.name}
+                      onClick={() => setTargetAuditorium(aud.name)}
                       className={`p-3 rounded-xl border cursor-pointer transition ${
                         isSelected
-                          ? 'bg-purple-950/40 border-purple-500 text-white shadow-md shadow-purple-950/40'
+                          ? 'bg-purple-950/40 border-purple-500 text-white shadow-md shadow-purple-950/40 ring-1 ring-purple-500'
                           : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs">{audName}</span>
-                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-purple-300 border border-zinc-700">
-                          {audName.includes('IMAX') ? 'IMAX Format' : audName.includes('Dolby') ? 'Dolby Format' : 'Theatrical Studio'}
-                        </span>
+                        <div>
+                          <span className="font-bold text-xs text-white block">{aud.name}</span>
+                          <span className="text-[10px] text-zinc-400 mt-0.5 block">{aud.perk}</span>
+                        </div>
+                        <div className="text-right shrink-0">
+                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-purple-300 border border-zinc-700">
+                            {aud.format}
+                          </span>
+                          <span className="text-[10px] text-amber-400 font-mono block mt-0.5">
+                            {aud.surgeMultiplier > 1 ? `+${Math.round((aud.surgeMultiplier - 1) * 100)}% Surge` : 'Standard Yield'}
+                          </span>
+                        </div>
                       </div>
-                      <div className="flex items-center justify-between mt-2 pt-1 border-t border-zinc-800/60 text-[10px] text-zinc-500">
-                        <span>{matchingMovies.length} Active Title{matchingMovies.length === 1 ? '' : 's'} Assigned</span>
+                      <div className="flex items-center justify-between mt-2 pt-1.5 border-t border-zinc-800/60 text-[10px] text-zinc-500">
+                        <span>{matchingMovies.length} Active Title{matchingMovies.length === 1 ? '' : 's'} Assigned • {aud.capacity} Recliners</span>
                         <span className="text-emerald-400 font-mono font-semibold">Avg Occupancy: {avgOccupancy}%</span>
                       </div>
                     </div>

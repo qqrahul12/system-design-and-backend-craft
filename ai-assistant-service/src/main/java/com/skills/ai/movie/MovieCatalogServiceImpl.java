@@ -557,4 +557,27 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         log.info("Ingested {} current-year ({}) theatrical movies", ingested.size(), year);
         return ingested;
     }
+
+    @Override
+    public List<Auditorium> getAuditoriums() {
+        if (jdbcTemplate != null) {
+            try {
+                return jdbcTemplate.query(
+                        "SELECT id, name, format, capacity, surge_multiplier, perk, sound_system FROM auditoriums ORDER BY id",
+                        (rs, rowNum) -> new Auditorium(
+                                rs.getString("id"),
+                                rs.getString("name"),
+                                rs.getString("format"),
+                                rs.getInt("capacity"),
+                                rs.getDouble("surge_multiplier"),
+                                rs.getString("perk"),
+                                rs.getString("sound_system")
+                        )
+                );
+            } catch (Exception e) {
+                log.warn("Error reading auditoriums from PostgreSQL: {}", e.getMessage());
+            }
+        }
+        return Collections.emptyList();
+    }
 }

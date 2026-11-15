@@ -29,6 +29,16 @@ export interface Movie {
   ageRating?: string;
 }
 
+export interface Auditorium {
+  id: string;
+  name: string;
+  format: string;
+  capacity: number;
+  surgeMultiplier: number;
+  perk?: string;
+  soundSystem?: string;
+}
+
 export const movieService = {
   getMovies: (params?: { genre?: string; status?: string; search?: string }): Promise<Movie[]> => {
     const searchParams = new URLSearchParams();
@@ -59,4 +69,7 @@ export const movieService = {
 
   ingestCurrentYear: (year: number): Promise<Movie[]> =>
     apiClient.post<Movie[]>(`/api/v1/movies/ingest-current-year?year=${year}`),
+
+  getAuditoriums: (): Promise<Auditorium[]> =>
+    apiClient.get<Auditorium[]>('/api/v1/movies/auditoriums'),
 };

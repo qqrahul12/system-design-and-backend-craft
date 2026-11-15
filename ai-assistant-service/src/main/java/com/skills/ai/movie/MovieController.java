@@ -88,4 +88,9 @@ public class MovieController {
         List<Movie> ingested = movieCatalogService.ingestCurrentYearMovies(year);
         return ResponseEntity.ok(ingested);
     }
+
+    @GetMapping("/auditoriums")
+    public ResponseEntity<List<Auditorium>> getAuditoriums() {
+        return ResponseEntity.ok(movieCatalogService.getAuditoriums());
+    }
 }

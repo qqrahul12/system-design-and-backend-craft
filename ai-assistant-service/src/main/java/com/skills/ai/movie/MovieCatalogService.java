@@ -47,6 +47,11 @@ public interface MovieCatalogService {
     List<Movie> ingestCurrentYearMovies(int targetYear);
 
     /**
+     * Retrieves all verified circuit auditoriums from PostgreSQL SSOT.
+     */
+    List<Auditorium> getAuditoriums();
+
+    /**
      * Normalizes YouTube links into embeddable URLs for trailer players.
      */
     static String normalizeTrailerUrl(String url) {
