@@ -29,6 +29,7 @@ import {
   Smartphone,
   Globe,
   Flame,
+  X,
 } from 'lucide-react'
 import { authService, concessionsService, movieService, ticketService, walletService, apiClient } from '@/services'
 import { formatCurrency, getCurrencySymbol } from '@/services/walletService'
@@ -111,6 +112,41 @@ function ManagerPortalContent() {
   const [selectedAuditorium, setSelectedAuditorium] = useState<'AUD-01' | 'AUD-02' | 'AUD-03'>('AUD-01')
   const [dynamicSurge, setDynamicSurge] = useState<number>(2.5)
   const [activeSeatLocks, setActiveSeatLocks] = useState<string[]>(['C3', 'C4', 'D3'])
+
+  // Screen Reallocation State
+  const [reallocatingMovie, setReallocatingMovie] = useState<any | null>(null)
+  const [targetAuditorium, setTargetAuditorium] = useState<string>('')
+  const [isReallocating, setIsReallocating] = useState<boolean>(false)
+
+  const AVAILABLE_AUDITORIUMS = [
+    { id: 'IMAX 70mm Auditorium 1', name: 'Auditorium 1 — Grand GT Laser', format: 'IMAX 70mm', capacity: 30, surgeMultiplier: 1.15, perk: 'Dual 4K Commercial Laser • 1.43:1 Giant Dome' },
+    { id: '70mm Large Format Screen 2', name: 'Auditorium 2 — Laser Studio', format: 'Standard 70mm', capacity: 30, surgeMultiplier: 1.05, perk: '70mm 5-perf Physical Film Optics • 2.39:1 CinemaScope' },
+    { id: 'Dolby Cinema Auditorium 3', name: 'Auditorium 3 — Pavilion Dolby', format: 'Dolby Cinema', capacity: 30, surgeMultiplier: 1.10, perk: 'Dolby Vision HDR • 128-ch Atmos Spatial Immersion' },
+    { id: 'Indie Studio 4', name: 'Auditorium 4 — Intimate Studio', format: 'Standard Digital', capacity: 30, surgeMultiplier: 1.0, perk: 'Acoustic Wool Baffling • 7.1 Studio Surround' },
+    { id: 'ScreenX 270° Panoramic', name: 'Auditorium 5 — ScreenX 270°', format: 'ScreenX 270°', capacity: 30, surgeMultiplier: 1.12, perk: '3-Screen Panoramic Peripheral Immersion' },
+    { id: 'IMAX 3D Laser Auditorium 1', name: 'Auditorium 6 — 3D Laser Dome', format: 'IMAX 3D Laser', capacity: 30, surgeMultiplier: 1.18, perk: 'Active Shutter 4K Laser 3D Reference' },
+  ]
+
+  const handleConfirmReallocation = async () => {
+    if (!reallocatingMovie || !targetAuditorium || isReallocating) return
+    setIsReallocating(true)
+    try {
+      const updated = await movieService.updateMovie(reallocatingMovie.id, {
+        ...reallocatingMovie,
+        auditorium: targetAuditorium,
+      })
+      setMovies((prev) =>
+        prev.map((m) => (m.id === reallocatingMovie.id ? { ...m, auditorium: updated.auditorium || targetAuditorium } : m))
+      )
+      showToast(`'${reallocatingMovie.title}' reallocated to ${targetAuditorium}`, 'success', 'Screen Reallocation Complete')
+      setReallocatingMovie(null)
+    } catch (e) {
+      console.error('Failed to reallocate screen:', e)
+      showToast(`Failed to update auditorium: ${e instanceof Error ? e.message : 'Unknown error'}`, 'error', 'Reallocation Failed')
+    } finally {
+      setIsReallocating(false)
+    }
+  }
 
   const showToast = (
     msg: string,
@@ -887,9 +923,13 @@ function ManagerPortalContent() {
                           </td>
                           <td className="py-3 px-4 text-right">
                             <button
-                              onClick={() => showToast(`Auditorium reallocated for '${m.title}'`)}
-                              className="px-2.5 py-1 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-zinc-200 text-[10px] font-semibold border border-zinc-700 transition"
+                              onClick={() => {
+                                setReallocatingMovie(m)
+                                setTargetAuditorium(m.auditorium || 'IMAX 70mm Auditorium 1')
+                              }}
+                              className="px-2.5 py-1 rounded-lg bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 text-[10px] font-semibold border border-purple-500/40 transition flex items-center gap-1 ml-auto"
                             >
+                              <Sliders className="h-3 w-3" />
                               Reallocate Screen
                             </button>
                           </td>
@@ -902,6 +942,83 @@ function ManagerPortalContent() {
             </div>
           )}
         </>
+      )}
+
+      {/* Screen Reallocation Modal */}
+      {reallocatingMovie && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fade-in">
+          <div className="w-full max-w-lg rounded-2xl border border-purple-500/40 bg-zinc-950 p-6 shadow-2xl space-y-5">
+            <div className="flex items-start justify-between border-b border-zinc-800 pb-3">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-purple-400 font-mono tracking-wider">
+                  Theatrical Screen Reallocation
+                </span>
+                <h3 className="text-base font-bold text-white mt-0.5">{reallocatingMovie.title}</h3>
+                <p className="text-xs text-zinc-400 mt-0.5">
+                  Current: <span className="font-mono text-purple-300">{reallocatingMovie.auditorium || 'Auditorium 1 (Dolby)'}</span> • Occupancy: <span className="font-bold text-emerald-400">{reallocatingMovie.occupancyRate || 88}%</span>
+                </p>
+              </div>
+              <button
+                onClick={() => setReallocatingMovie(null)}
+                className="text-zinc-500 hover:text-white p-1 rounded-lg hover:bg-zinc-800 transition"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-xs font-semibold text-zinc-300 block">
+                Select Target Auditorium & Projection Format:
+              </label>
+              <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
+                {AVAILABLE_AUDITORIUMS.map((aud) => {
+                  const isSelected = targetAuditorium === aud.id
+                  return (
+                    <div
+                      key={aud.id}
+                      onClick={() => setTargetAuditorium(aud.id)}
+                      className={`p-3 rounded-xl border cursor-pointer transition ${
+                        isSelected
+                          ? 'bg-purple-950/40 border-purple-500 text-white shadow-md shadow-purple-950/40'
+                          : 'bg-zinc-900/60 border-zinc-800 text-zinc-300 hover:border-zinc-700'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-xs">{aud.name}</span>
+                        <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-purple-300 border border-zinc-700">
+                          {aud.format}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-zinc-400 mt-1">{aud.perk}</p>
+                      <div className="flex items-center justify-between mt-2 pt-1 border-t border-zinc-800/60 text-[10px] text-zinc-500">
+                        <span>Capacity: {aud.capacity} seats</span>
+                        <span className="text-emerald-400 font-mono font-semibold">Yield Multiplier: {aud.surgeMultiplier}x</span>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 pt-3 border-t border-zinc-800">
+              <button
+                onClick={() => setReallocatingMovie(null)}
+                disabled={isReallocating}
+                className="px-4 py-2 rounded-xl bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-semibold transition"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleConfirmReallocation}
+                disabled={isReallocating || !targetAuditorium}
+                className="px-4 py-2 rounded-xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-white text-xs font-bold transition shadow-lg shadow-purple-900/30 flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isReallocating ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : <CheckCircle2 className="h-3.5 w-3.5" />}
+                <span>{isReallocating ? 'Reallocating...' : 'Confirm Screen Reallocation'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )
