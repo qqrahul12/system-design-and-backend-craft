@@ -118,14 +118,10 @@ function ManagerPortalContent() {
   const [targetAuditorium, setTargetAuditorium] = useState<string>('')
   const [isReallocating, setIsReallocating] = useState<boolean>(false)
 
-  const AVAILABLE_AUDITORIUMS = [
-    { id: 'IMAX 70mm Auditorium 1', name: 'Auditorium 1 — Grand GT Laser', format: 'IMAX 70mm', capacity: 30, surgeMultiplier: 1.15, perk: 'Dual 4K Commercial Laser • 1.43:1 Giant Dome' },
-    { id: '70mm Large Format Screen 2', name: 'Auditorium 2 — Laser Studio', format: 'Standard 70mm', capacity: 30, surgeMultiplier: 1.05, perk: '70mm 5-perf Physical Film Optics • 2.39:1 CinemaScope' },
-    { id: 'Dolby Cinema Auditorium 3', name: 'Auditorium 3 — Pavilion Dolby', format: 'Dolby Cinema', capacity: 30, surgeMultiplier: 1.10, perk: 'Dolby Vision HDR • 128-ch Atmos Spatial Immersion' },
-    { id: 'Indie Studio 4', name: 'Auditorium 4 — Intimate Studio', format: 'Standard Digital', capacity: 30, surgeMultiplier: 1.0, perk: 'Acoustic Wool Baffling • 7.1 Studio Surround' },
-    { id: 'ScreenX 270° Panoramic', name: 'Auditorium 5 — ScreenX 270°', format: 'ScreenX 270°', capacity: 30, surgeMultiplier: 1.12, perk: '3-Screen Panoramic Peripheral Immersion' },
-    { id: 'IMAX 3D Laser Auditorium 1', name: 'Auditorium 6 — 3D Laser Dome', format: 'IMAX 3D Laser', capacity: 30, surgeMultiplier: 1.18, perk: 'Active Shutter 4K Laser 3D Reference' },
-  ]
+  // Dynamic Auditoriums derived directly from database movies (SSOT) - zero hardcoded arrays
+  const availableAuditoriums = Array.from(
+    new Set(movies.map((m) => m.auditorium).filter(Boolean) as string[])
+  )
 
   const handleConfirmReallocation = async () => {
     if (!reallocatingMovie || !targetAuditorium || isReallocating) return
@@ -971,12 +967,16 @@ function ManagerPortalContent() {
                 Select Target Auditorium & Projection Format:
               </label>
               <div className="space-y-2 max-h-64 overflow-y-auto pr-1">
-                {AVAILABLE_AUDITORIUMS.map((aud) => {
-                  const isSelected = targetAuditorium === aud.id
+                {availableAuditoriums.map((audName) => {
+                  const isSelected = targetAuditorium === audName
+                  const matchingMovies = movies.filter((m) => m.auditorium === audName)
+                  const avgOccupancy = matchingMovies.length > 0
+                    ? Math.round(matchingMovies.reduce((acc, curr) => acc + (curr.occupancyRate || 80), 0) / matchingMovies.length)
+                    : 80
                   return (
                     <div
-                      key={aud.id}
-                      onClick={() => setTargetAuditorium(aud.id)}
+                      key={audName}
+                      onClick={() => setTargetAuditorium(audName)}
                       className={`p-3 rounded-xl border cursor-pointer transition ${
                         isSelected
                           ? 'bg-purple-950/40 border-purple-500 text-white shadow-md shadow-purple-950/40'
@@ -984,15 +984,14 @@ function ManagerPortalContent() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-xs">{aud.name}</span>
+                        <span className="font-bold text-xs">{audName}</span>
                         <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-zinc-800 text-purple-300 border border-zinc-700">
-                          {aud.format}
+                          {audName.includes('IMAX') ? 'IMAX Format' : audName.includes('Dolby') ? 'Dolby Format' : 'Theatrical Studio'}
                         </span>
                       </div>
-                      <p className="text-[11px] text-zinc-400 mt-1">{aud.perk}</p>
                       <div className="flex items-center justify-between mt-2 pt-1 border-t border-zinc-800/60 text-[10px] text-zinc-500">
-                        <span>Capacity: {aud.capacity} seats</span>
-                        <span className="text-emerald-400 font-mono font-semibold">Yield Multiplier: {aud.surgeMultiplier}x</span>
+                        <span>{matchingMovies.length} Active Title{matchingMovies.length === 1 ? '' : 's'} Assigned</span>
+                        <span className="text-emerald-400 font-mono font-semibold">Avg Occupancy: {avgOccupancy}%</span>
                       </div>
                     </div>
                   )
