@@ -241,7 +241,7 @@ export default function WalletPage() {
               </span>
               <div className="text-4xl font-extrabold tracking-tight text-white flex items-baseline gap-1 mt-0.5">
                 <span className="text-2xl text-purple-400 font-bold">$</span>
-                {(wallet?.balance ?? 175.0).toLocaleString(undefined, {
+                {(wallet?.balance ?? 0.0).toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}

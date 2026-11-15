@@ -169,7 +169,7 @@ export default function ProfilePage() {
     )
   })
 
-  const walletBalance = walletSummary?.balance ?? 150.0
+  const walletBalance = walletSummary?.balance ?? 0.0
 
   return (
     <div className="min-h-screen bg-[#0d0d0d] text-white p-6 md:p-10 space-y-8 pb-20">

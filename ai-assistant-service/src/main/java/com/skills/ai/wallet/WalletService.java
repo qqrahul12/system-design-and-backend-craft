@@ -28,22 +28,42 @@ public interface WalletService {
     ) {}
 
     /**
-     * Retrieves the current wallet summary including balance and transaction history.
+     * Retrieves the current wallet summary for the active user.
      */
     WalletSummary getWalletSummary();
 
     /**
-     * Tops up wallet balance via registered payment gateway.
+     * Retrieves the wallet summary for a specific wallet identifier.
+     */
+    WalletSummary getWalletSummary(String walletId);
+
+    /**
+     * Tops up active user's wallet balance via registered payment gateway.
      */
     WalletTransaction topUp(double amount, String paymentMethod);
 
     /**
-     * Atomically debits funds from the wallet.
+     * Tops up a specific wallet balance.
+     */
+    WalletTransaction topUp(String walletId, double amount, String paymentMethod);
+
+    /**
+     * Atomically debits funds from the active user's wallet.
      */
     WalletTransaction debit(double amount, String type, String description);
+
+    /**
+     * Atomically debits funds from a specific wallet.
+     */
+    WalletTransaction debit(String walletId, double amount, String type, String description);
 
     /**
      * Credits a refund back to the customer's wallet.
      */
     WalletTransaction creditRefund(double amount, String reason);
+
+    /**
+     * Credits a refund back to a specific wallet.
+     */
+    WalletTransaction creditRefund(String walletId, double amount, String reason);
 }

@@ -11,12 +11,14 @@ public final class WalletSqlQueries {
     public static final String COUNT_WALLET_BY_ID =
             "SELECT COUNT(*) FROM wallets WHERE wallet_id = ?";
 
-    public static final String INSERT_INITIAL_WALLET =
-            "INSERT INTO wallets (wallet_id, currency, balance, updated_at) VALUES (?, 'USD', 150.00, CURRENT_TIMESTAMP)";
+    public static final String INSERT_WALLET =
+            "INSERT INTO wallets (wallet_id, currency, balance, updated_at) VALUES (?, 'USD', 0.00, CURRENT_TIMESTAMP)";
 
-    public static final String INSERT_INITIAL_TRANSACTION =
-            "INSERT INTO wallet_transactions (transaction_id, wallet_id, type, amount, balance_after, description, created_at) " +
-            "VALUES (?, ?, 'INITIAL_GRANT', 150.00, 150.00, 'CineMind VIP Welcome Bonus & Stored Value Grant', CURRENT_TIMESTAMP)";
+    public static final String MIGRATE_LEGACY_WALLET =
+            "UPDATE wallets SET wallet_id = ? WHERE wallet_id = 'WLT-CINEMIND-8842'";
+
+    public static final String MIGRATE_LEGACY_TRANSACTIONS =
+            "UPDATE wallet_transactions SET wallet_id = ? WHERE wallet_id = 'WLT-CINEMIND-8842'";
 
     public static final String SELECT_BALANCE_BY_ID =
             "SELECT balance FROM wallets WHERE wallet_id = ?";

@@ -16,15 +16,14 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 import static com.skills.ai.persistence.queries.SplitMoneySqlQueries.*;
 
 /**
- * Production-grade distributed implementation of SplitMoneyService managing group bill-splitting,
- * patron squad coordination, and multi-gateway share settlement.
- * Relies on PostgreSQL as authoritative Single Source of Truth with @Transactional boundaries.
+ * Enterprise Service Implementation for Squad Bill Splitting & Shared Payments.
+ * Adheres strictly to Single Source of Truth (PostgreSQL) and zero dual-write principles.
+ * Eliminates ad-hoc in-memory fallback maps and hardcoded seed mocks.
  */
 @Slf4j
 @Service
@@ -33,11 +32,6 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
     private final WalletService walletService;
     private final PaymentAdapterRegistry paymentAdapterRegistry;
     private final JdbcTemplate jdbcTemplate;
-
-    // In-memory fallback structures for standalone non-DB environments
-    private final Map<String, SplitUser> fallbackUsers = new ConcurrentHashMap<>();
-    private final Map<String, SplitGroup> fallbackGroups = new ConcurrentHashMap<>();
-    private final Map<String, SplitExpense> fallbackExpenses = new ConcurrentHashMap<>();
 
     public SplitMoneyServiceImpl(
             WalletService walletService,
@@ -54,167 +48,95 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         if (jdbcTemplate != null) {
             try {
                 Integer userCount = jdbcTemplate.queryForObject(COUNT_USERS, Integer.class);
-                if (userCount == null || userCount == 0) {
-                    seedDatabase();
-                } else {
-                    log.info("👥 Found {} persisted squad users in PostgreSQL (SSOT)", userCount);
-                }
-                return;
+                log.info("👥 Found {} persisted squad users in PostgreSQL (SSOT). Zero startup seeding needed.", userCount != null ? userCount : 0);
             } catch (Exception e) {
-                log.warn("⚠️ Failed to check or seed SplitMoney in PostgreSQL, falling back to local memory: {}", e.getMessage());
+                log.warn("⚠️ Failed to verify SplitMoney schema in PostgreSQL: {}", e.getMessage());
             }
         }
-        seedFallbackData();
-    }
-
-    private void seedDatabase() {
-        SplitUser u1 = new SplitUser("usr-marcus", "Marcus", "Kane", "marcus.kane@cinemind.io", "+1-555-0101", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150");
-        SplitUser u2 = new SplitUser("usr-alex", "Alex", "Mercer", "alex.mercer@cinemind.io", "+1-555-0102", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150");
-        SplitUser u3 = new SplitUser("usr-elena", "Elena", "Rostova", "elena.rostova@cinemind.io", "+1-555-0103", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150");
-        SplitUser u4 = new SplitUser("usr-chloe", "Chloe", "Bennett", "chloe.bennett@cinemind.io", "+1-555-0104", "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150");
-
-        for (SplitUser u : List.of(u1, u2, u3, u4)) {
-            jdbcTemplate.update(
-                    INSERT_USER_IF_NOT_EXISTS,
-                    u.id(), u.firstName(), u.lastName(), u.email(), u.phoneNumber(), u.avatarUrl()
-            );
-        }
-
-        jdbcTemplate.update(
-                INSERT_GROUP_IF_NOT_EXISTS,
-                "grp-imax-squad", "CineMind IMAX VIP Squad", "Weekend film screenings, 70mm re-releases, and gourmet lounge orders.",
-                Timestamp.from(Instant.now().minus(java.time.Duration.ofDays(14)))
-        );
-
-        for (SplitUser u : List.of(u1, u2, u3, u4)) {
-            jdbcTemplate.update(
-                    INSERT_GROUP_MEMBER_IF_NOT_EXISTS,
-                    "grp-imax-squad", u.id()
-            );
-        }
-
-        splitBill(
-                "Dune: Part Two IMAX 70mm Tickets (4 Passes)",
-                78.00,
-                u1.id(),
-                List.of(u1.id(), u2.id(), u3.id(), u4.id()),
-                "MOVIE_TICKET",
-                "TKT-DUNE-INIT"
-        );
-        log.info("👥 Seeded initial CineMind SplitMoney squad into PostgreSQL");
-    }
-
-    private void seedFallbackData() {
-        SplitUser u1 = new SplitUser("usr-marcus", "Marcus", "Kane", "marcus.kane@cinemind.io", "+1-555-0101", "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150");
-        SplitUser u2 = new SplitUser("usr-alex", "Alex", "Mercer", "alex.mercer@cinemind.io", "+1-555-0102", "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150");
-        SplitUser u3 = new SplitUser("usr-elena", "Elena", "Rostova", "elena.rostova@cinemind.io", "+1-555-0103", "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150");
-        SplitUser u4 = new SplitUser("usr-chloe", "Chloe", "Bennett", "chloe.bennett@cinemind.io", "+1-555-0104", "https://images.unsplash.com/photo-1517841905240-472988babdf9?w=150");
-
-        fallbackUsers.put(u1.id(), u1);
-        fallbackUsers.put(u2.id(), u2);
-        fallbackUsers.put(u3.id(), u3);
-        fallbackUsers.put(u4.id(), u4);
-
-        SplitGroup g1 = new SplitGroup(
-                "grp-imax-squad",
-                "CineMind IMAX VIP Squad",
-                "Weekend film screenings, 70mm re-releases, and gourmet lounge orders.",
-                List.of(u1, u2, u3, u4),
-                Instant.now().minus(java.time.Duration.ofDays(14))
-        );
-        fallbackGroups.put(g1.id(), g1);
-
-        splitBill(
-                "Dune: Part Two IMAX 70mm Tickets (4 Passes)",
-                78.00,
-                u1.id(),
-                List.of(u1.id(), u2.id(), u3.id(), u4.id()),
-                "MOVIE_TICKET",
-                "TKT-DUNE-INIT"
-        );
     }
 
     @Override
     public List<SplitUser> listUsers() {
-        if (jdbcTemplate != null) {
-            try {
-                return jdbcTemplate.query(SELECT_ALL_USERS, this::mapRowToUser);
-            } catch (Exception e) {
-                log.warn("⚠️ Error listing users from PostgreSQL: {}", e.getMessage());
-            }
+        if (jdbcTemplate == null) {
+            return Collections.emptyList();
         }
-        return new ArrayList<>(fallbackUsers.values());
+        try {
+            return jdbcTemplate.query(SELECT_ALL_USERS, this::mapRowToUser);
+        } catch (Exception e) {
+            log.warn("⚠️ Error listing users from PostgreSQL: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     @Override
     public Optional<SplitUser> getUser(String id) {
-        if (id == null) return Optional.empty();
-        if (jdbcTemplate != null) {
-            try {
-                List<SplitUser> users = jdbcTemplate.query(SELECT_USER_BY_ID, this::mapRowToUser, id);
-                if (!users.isEmpty()) return Optional.of(users.get(0));
-            } catch (Exception e) {
-                log.warn("⚠️ Error getting user {} from PostgreSQL: {}", id, e.getMessage());
-            }
+        if (id == null || jdbcTemplate == null) return Optional.empty();
+        try {
+            List<SplitUser> users = jdbcTemplate.query(SELECT_USER_BY_ID, this::mapRowToUser, id);
+            if (!users.isEmpty()) return Optional.of(users.get(0));
+        } catch (Exception e) {
+            log.warn("⚠️ Error getting user {} from PostgreSQL: {}", id, e.getMessage());
         }
-        return Optional.ofNullable(fallbackUsers.get(id));
+        return Optional.empty();
     }
 
     @Override
     public List<SplitGroup> listGroups() {
-        if (jdbcTemplate != null) {
-            try {
-                return jdbcTemplate.query(SELECT_ALL_GROUPS, (rs, rowNum) -> {
-                    String groupId = rs.getString("id");
-                    List<SplitUser> members = jdbcTemplate.query(
-                            SELECT_GROUP_MEMBERS,
-                            this::mapRowToUser, groupId
-                    );
-                    return new SplitGroup(
-                            groupId,
-                            rs.getString("name"),
-                            rs.getString("description"),
-                            members,
-                            rs.getTimestamp("created_at").toInstant()
-                    );
-                });
-            } catch (Exception e) {
-                log.warn("⚠️ Error listing groups from PostgreSQL: {}", e.getMessage());
-            }
+        if (jdbcTemplate == null) {
+            return Collections.emptyList();
         }
-        return new ArrayList<>(fallbackGroups.values());
+        try {
+            return jdbcTemplate.query(SELECT_ALL_GROUPS, (rs, rowNum) -> {
+                String groupId = rs.getString("id");
+                List<SplitUser> members = jdbcTemplate.query(
+                        SELECT_GROUP_MEMBERS,
+                        this::mapRowToUser, groupId
+                );
+                return new SplitGroup(
+                        groupId,
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        members,
+                        rs.getTimestamp("created_at").toInstant()
+                );
+            });
+        } catch (Exception e) {
+            log.warn("⚠️ Error listing groups from PostgreSQL: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     @Override
     public Optional<SplitGroup> getGroup(String id) {
-        if (id == null) return Optional.empty();
-        if (jdbcTemplate != null) {
-            try {
-                List<SplitGroup> list = jdbcTemplate.query(SELECT_GROUP_BY_ID, (rs, rowNum) -> {
-                    String groupId = rs.getString("id");
-                    List<SplitUser> members = jdbcTemplate.query(
-                            SELECT_GROUP_MEMBERS,
-                            this::mapRowToUser, groupId
-                    );
-                    return new SplitGroup(
-                            groupId,
-                            rs.getString("name"),
-                            rs.getString("description"),
-                            members,
-                            rs.getTimestamp("created_at").toInstant()
-                    );
-                }, id);
-                if (!list.isEmpty()) return Optional.of(list.get(0));
-            } catch (Exception e) {
-                log.warn("⚠️ Error getting group {} from PostgreSQL: {}", id, e.getMessage());
-            }
+        if (id == null || jdbcTemplate == null) return Optional.empty();
+        try {
+            List<SplitGroup> list = jdbcTemplate.query(SELECT_GROUP_BY_ID, (rs, rowNum) -> {
+                String groupId = rs.getString("id");
+                List<SplitUser> members = jdbcTemplate.query(
+                        SELECT_GROUP_MEMBERS,
+                        this::mapRowToUser, groupId
+                );
+                return new SplitGroup(
+                        groupId,
+                        rs.getString("name"),
+                        rs.getString("description"),
+                        members,
+                        rs.getTimestamp("created_at").toInstant()
+                );
+            }, id);
+            if (!list.isEmpty()) return Optional.of(list.get(0));
+        } catch (Exception e) {
+            log.warn("⚠️ Error getting group {} from PostgreSQL: {}", id, e.getMessage());
         }
-        return Optional.ofNullable(fallbackGroups.get(id));
+        return Optional.empty();
     }
 
     @Override
     @Transactional
     public SplitGroup createGroup(String name, String description, List<String> memberUserIds) {
+        if (jdbcTemplate == null) {
+            throw new IllegalStateException("Database connection required for creating squad groups");
+        }
         String groupId = "grp-" + UUID.randomUUID().toString().substring(0, 8);
         List<SplitUser> members = (memberUserIds != null ? memberUserIds : List.<String>of())
                 .stream()
@@ -228,28 +150,18 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         }
 
         Instant now = Instant.now();
-        if (jdbcTemplate != null) {
-            try {
-                jdbcTemplate.update(
-                        INSERT_GROUP,
-                        groupId, name, description, Timestamp.from(now)
-                );
-                for (SplitUser u : members) {
-                    jdbcTemplate.update(
-                            INSERT_GROUP_MEMBER_IF_NOT_EXISTS,
-                            groupId, u.id()
-                    );
-                }
-                log.info("👥 [Distributed] Created group '{}' (id={}) with {} members in PostgreSQL", name, groupId, members.size());
-                return new SplitGroup(groupId, name, description, members, now);
-            } catch (Exception e) {
-                log.warn("⚠️ Error saving group to PostgreSQL: {}", e.getMessage());
-            }
+        jdbcTemplate.update(
+                INSERT_GROUP,
+                groupId, name, description, Timestamp.from(now)
+        );
+        for (SplitUser u : members) {
+            jdbcTemplate.update(
+                    INSERT_GROUP_MEMBER_IF_NOT_EXISTS,
+                    groupId, u.id()
+            );
         }
-
-        SplitGroup g = new SplitGroup(groupId, name, description, members, now);
-        fallbackGroups.put(groupId, g);
-        return g;
+        log.info("👥 [Distributed] Created group '{}' (id={}) with {} members in PostgreSQL", name, groupId, members.size());
+        return new SplitGroup(groupId, name, description, members, now);
     }
 
     @Override
@@ -262,8 +174,12 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             String referenceType,
             String referenceId
     ) {
-        SplitUser payer = getUser(paidByUserId).orElseGet(() -> listUsers().stream().findFirst().orElse(
-                new SplitUser("usr-marcus", "Marcus", "Kane", "marcus.kane@cinemind.io", "+1-555-0101", "")
+        if (jdbcTemplate == null) {
+            throw new IllegalStateException("Database connection required for bill splitting");
+        }
+
+        SplitUser payer = getUser(paidByUserId).orElseGet(() -> listUsers().stream().findFirst().orElseThrow(
+                () -> new IllegalStateException("Payer not found and no squad users available in database")
         ));
 
         List<SplitUser> participants = (memberUserIds != null && !memberUserIds.isEmpty())
@@ -293,112 +209,105 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
             ));
         }
 
-        if (jdbcTemplate != null) {
-            try {
-                jdbcTemplate.update(
-                        INSERT_EXPENSE,
-                        expenseId, "grp-imax-squad", name, totalAmount, payer.id(), payer.getFullName(),
-                        SplitExpenseType.EQUAL.name(), referenceType != null ? referenceType : "CUSTOM",
-                        referenceId != null ? referenceId : "REF-GEN", Timestamp.from(now)
-                );
+        jdbcTemplate.update(
+                INSERT_EXPENSE,
+                expenseId, "grp-imax-squad", name, totalAmount, payer.id(), payer.getFullName(),
+                SplitExpenseType.EQUAL.name(), referenceType != null ? referenceType : "CUSTOM",
+                referenceId != null ? referenceId : "REF-GEN", Timestamp.from(now)
+        );
 
-                for (UserShare share : shares) {
-                    String shareId = "SHR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-                    jdbcTemplate.update(
-                            INSERT_SHARE,
-                            shareId, expenseId, share.userId(), share.userName(), share.shareAmount(),
-                            share.isPaid(), share.paymentMethod(), share.paidAt() != null ? Timestamp.from(share.paidAt()) : null
-                    );
-                }
-
-                log.info("💸 [Distributed] Split expense '{}' (${}) among {} patrons in PostgreSQL. Share: ${} each",
-                        name, totalAmount, count, equalShare);
-                return new SplitExpense(expenseId, name, totalAmount, payer.id(), payer.getFullName(),
-                        SplitExpenseType.EQUAL, "grp-imax-squad", referenceType, referenceId, shares, now);
-            } catch (Exception e) {
-                log.warn("⚠️ Error saving split expense to PostgreSQL: {}", e.getMessage());
-            }
+        for (UserShare share : shares) {
+            String shareId = "SHR-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+            jdbcTemplate.update(
+                    INSERT_SHARE,
+                    shareId, expenseId, share.userId(), share.userName(), share.shareAmount(),
+                    share.isPaid(), share.paymentMethod(), share.paidAt() != null ? Timestamp.from(share.paidAt()) : null
+            );
         }
 
-        SplitExpense expense = new SplitExpense(expenseId, name, totalAmount, payer.id(), payer.getFullName(),
+        log.info("💸 [Distributed] Split expense '{}' (${}) among {} patrons in PostgreSQL. Share: ${} each",
+                name, totalAmount, count, equalShare);
+        return new SplitExpense(expenseId, name, totalAmount, payer.id(), payer.getFullName(),
                 SplitExpenseType.EQUAL, "grp-imax-squad", referenceType, referenceId, shares, now);
-        fallbackExpenses.put(expenseId, expense);
-        return expense;
     }
 
     @Override
     public List<SplitExpense> listExpenses() {
-        if (jdbcTemplate != null) {
-            try {
-                return jdbcTemplate.query(
-                        SELECT_ALL_EXPENSES,
-                        (rs, rowNum) -> {
-                            String expId = rs.getString("id");
-                            List<UserShare> shares = jdbcTemplate.query(
-                                    SELECT_SHARES_BY_EXPENSE_ID,
-                                    this::mapRowToShare, expId
-                            );
-                            return new SplitExpense(
-                                    expId,
-                                    rs.getString("name"),
-                                    rs.getDouble("total_amount"),
-                                    rs.getString("paid_by_user_id"),
-                                    rs.getString("paid_by_user_name"),
-                                    SplitExpenseType.valueOf(rs.getString("expense_type")),
-                                    rs.getString("group_id"),
-                                    rs.getString("reference_type"),
-                                    rs.getString("reference_id"),
-                                    shares,
-                                    rs.getTimestamp("created_at").toInstant()
-                            );
-                        }
-                );
-            } catch (Exception e) {
-                log.warn("⚠️ Error reading expenses from PostgreSQL: {}", e.getMessage());
-            }
+        if (jdbcTemplate == null) {
+            return Collections.emptyList();
         }
-        return new ArrayList<>(fallbackExpenses.values());
+        try {
+            return jdbcTemplate.query(
+                    SELECT_ALL_EXPENSES,
+                    (rs, rowNum) -> {
+                        String expId = rs.getString("id");
+                        List<UserShare> shares = jdbcTemplate.query(
+                                SELECT_SHARES_BY_EXPENSE_ID,
+                                this::mapRowToShare, expId
+                        );
+                        return new SplitExpense(
+                                expId,
+                                rs.getString("name"),
+                                rs.getDouble("total_amount"),
+                                rs.getString("paid_by_user_id"),
+                                rs.getString("paid_by_user_name"),
+                                SplitExpenseType.valueOf(rs.getString("expense_type")),
+                                rs.getString("group_id"),
+                                rs.getString("reference_type"),
+                                rs.getString("reference_id"),
+                                shares,
+                                rs.getTimestamp("created_at").toInstant()
+                        );
+                    }
+            );
+        } catch (Exception e) {
+            log.warn("⚠️ Error reading expenses from PostgreSQL: {}", e.getMessage());
+            return Collections.emptyList();
+        }
     }
 
     @Override
     public Optional<SplitExpense> getExpense(String id) {
-        if (id == null) return Optional.empty();
-        if (jdbcTemplate != null) {
-            try {
-                List<SplitExpense> list = jdbcTemplate.query(
-                        SELECT_EXPENSE_BY_ID,
-                        (rs, rowNum) -> {
-                            String expId = rs.getString("id");
-                            List<UserShare> shares = jdbcTemplate.query(
-                                    SELECT_SHARES_BY_EXPENSE_ID,
-                                    this::mapRowToShare, expId
-                            );
-                            return new SplitExpense(
-                                    expId,
-                                    rs.getString("name"),
-                                    rs.getDouble("total_amount"),
-                                    rs.getString("paid_by_user_id"),
-                                    rs.getString("paid_by_user_name"),
-                                    SplitExpenseType.valueOf(rs.getString("expense_type")),
-                                    rs.getString("group_id"),
-                                    rs.getString("reference_type"),
-                                    rs.getString("reference_id"),
-                                    shares,
-                                    rs.getTimestamp("created_at").toInstant()
-                            );
-                        }, id
-                );
-                if (!list.isEmpty()) return Optional.of(list.get(0));
-            } catch (Exception e) {
-                log.warn("⚠️ Error getting expense {} from PostgreSQL: {}", id, e.getMessage());
-            }
+        if (id == null || jdbcTemplate == null) return Optional.empty();
+        try {
+            List<SplitExpense> list = jdbcTemplate.query(
+                    SELECT_EXPENSE_BY_ID,
+                    (rs, rowNum) -> {
+                        String expId = rs.getString("id");
+                        List<UserShare> shares = jdbcTemplate.query(
+                                SELECT_SHARES_BY_EXPENSE_ID,
+                                this::mapRowToShare, expId
+                        );
+                        return new SplitExpense(
+                                expId,
+                                rs.getString("name"),
+                                rs.getDouble("total_amount"),
+                                rs.getString("paid_by_user_id"),
+                                rs.getString("paid_by_user_name"),
+                                SplitExpenseType.valueOf(rs.getString("expense_type")),
+                                rs.getString("group_id"),
+                                rs.getString("reference_type"),
+                                rs.getString("reference_id"),
+                                shares,
+                                rs.getTimestamp("created_at").toInstant()
+                        );
+                    },
+                    id
+            );
+            if (!list.isEmpty()) return Optional.of(list.get(0));
+        } catch (Exception e) {
+            log.warn("⚠️ Error getting expense {} from PostgreSQL: {}", id, e.getMessage());
         }
-        return Optional.ofNullable(fallbackExpenses.get(id));
+        return Optional.empty();
     }
 
     @Override
     @Transactional
     public UserShare settleShare(String expenseId, String debtorUserId, String paymentMethod) {
+        if (jdbcTemplate == null) {
+            throw new IllegalStateException("Database connection required for share settlement");
+        }
+
         SplitExpense expense = getExpense(expenseId)
                 .orElseThrow(() -> new IllegalArgumentException("Expense not found: " + expenseId));
 
@@ -435,35 +344,13 @@ public class SplitMoneyServiceImpl implements SplitMoneyService {
         }
 
         Instant now = Instant.now();
-        if (jdbcTemplate != null) {
-            try {
-                jdbcTemplate.update(
-                        UPDATE_SHARE_SETTLED,
-                        method, Timestamp.from(now), expenseId, debtorUserId
-                );
-                log.info("💳 [Distributed] Share settled in PostgreSQL: expense={}, user={}, method={}", expenseId, debtorUserId, method);
-            } catch (Exception e) {
-                log.warn("⚠️ Error updating settled share in PostgreSQL: {}", e.getMessage());
-            }
-        }
+        jdbcTemplate.update(
+                UPDATE_SHARE_SETTLED,
+                method, Timestamp.from(now), expenseId, debtorUserId
+        );
+        log.info("💳 [Distributed] Share settled in PostgreSQL: expense={}, user={}, method={}", expenseId, debtorUserId, method);
 
-        UserShare settled = targetShare.withPayment(method);
-        if (fallbackExpenses.containsKey(expenseId)) {
-            List<UserShare> updatedShares = new ArrayList<>(expense.shares());
-            for (int i = 0; i < updatedShares.size(); i++) {
-                if (updatedShares.get(i).userId().equals(debtorUserId)) {
-                    updatedShares.set(i, settled);
-                    break;
-                }
-            }
-            SplitExpense updated = new SplitExpense(
-                    expense.id(), expense.name(), expense.totalAmount(), expense.paidByUserId(),
-                    expense.paidByUserName(), expense.expenseType(), expense.groupId(),
-                    expense.referenceType(), expense.referenceId(), updatedShares, expense.createdAt()
-            );
-            fallbackExpenses.put(expenseId, updated);
-        }
-        return settled;
+        return targetShare.withPayment(method);
     }
 
     @Override
