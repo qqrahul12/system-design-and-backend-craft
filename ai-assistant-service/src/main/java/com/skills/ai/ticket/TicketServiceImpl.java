@@ -1,8 +1,13 @@
 package com.skills.ai.ticket;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
@@ -19,16 +24,18 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * Enterprise Service Implementation for Digital Pass Management.
  * Follows SOLID principles:
- * - Single Responsibility: Manages ticket records and seat locks; delegates signature computation to TicketSignatureService.
+ * - Single Responsibility: Manages ticket records, distributed seat locks, and cluster-wide event pub/sub.
  * - Dependency Inversion: Depends on abstractions (TicketSignatureService, StringRedisTemplate, JdbcTemplate).
  */
 @Slf4j
 @Service
 public class TicketServiceImpl implements TicketService {
 
+    private final String nodeId = UUID.randomUUID().toString().substring(0, 8);
     private final JdbcTemplate jdbcTemplate;
     private final StringRedisTemplate redisTemplate;
     private final TicketSignatureService signatureService;
+    private final ObjectMapper objectMapper;
     private final Map<String, SeatLock> activeLocks = new ConcurrentHashMap<>();
 
     private final Sinks.Many<Map<String, Object>> seatEventSink =
@@ -37,11 +44,56 @@ public class TicketServiceImpl implements TicketService {
     public TicketServiceImpl(
             JdbcTemplate jdbcTemplate,
             @Autowired(required = false) StringRedisTemplate redisTemplate,
-            TicketSignatureService signatureService
+            TicketSignatureService signatureService,
+            @Autowired(required = false) ObjectMapper objectMapper,
+            @Autowired(required = false) RedisMessageListenerContainer listenerContainer,
+            @Autowired(required = false) @Qualifier("seatEventsTopic") ChannelTopic seatEventsTopic
     ) {
         this.jdbcTemplate = jdbcTemplate;
         this.redisTemplate = redisTemplate;
         this.signatureService = signatureService;
+        this.objectMapper = (objectMapper != null) ? objectMapper : new ObjectMapper();
+
+        initClusterPubSubListener(listenerContainer, seatEventsTopic);
+    }
+
+    private void initClusterPubSubListener(RedisMessageListenerContainer container, ChannelTopic topic) {
+        if (container != null && topic != null) {
+            try {
+                container.addMessageListener((message, pattern) -> {
+                    try {
+                        String body = new String(message.getBody());
+                        Map<String, Object> event = objectMapper.readValue(body, new TypeReference<>() {});
+                        String senderNode = (String) event.get("nodeId");
+                        // Deduplicate: if event was published by this pod, skip emitting again
+                        if (!nodeId.equals(senderNode)) {
+                            seatEventSink.tryEmitNext(event);
+                            log.debug("📡 [Cluster Pub/Sub] Received remote seat event on node {}: {}", nodeId, event.get("event"));
+                        }
+                    } catch (Exception e) {
+                        log.debug("Failed to deserialize cluster seat event: {}", e.getMessage());
+                    }
+                }, topic);
+                log.info("📡 Subscribed node {} to distributed Redis topic: {}", nodeId, topic.getTopic());
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to register Redis Pub/Sub listener for seat events: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void broadcastSeatEvent(Map<String, Object> rawEvent) {
+        Map<String, Object> eventWithNode = new HashMap<>(rawEvent);
+        eventWithNode.put("nodeId", nodeId);
+        seatEventSink.tryEmitNext(eventWithNode);
+
+        if (redisTemplate != null) {
+            try {
+                String json = objectMapper.writeValueAsString(eventWithNode);
+                redisTemplate.convertAndSend("cinemind:topic:seats", json);
+            } catch (Exception e) {
+                log.debug("Redis Pub/Sub broadcast skipped: {}", e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -78,7 +130,7 @@ public class TicketServiceImpl implements TicketService {
             log.info("🔒 Acquired 10-minute in-memory seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
         }
 
-        seatEventSink.tryEmitNext(Map.of(
+        broadcastSeatEvent(Map.of(
                 "event", "LOCK_ACQUIRED",
                 "movieTitle", movieTitle != null ? movieTitle : "",
                 "showTime", showTime != null ? showTime : "",
@@ -92,6 +144,10 @@ public class TicketServiceImpl implements TicketService {
     @Override
     public boolean releaseSeatLock(String lockToken) {
         SeatLock removed = activeLocks.remove(lockToken);
+        String movie = (removed != null) ? removed.movieTitle() : "";
+        String show = (removed != null) ? removed.showTime() : "";
+        List<String> releasedSeats = (removed != null) ? removed.seats() : List.of();
+
         if (redisTemplate != null) {
             try {
                 String tokenKey = "cinemind:lock:" + lockToken;
@@ -99,11 +155,11 @@ public class TicketServiceImpl implements TicketService {
                 if (val != null) {
                     String[] parts = val.split("\\|");
                     if (parts.length >= 3) {
-                        String m = parts[0];
-                        String s = parts[1];
-                        String[] seatList = parts[2].split(",");
-                        for (String seat : seatList) {
-                            redisTemplate.delete("cinemind:seatlock:" + m + ":" + s + ":" + seat);
+                        movie = parts[0];
+                        show = parts[1];
+                        releasedSeats = Arrays.asList(parts[2].split(","));
+                        for (String seat : releasedSeats) {
+                            redisTemplate.delete("cinemind:seatlock:" + movie + ":" + show + ":" + seat);
                         }
                     }
                     redisTemplate.delete(tokenKey);
@@ -112,13 +168,14 @@ public class TicketServiceImpl implements TicketService {
                 log.warn("⚠️ Failed to release seat lock in Redis: {}", e.getMessage());
             }
         }
-        if (removed != null) {
-            log.info("🔓 Released seat lock: token={}, seats={}", lockToken, removed.seats());
-            seatEventSink.tryEmitNext(Map.of(
+
+        if (removed != null || !releasedSeats.isEmpty()) {
+            log.info("🔓 Released seat lock across cluster: token={}, seats={}", lockToken, releasedSeats);
+            broadcastSeatEvent(Map.of(
                     "event", "LOCK_RELEASED",
-                    "movieTitle", removed.movieTitle() != null ? removed.movieTitle() : "",
-                    "showTime", removed.showTime() != null ? removed.showTime() : "",
-                    "seats", removed.seats(),
+                    "movieTitle", movie != null ? movie : "",
+                    "showTime", show != null ? show : "",
+                    "seats", releasedSeats,
                     "lockToken", lockToken != null ? lockToken : "",
                     "timestamp", Instant.now().toString()
             ));
@@ -255,7 +312,7 @@ public class TicketServiceImpl implements TicketService {
 
         log.info("Issued digital ticket in DB: id={}, movie={}, seats={}", ticketId, safeTitle, safeSeats);
 
-        seatEventSink.tryEmitNext(Map.of(
+        broadcastSeatEvent(Map.of(
                 "event", "TICKET_ISSUED",
                 "movieTitle", safeTitle,
                 "showTime", showTimeVal,

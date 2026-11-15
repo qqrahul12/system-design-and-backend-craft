@@ -66,4 +66,24 @@ public class RedisConfig {
     public StringRedisTemplate stringRedisTemplate(RedisConnectionFactory connectionFactory) {
         return new StringRedisTemplate(connectionFactory);
     }
+
+    @Bean
+    public org.springframework.data.redis.listener.RedisMessageListenerContainer redisMessageListenerContainer(
+            RedisConnectionFactory connectionFactory
+    ) {
+        org.springframework.data.redis.listener.RedisMessageListenerContainer container =
+                new org.springframework.data.redis.listener.RedisMessageListenerContainer();
+        container.setConnectionFactory(connectionFactory);
+        return container;
+    }
+
+    @Bean
+    public org.springframework.data.redis.listener.ChannelTopic seatEventsTopic() {
+        return new org.springframework.data.redis.listener.ChannelTopic("cinemind:topic:seats");
+    }
+
+    @Bean
+    public org.springframework.data.redis.listener.ChannelTopic orderEventsTopic() {
+        return new org.springframework.data.redis.listener.ChannelTopic("cinemind:topic:orders");
+    }
 }

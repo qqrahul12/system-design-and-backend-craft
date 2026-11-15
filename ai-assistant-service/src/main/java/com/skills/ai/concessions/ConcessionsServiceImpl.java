@@ -3,8 +3,14 @@ package com.skills.ai.concessions;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.listener.ChannelTopic;
+import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
@@ -16,22 +22,74 @@ import java.util.*;
 
 /**
  * Relational database-backed implementation of ConcessionsService managing CineMind Gourmet Concessions,
- * dietary validation, and real-time order lifecycle events.
+ * dietary validation, and real-time order lifecycle events across distributed cluster pods via Redis Pub/Sub.
  */
 @Slf4j
 @Service
 public class ConcessionsServiceImpl implements ConcessionsService {
 
+    private final String nodeId = UUID.randomUUID().toString().substring(0, 8);
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
+    private final StringRedisTemplate redisTemplate;
     private final List<ConcessionItem> menu = new ArrayList<>();
     private final Sinks.Many<ConcessionOrder> orderEventSink =
             Sinks.many().multicast().onBackpressureBuffer();
 
-    public ConcessionsServiceImpl(JdbcTemplate jdbcTemplate, ObjectMapper objectMapper) {
+    public ConcessionsServiceImpl(
+            JdbcTemplate jdbcTemplate,
+            ObjectMapper objectMapper,
+            @Autowired(required = false) StringRedisTemplate redisTemplate,
+            @Autowired(required = false) RedisMessageListenerContainer listenerContainer,
+            @Autowired(required = false) @Qualifier("orderEventsTopic") ChannelTopic orderEventsTopic
+    ) {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
+        this.redisTemplate = redisTemplate;
         seedMenu();
+        initClusterPubSubListener(listenerContainer, orderEventsTopic);
+    }
+
+    private void initClusterPubSubListener(RedisMessageListenerContainer container, ChannelTopic topic) {
+        if (container != null && topic != null) {
+            try {
+                container.addMessageListener((message, pattern) -> {
+                    try {
+                        String body = new String(message.getBody());
+                        Map<String, Object> payload = objectMapper.readValue(body, new TypeReference<>() {});
+                        String senderNode = (String) payload.get("nodeId");
+                        if (!nodeId.equals(senderNode)) {
+                            ConcessionOrder order = objectMapper.convertValue(payload.get("order"), ConcessionOrder.class);
+                            if (order != null) {
+                                orderEventSink.tryEmitNext(order);
+                                log.debug("📡 [Cluster Pub/Sub] Received remote concession order event on node {}: {}", nodeId, order.orderId());
+                            }
+                        }
+                    } catch (Exception e) {
+                        log.debug("Failed to deserialize cluster order event: {}", e.getMessage());
+                    }
+                }, topic);
+                log.info("📡 Subscribed node {} to distributed Redis order topic: {}", nodeId, topic.getTopic());
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to register Redis Pub/Sub listener for concession orders: {}", e.getMessage());
+            }
+        }
+    }
+
+    private void broadcastOrderEvent(ConcessionOrder order) {
+        orderEventSink.tryEmitNext(order);
+        if (redisTemplate != null) {
+            try {
+                Map<String, Object> payload = Map.of(
+                        "nodeId", nodeId,
+                        "order", order
+                );
+                String json = objectMapper.writeValueAsString(payload);
+                redisTemplate.convertAndSend("cinemind:topic:orders", json);
+            } catch (Exception e) {
+                log.debug("Redis order event broadcast skipped: {}", e.getMessage());
+            }
+        }
     }
 
     @Override
@@ -218,12 +276,13 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                 .createdAt(orderTime)
                 .build();
 
-        orderEventSink.tryEmitNext(order);
+        broadcastOrderEvent(order);
         log.info("🍿 Placed concessions order in DB: id={}, total={}, deliverySeat={}", orderId, orderTotal, seat);
         return order;
     }
 
     @Override
+    @Transactional
     public Optional<ConcessionOrder> updateOrderStatus(String orderId, String newStatus) {
         List<ConcessionOrder> matches = jdbcTemplate.query(
                 "SELECT order_id, items_json, delivery_seat, total_amount, status, estimated_minutes, created_at FROM concession_orders WHERE order_id = ?",
@@ -257,7 +316,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
                 .createdAt(existing.createdAt())
                 .build();
 
-        orderEventSink.tryEmitNext(updated);
+        broadcastOrderEvent(updated);
         log.info("🍽️ Order status advanced in DB: orderId={}, status={}, remainingMinutes={}", orderId, cleanStatus, newEst);
         return Optional.of(updated);
     }
