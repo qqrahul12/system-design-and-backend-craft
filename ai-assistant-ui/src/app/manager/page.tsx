@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, Suspense } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import {
@@ -35,7 +35,7 @@ import { formatCurrency, getCurrencySymbol } from '@/services/walletService'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
-export default function ManagerPortalPage() {
+function ManagerPortalContent() {
   const searchParams = useSearchParams()
   const initialTab = searchParams.get('tab') || 'auth'
 
@@ -898,5 +898,13 @@ export default function ManagerPortalPage() {
         </>
       )}
     </div>
+  )
+}
+
+export default function ManagerPortalPage() {
+  return (
+    <Suspense fallback={<div className="p-12 text-center text-zinc-500">Loading Operations Portal...</div>}>
+      <ManagerPortalContent />
+    </Suspense>
   )
 }
