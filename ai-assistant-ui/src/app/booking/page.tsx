@@ -32,7 +32,14 @@ import {
   Users,
   Wallet,
 } from 'lucide-react'
-import { splitService } from '@/services/splitService'
+import {
+  splitService,
+  authService,
+  movieService,
+  walletService,
+  ticketService,
+  llmopsService,
+} from '@/services'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -141,23 +148,17 @@ export default function BookingPage() {
   const [movies, setMovies] = useState<Movie[]>([])
 
   useEffect(() => {
-    const API_BASE =
-      typeof window !== 'undefined'
-        ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-        : 'http://localhost:8080'
-    fetch(`${API_BASE}/api/v1/movies`)
-      .then((res) => (res.ok ? res.json() : null))
+    movieService.getMovies()
       .then((data) => {
         if (data && Array.isArray(data) && data.length > 0) {
-          setMovies(data)
+          setMovies(data as any)
         }
       })
       .catch(() => {})
 
-    fetch(`${API_BASE}/api/v1/auth/me`)
-      .then((res) => (res.ok ? res.json() : null))
+    authService.getCurrentUser()
       .then((u) => {
-        if (u) setCurrentUser(u)
+        if (u) setCurrentUser(u as any)
       })
       .catch(() => {})
   }, [])
@@ -262,8 +263,7 @@ export default function BookingPage() {
   }
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/wallet`)
-      .then((r) => (r.ok ? r.json() : null))
+    walletService.getWalletSummary()
       .then((w) => {
         if (w) setWalletBalance(w.balance)
       })
@@ -309,24 +309,19 @@ export default function BookingPage() {
     if (!selectedMovie || selectedSeats.length === 0 || isLocking) return
     setIsLocking(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/tickets/lock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          movieTitle: selectedMovie.title,
-          showTime: selectedShowtime,
-          seats: selectedSeats,
-        }),
+      const lockData = await ticketService.lockSeats({
+        movieTitle: selectedMovie.title,
+        showTime: selectedShowtime,
+        seats: selectedSeats,
       })
-      if (res.ok) {
-        const lockData = await res.json()
+      if (lockData) {
         setActiveLockToken(lockData.lockToken)
         const expTime = new Date(lockData.expiresAt).getTime()
         setLockExpiresAt(expTime)
         setSecondsRemaining(Math.max(0, Math.floor((expTime - Date.now()) / 1000)))
         playSound('lock')
       }
-    } finally {
+    } catch {} finally {
       setIsLocking(false)
     }
   }
@@ -374,16 +369,10 @@ Return strictly:
 MATCH: <Exact Movie Title>
 REASON: <1 sentence why it matches>`
 
-      const res = await fetch(`${API_BASE}/api/v1/chat?provider=groq`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: prompt }),
-        signal: controller.signal,
-      })
+      const data = await llmopsService.sendChatMessage({ message: prompt, provider: 'groq' })
       clearTimeout(timeoutId)
 
-      if (res.ok) {
-        const data = await res.json()
+      if (data) {
         const text = data.response || ''
         const matchLine = text.split('\n').find((l: string) => l.startsWith('MATCH:'))
         const reasonLine = text.split('\n').find((l: string) => l.startsWith('REASON:'))
@@ -441,17 +430,13 @@ REASON: <1 sentence why it matches>`
     let isMounted = true
     const fetchInventory = async () => {
       try {
-        const res = await fetch(
-          `${API_BASE}/api/v1/tickets/seats?movie=${encodeURIComponent(
-            selectedMovie.title
-          )}&showtime=${encodeURIComponent(selectedShowtime)}`
+        const data = await ticketService.getAuditoriumSeats(
+          selectedMovie.title,
+          selectedShowtime
         )
-        if (res.ok) {
-          const data = await res.json()
-          if (isMounted) {
-            setOccupiedSeats(data.occupiedSeats || [])
-            setLockedSeats(data.lockedSeats || [])
-          }
+        if (data && isMounted) {
+          setOccupiedSeats(data.occupiedSeats || [])
+          setLockedSeats(data.lockedSeats || [])
         }
       } catch {
         if (isMounted) {
@@ -525,12 +510,10 @@ REASON: <1 sentence why it matches>`
           '⏰ Your 10-minute seat lock expired. Seats have been returned to the public booking pool.'
         )
         if (selectedMovie) {
-          fetch(
-            `${API_BASE}/api/v1/tickets/seats?movie=${encodeURIComponent(
-              selectedMovie.title
-            )}&showtime=${encodeURIComponent(selectedShowtime)}`
+          ticketService.getAuditoriumSeats(
+            selectedMovie.title,
+            selectedShowtime
           )
-            .then((r) => (r.ok ? r.json() : null))
             .then((d) => {
               if (d) {
                 setOccupiedSeats(d.occupiedSeats || [])
@@ -598,11 +581,7 @@ REASON: <1 sentence why it matches>`
 
     // Release any previous lock
     if (activeLockToken) {
-      fetch(`${API_BASE}/api/v1/tickets/unlock`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ lockToken: activeLockToken }),
-      }).catch(() => {})
+      ticketService.unlockSeats({ lockToken: activeLockToken }).catch(() => {})
       setActiveLockToken(null)
       setLockExpiresAt(null)
       setSecondsRemaining(0)
@@ -610,11 +589,8 @@ REASON: <1 sentence why it matches>`
 
     // Try pre-locking suggested seats if available
     try {
-      const seatRes = await fetch(
-        `${API_BASE}/api/v1/tickets/seats?movie=${encodeURIComponent(movie.title)}&showtime=${encodeURIComponent(time)}`
-      )
-      if (seatRes.ok) {
-        const seatData = await seatRes.json()
+      const seatData = await ticketService.getAuditoriumSeats(movie.title, time)
+      if (seatData) {
         const occupied = seatData.occupiedSeats || []
         setOccupiedSeats(occupied)
         setLockedSeats(seatData.lockedSeats || [])
@@ -624,17 +600,12 @@ REASON: <1 sentence why it matches>`
         setSelectedSeats(seatsToLock)
 
         if (seatsToLock.length > 0) {
-          const lockRes = await fetch(`${API_BASE}/api/v1/tickets/lock`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              movieTitle: movie.title,
-              showTime: time,
-              seats: seatsToLock,
-            }),
+          const lk = await ticketService.lockSeats({
+            movieTitle: movie.title,
+            showTime: time,
+            seats: seatsToLock,
           })
-          if (lockRes.ok) {
-            const lk = await lockRes.json()
+          if (lk) {
             setActiveLockToken(lk.lockToken)
             const exp = new Date(lk.expiresAt).getTime()
             setLockExpiresAt(exp)
@@ -670,17 +641,12 @@ REASON: <1 sentence why it matches>`
     if (newSeats.length > 0) {
       setIsLocking(true)
       try {
-        const res = await fetch(`${API_BASE}/api/v1/tickets/lock`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            movieTitle: selectedMovie.title,
-            showTime: selectedShowtime,
-            seats: newSeats,
-          }),
+        const lockData = await ticketService.lockSeats({
+          movieTitle: selectedMovie.title,
+          showTime: selectedShowtime,
+          seats: newSeats,
         })
-        if (res.ok) {
-          const lockData = await res.json()
+        if (lockData) {
           setActiveLockToken(lockData.lockToken)
           const expTime = new Date(lockData.expiresAt).getTime()
           setLockExpiresAt(expTime)
@@ -698,11 +664,7 @@ REASON: <1 sentence why it matches>`
       }
     } else {
       if (activeLockToken) {
-        fetch(`${API_BASE}/api/v1/tickets/unlock`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ lockToken: activeLockToken }),
-        }).catch(() => {})
+        ticketService.unlockSeats({ lockToken: activeLockToken }).catch(() => {})
         setActiveLockToken(null)
         setLockExpiresAt(null)
         setSecondsRemaining(0)
@@ -713,14 +675,9 @@ REASON: <1 sentence why it matches>`
   const handleLoginAndBook = async (roleName: string) => {
     setIsAuthLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/auth/switch-role`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: roleName }),
-      })
-      if (res.ok) {
-        const u = await res.json()
-        setCurrentUser(u)
+      const u = await authService.switchRole(roleName)
+      if (u) {
+        setCurrentUser(u as any)
         setIsAuthModalOpen(false)
         setTimeout(() => {
           handleCompleteBooking(true)
@@ -759,37 +716,26 @@ REASON: <1 sentence why it matches>`
     try {
       if (paymentMethod === 'WALLET') {
         try {
-          const wRes = await fetch(`${API_BASE}/api/v1/wallet/pay`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              amount: totalAmount,
-              type: 'TICKET_PAYMENT',
-              description: `${selectedMovie.title} (${selectedSeats.join(', ')})`,
-            }),
-          })
-          if (wRes.ok) {
-            const wTxn = await wRes.json()
+          const wTxn = await walletService.pay(
+            totalAmount,
+            `${selectedMovie.title} (${selectedSeats.join(', ')})`
+          )
+          if (wTxn) {
             setWalletBalance(wTxn.balanceAfter)
           }
         } catch {}
       }
 
-      const res = await fetch(`${API_BASE}/api/v1/tickets/issue`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          movieTitle: selectedMovie.title,
-          showTime,
-          format: selectedFormat,
-          auditorium,
-          seats: selectedSeats,
-          totalPaid: totalAmount,
-        }),
+      const ticket = await ticketService.issueTicket({
+        movieTitle: selectedMovie.title,
+        showTime,
+        format: selectedFormat,
+        auditorium,
+        seats: selectedSeats,
+        totalPaid: totalAmount,
       })
 
-      if (res.ok) {
-        const ticket = await res.json()
+      if (ticket) {
         playSound('success')
         setBookingConfirmation({
           ticketId: ticket.ticketId,
@@ -803,11 +749,7 @@ REASON: <1 sentence why it matches>`
 
         // Release lock and mark seats occupied
         if (activeLockToken) {
-          fetch(`${API_BASE}/api/v1/tickets/unlock`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ lockToken: activeLockToken }),
-          }).catch(() => {})
+          ticketService.unlockSeats({ lockToken: activeLockToken }).catch(() => {})
           setActiveLockToken(null)
           setLockExpiresAt(null)
           setSecondsRemaining(0)

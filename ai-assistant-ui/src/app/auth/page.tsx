@@ -16,11 +16,7 @@ import {
   Sliders,
   UserCheck,
 } from 'lucide-react'
-
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
+import { authService } from '@/services'
 
 const DEMO_ACCOUNTS = [
   {
@@ -70,30 +66,17 @@ export default function AuthPage() {
     const targetEmail = customEmail || email
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: targetEmail }),
-      })
-
-      if (res.ok) {
-        const user = await res.json()
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('cinemind-auth-changed'))
+      const user = await authService.login(targetEmail)
+      setStatusMsg(`Authenticated as ${user.name || 'Patron'} (${user.role})`)
+      setTimeout(() => {
+        if (user.role === 'EXECUTIVE_ADMIN') {
+          router.push('/admin')
+        } else if (user.role === 'AUDITORIUM_USHER') {
+          router.push('/tickets')
+        } else {
+          router.push('/booking')
         }
-        setStatusMsg(`Authenticated as ${user.fullName} (${user.roleDisplayName})`)
-        setTimeout(() => {
-          if (user.role === 'EXECUTIVE_ADMIN') {
-            router.push('/admin')
-          } else if (user.role === 'AUDITORIUM_USHER') {
-            router.push('/tickets')
-          } else {
-            router.push('/booking')
-          }
-        }, 800)
-      } else {
-        setStatusMsg('Login failed. Please verify credentials.')
-      }
+      }, 800)
     } catch {
       setStatusMsg('Connection error reaching Auth microservice.')
     } finally {

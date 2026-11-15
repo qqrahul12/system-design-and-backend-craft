@@ -54,6 +54,9 @@ export const movieService = {
   aiDraft: (title: string, genreHint?: string): Promise<Movie> =>
     apiClient.post<Movie>('/api/v1/movies/ai-draft', { title, genreHint }),
 
+  getReviews: (id: number | string): Promise<any> =>
+    apiClient.get<any>(`/api/v1/movies/${id}/reviews`),
+
   ingestCurrentYear: (year: number): Promise<Movie[]> =>
     apiClient.post<Movie[]>(`/api/v1/movies/ingest-current-year?year=${year}`),
 };

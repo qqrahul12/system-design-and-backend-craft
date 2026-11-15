@@ -3,6 +3,7 @@ package com.skills.ai.controller;
 import com.skills.ai.auth.AuthService;
 import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
+import com.skills.ai.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -13,6 +14,7 @@ import reactor.core.publisher.Flux;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 
 /**
  * REST Controller for issuing digital passes and auditorium gate scanning validation.
@@ -25,6 +27,7 @@ public class TicketController {
 
     private final TicketService ticketService;
     private final AuthService authService;
+    private final WalletService walletService;
 
     @GetMapping
     public List<DigitalTicket> listTickets() {
@@ -100,9 +103,21 @@ public class TicketController {
 
     @DeleteMapping("/{id}")
     public ResponseEntity<Map<String, Object>> cancelTicket(@PathVariable String id) {
+        Optional<DigitalTicket> ticketOpt = ticketService.getTicket(id);
+        if (ticketOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+        DigitalTicket ticket = ticketOpt.get();
         boolean removed = ticketService.deleteTicket(id);
         if (removed) {
-            return ResponseEntity.ok(Map.of("success", true, "message", "Reservation cancelled and refunded"));
+            if (walletService != null && ticket.totalPaid() > 0) {
+                walletService.creditRefund(ticket.totalPaid(), "Automated refund for cancelled pass " + id);
+            }
+            return ResponseEntity.ok(Map.of(
+                    "success", true,
+                    "refundedAmount", ticket.totalPaid(),
+                    "message", "Reservation cancelled and $" + ticket.totalPaid() + " refunded to CineCash wallet"
+            ));
         }
         return ResponseEntity.notFound().build();
     }

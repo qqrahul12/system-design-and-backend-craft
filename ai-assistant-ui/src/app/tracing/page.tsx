@@ -17,11 +17,7 @@ import {
   Server,
   Code2,
 } from 'lucide-react'
-
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
+import { telemetryService } from '@/services'
 
 interface TraceSpan {
   traceId: string
@@ -61,15 +57,12 @@ export default function TracingPage() {
   const fetchTraces = async () => {
     setIsRefreshing(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/telemetry/traces`)
-      if (res.ok) {
-        const data = await res.json()
-        setTraces(data)
-        if (data.length > 0 && !selectedTrace) {
-          setSelectedTrace(data[0])
-          if (data[0].spans?.length > 0) {
-            setSelectedSpan(data[0].spans[0])
-          }
+      const data = await telemetryService.getTraces()
+      setTraces(data as any)
+      if (data.length > 0 && !selectedTrace) {
+        setSelectedTrace(data[0] as any)
+        if (data[0].spans?.length > 0) {
+          setSelectedSpan(data[0].spans[0] as any)
         }
       }
     } catch (e) {

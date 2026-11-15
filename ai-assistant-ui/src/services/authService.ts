@@ -22,10 +22,15 @@ export const authService = {
 
   getPersonas: (): Promise<UserPersona[]> => apiClient.get<UserPersona[]>('/api/v1/auth/personas'),
 
-  login: async (role: string, email: string, name: string): Promise<UserPersona> => {
-    const user = await apiClient.post<UserPersona>('/api/v1/auth/login', { role, email, name });
+  login: async (email?: string, role?: string, name?: string): Promise<UserPersona> => {
+    const user = await apiClient.post<UserPersona>('/api/v1/auth/login', {
+      email: email ?? 'alex.vance@cinemind.vip',
+      role: role ?? '',
+      name: name ?? ''
+    });
     if (typeof window !== 'undefined' && user?.role) {
       localStorage.setItem('cinemind_role', user.role);
+      window.dispatchEvent(new Event('cinemind-auth-changed'));
     }
     return user;
   },
@@ -34,6 +39,7 @@ export const authService = {
     const res = await apiClient.post<{ message: string; currentUser: UserPersona }>('/api/v1/auth/logout');
     if (typeof window !== 'undefined') {
       localStorage.setItem('cinemind_role', 'ANONYMOUS');
+      window.dispatchEvent(new Event('cinemind-auth-changed'));
     }
     return res;
   },
@@ -42,6 +48,7 @@ export const authService = {
     const user = await apiClient.post<UserPersona>('/api/v1/auth/switch-role', { role });
     if (typeof window !== 'undefined' && user?.role) {
       localStorage.setItem('cinemind_role', user.role);
+      window.dispatchEvent(new Event('cinemind-auth-changed'));
     }
     return user;
   },

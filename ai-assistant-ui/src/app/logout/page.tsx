@@ -3,32 +3,15 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { LogOut, CheckCircle2, ArrowRight, Sparkles, Film, Key } from 'lucide-react'
-
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
+import { authService } from '@/services'
 
 export default function LogoutPage() {
   const [done, setDone] = useState(false)
 
   useEffect(() => {
-    fetch(`${API_BASE}/api/v1/auth/logout`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-    })
-      .then(() => {
-        setDone(true)
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('cinemind-auth-changed'))
-        }
-      })
-      .catch(() => {
-        setDone(true)
-        if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('cinemind-auth-changed'))
-        }
-      })
+    authService.logout()
+      .then(() => setDone(true))
+      .catch(() => setDone(true))
   }, [])
 
   return (

@@ -32,6 +32,7 @@ import {
   Ticket,
   UtensilsCrossed,
 } from 'lucide-react'
+import { agentService } from '@/services'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -339,10 +340,9 @@ export default function MultiAgentOrchestratorPage() {
 
   const loadRoster = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/agents/roster`)
-      if (res.ok) {
-        const data = await res.json()
-        setAgents(data)
+      const data = await agentService.getRoster()
+      if (data && data.length > 0) {
+        setAgents(data as any)
       }
     } catch {
       // Fallback roster
@@ -407,18 +407,11 @@ export default function MultiAgentOrchestratorPage() {
 
   const loadMcpTools = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/mcp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        if (data.result?.tools) {
-          setMcpTools(data.result.tools)
-          if (data.result.tools.length > 0 && !selectedMcpTool) {
-            handleSelectMcpTool(data.result.tools[0])
-          }
+      const data = await agentService.callMcp('tools/list')
+      if (data?.result?.tools) {
+        setMcpTools(data.result.tools)
+        if (data.result.tools.length > 0 && !selectedMcpTool) {
+          handleSelectMcpTool(data.result.tools[0])
         }
       }
     } catch (e) {
@@ -457,17 +450,7 @@ export default function MultiAgentOrchestratorPage() {
     setMcpRawOutput(null)
     try {
       const parsedArgs = JSON.parse(mcpArgsJson)
-      const res = await fetch(`${API_BASE}/api/v1/mcp`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          jsonrpc: '2.0',
-          id: Date.now(),
-          method: 'tools/call',
-          params: { name: selectedMcpTool, arguments: parsedArgs },
-        }),
-      })
-      const data = await res.json()
+      const data = await agentService.callMcp('tools/call', { name: selectedMcpTool, arguments: parsedArgs })
       setMcpRawOutput(JSON.stringify(data, null, 2))
     } catch (err: any) {
       setMcpRawOutput(`Error: ${err.message}`)
@@ -561,18 +544,10 @@ export default function MultiAgentOrchestratorPage() {
 
   const runRestOrchestration = async (startClock: number) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/agents/orchestrate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          objective: activeObjective.trim(),
-          model: selectedModel,
-          mode: 'SUPERVISOR_DAG',
-        }),
+      const data: any = await agentService.orchestrate({
+        objective: activeObjective.trim(),
+        model: selectedModel,
       })
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to orchestrate swarm`)
-      const data = await res.json()
 
       const receivedSteps: AgentExecutionStep[] = data.steps || []
       for (let i = 0; i < receivedSteps.length; i++) {

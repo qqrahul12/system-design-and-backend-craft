@@ -2,11 +2,7 @@
 
 import { useState } from 'react'
 import { Upload, Search, Database, FileText, Cpu, MessageSquare, CheckCircle, Clock, Sparkles, BookOpen, FileUp } from 'lucide-react'
-
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
+import { ragService } from '@/services'
 
 interface Citation {
   source: string
@@ -58,18 +54,11 @@ export default function DocumentsPage() {
     setIngestSuccess(null)
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/rag/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: titleToUse.trim(),
-          content: contentToUse.trim(),
-          chunkSize: 250,
-        }),
+      const data = await ragService.ingest({
+        title: titleToUse.trim(),
+        content: contentToUse.trim(),
+        chunkSize: 250,
       })
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}: Failed to ingest`)
-      const data = await res.json()
       setIngestSuccess(`Indexed "${data.title}" into ${data.chunksIndexed} semantic chunks!`)
       if (!customTitle) {
         setDocTitle('')
@@ -103,15 +92,8 @@ export default function DocumentsPage() {
     setQueryError(null)
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/rag/query`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: query.trim(), topK: 3 }),
-      })
-
-      if (!res.ok) throw new Error(`HTTP ${res.status}: RAG Query failed`)
-      const data: RagResponse = await res.json()
-      setRagResult(data)
+      const data = await ragService.query({ question: query.trim(), topK: 3 })
+      setRagResult(data as any)
     } catch (err: unknown) {
       setQueryError(err instanceof Error ? err.message : 'Query failed')
     } finally {

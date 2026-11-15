@@ -15,13 +15,23 @@ export interface Ticket {
   showtime: string;
 }
 
-export interface SeatLockResponse {
-  lockId: string;
+export interface SeatLock {
+  lockToken: string;
   movieTitle: string;
+  showTime: string;
   seats: string[];
-  expiresInSeconds: number;
-  success: boolean;
-  message?: string;
+  expiresAt: string;
+}
+
+export interface AuditoriumSeatsData {
+  movieTitle: string;
+  showTime: string;
+  totalSeats: number;
+  rows: string[];
+  cols: number[];
+  occupiedSeats: string[];
+  lockedSeats: string[];
+  tierCatalog?: Record<string, any>;
 }
 
 export const ticketService = {
@@ -29,30 +39,38 @@ export const ticketService = {
 
   getTicket: (id: string): Promise<Ticket> => apiClient.get<Ticket>(`/api/v1/tickets/${id}`),
 
-  lockSeats: (payload: { movieTitle: string; seats: string[]; userId: string }): Promise<SeatLockResponse> =>
-    apiClient.post<SeatLockResponse>('/api/v1/tickets/lock', payload),
+  getAuditoriumSeats: (movieTitle: string, showtime?: string): Promise<AuditoriumSeatsData> => {
+    const qMovie = encodeURIComponent(movieTitle || 'Interstellar');
+    const qShow = encodeURIComponent(showtime || '7:30 PM');
+    return apiClient.get<AuditoriumSeatsData>(`/api/v1/tickets/seats?movie=${qMovie}&showtime=${qShow}`);
+  },
 
-  unlockSeats: (payload: { movieTitle: string; seats: string[]; lockId?: string }): Promise<void> =>
-    apiClient.post<void>('/api/v1/tickets/unlock', payload),
+  getLockedSeats: (movieTitle: string, showtime?: string): Promise<{ lockedSeats: string[] }> => {
+    const qMovie = encodeURIComponent(movieTitle || '');
+    const qShow = encodeURIComponent(showtime || '');
+    return apiClient.get<{ lockedSeats: string[] }>(`/api/v1/tickets/seats?movie=${qMovie}&showtime=${qShow}`);
+  },
 
-  getLockedSeats: (movieTitle: string): Promise<{ lockedSeats: string[] }> =>
-    apiClient.get<{ lockedSeats: string[] }>(`/api/v1/tickets/seats?movieTitle=${encodeURIComponent(movieTitle)}`),
+  lockSeats: (payload: { movieTitle: string; showTime?: string; seats: string[] }): Promise<SeatLock> =>
+    apiClient.post<SeatLock>('/api/v1/tickets/lock', payload),
+
+  unlockSeats: (payload: { lockToken: string }): Promise<{ released: boolean; lockToken: string }> =>
+    apiClient.post<{ released: boolean; lockToken: string }>('/api/v1/tickets/unlock', payload),
 
   issueTicket: (payload: {
     movieTitle: string;
+    showTime: string;
     format: string;
     auditorium: string;
     seats: string[];
-    pricePerTicket: number;
-    paymentMethod: string;
-    showtime: string;
-    lockId?: string;
+    totalPaid: number;
+    paymentMethod?: string;
   }): Promise<Ticket> => apiClient.post<Ticket>('/api/v1/tickets/issue', payload),
 
   validateTicket: (ticketId: string, qrToken: string): Promise<{ valid: boolean; code?: string; message: string; ticket?: any }> =>
     apiClient.post('/api/v1/tickets/validate', { ticketId, qrToken }),
 
-  cancelTicket: (ticketId: string): Promise<void> =>
+  cancelTicket: (ticketId: string): Promise<{ success: boolean; message: string; refundedAmount?: number }> =>
     apiClient.delete(`/api/v1/tickets/${ticketId}`),
 
   refundTicket: (ticketId: string, reason?: string): Promise<{ message: string; ticket: Ticket }> =>

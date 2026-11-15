@@ -2,11 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { TrendingUp, Zap, Layers, DollarSign, RefreshCw, Trash2, ShieldAlert } from 'lucide-react'
-
-const API_BASE =
-  typeof window !== 'undefined'
-    ? (process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080')
-    : 'http://localhost:8080'
+import { llmopsService } from '@/services'
 
 interface MetricsData {
   totalRequests: number
@@ -27,11 +23,8 @@ export default function AnalyticsPage() {
   const fetchMetrics = async () => {
     setIsRefreshing(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/llmops/metrics`)
-      if (res.ok) {
-        const data = await res.json()
-        setMetrics(data)
-      }
+      const data = await llmopsService.getMetrics()
+      setMetrics(data as any)
     } catch {
       // Backend offline fallback
     } finally {
@@ -41,7 +34,7 @@ export default function AnalyticsPage() {
 
   const clearCache = async () => {
     try {
-      await fetch(`${API_BASE}/api/v1/llmops/cache/clear`, { method: 'POST' })
+      await llmopsService.clearCache()
       fetchMetrics()
     } catch {
       // ignore
@@ -60,12 +53,7 @@ export default function AnalyticsPage() {
 
     setSecurityOutput('Testing against Prompt Guard...')
     try {
-      const res = await fetch(`${API_BASE}/api/v1/chat`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ message: testSecurityInput.trim() }),
-      })
-      const data = await res.json()
+      const data = await llmopsService.sendChatMessage({ message: testSecurityInput.trim() })
       setSecurityOutput(data.response)
       fetchMetrics()
     } catch (err: unknown) {

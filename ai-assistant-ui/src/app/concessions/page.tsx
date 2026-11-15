@@ -28,8 +28,13 @@ import {
   Truck,
   Users,
 } from 'lucide-react'
-import { splitService } from '@/services/splitService'
-import { authService } from '@/services/authService'
+import {
+  splitService,
+  authService,
+  concessionsService,
+  ticketService,
+  walletService,
+} from '@/services'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -269,14 +274,8 @@ function ConcessionsContent() {
 
   const fetchTickets = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/tickets`)
-      let list: UserTicket[] = []
-      if (res.ok) {
-        const raw = await res.json()
-        if (Array.isArray(raw)) {
-          list = raw
-        }
-      }
+      const raw = await ticketService.getTickets()
+      let list: UserTicket[] = Array.isArray(raw) ? (raw as any) : []
 
       // If query parameters provided (e.g. redirected from booking confirmation)
       if (movieParam && seatsParam) {
@@ -359,31 +358,25 @@ function ConcessionsContent() {
 
   const fetchWallet = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/wallet`)
-      if (res.ok) {
-        const data = await res.json()
-        setWalletBalance(data.balance)
-      }
+      const data = await walletService.getWalletSummary()
+      setWalletBalance(data.balance)
     } catch {}
   }
 
   const fetchOrders = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/concessions/orders`)
-      if (res.ok) {
-        const data = await res.json()
-        setAllOrders(data)
-        if (Array.isArray(data) && data.length > 0) {
-          const latest = data[0]
-          setActiveOrder({
-            orderId: latest.orderId,
-            total: latest.totalAmount,
-            seat: latest.deliverySeat,
-            itemsCount: latest.items?.length || 1,
-            status: latest.status === 'PREPARING' ? 'PREPARING' : 'READY',
-            estimatedMinutes: latest.estimatedMinutes || 6,
-          })
-        }
+      const data = await concessionsService.getOrders()
+      setAllOrders(data as any)
+      if (Array.isArray(data) && data.length > 0) {
+        const latest = data[0]
+        setActiveOrder({
+          orderId: latest.orderId,
+          total: latest.totalAmount,
+          seat: latest.deliverySeat,
+          itemsCount: latest.items?.length || 1,
+          status: latest.status === 'PREPARING' ? 'PREPARING' : 'READY',
+          estimatedMinutes: latest.estimatedMinutes || 6,
+        })
       }
     } catch (e) {
       console.warn('Failed to fetch orders:', e)
@@ -392,11 +385,8 @@ function ConcessionsContent() {
 
   const fetchMenu = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/concessions/menu`)
-      if (res.ok) {
-        const data = await res.json()
-        setMenu(data)
-      }
+      const data = await concessionsService.getMenu()
+      setMenu(data as any)
     } catch (e) {
       console.warn('Failed to fetch menu:', e)
     }
@@ -405,15 +395,8 @@ function ConcessionsContent() {
   const fetchCombos = async (genre: string, size: number) => {
     setIsLoadingCombos(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/concessions/recommend`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ genre, partySize: size }),
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setCombos(data)
-      }
+      const data = await concessionsService.recommendCombos(genre, size)
+      setCombos(data as any)
     } catch (e) {
       console.warn('Failed to fetch combos:', e)
     } finally {
@@ -458,23 +441,16 @@ function ConcessionsContent() {
     if (!activeOrder || isAdvancingStatus) return
     setIsAdvancingStatus(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/concessions/orders/${activeOrder.orderId}/status`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: targetStatus }),
-      })
-      if (res.ok) {
-        const updated = await res.json()
-        const st = updated.status === 'DELIVERED' ? 'DELIVERED' : updated.status === 'PLATED' ? 'READY' : 'PREPARING'
-        setActiveOrder((prev) => prev ? {
-          ...prev,
-          status: st,
-          estimatedMinutes: updated.estimatedMinutes,
-        } : null)
-        if (st === 'READY') playKitchenChime('plated')
-        if (st === 'DELIVERED') playKitchenChime('delivered')
-        showNotice(`Kitchen status updated: ${updated.status}`)
-      }
+      const updated = await concessionsService.updateOrderStatus(activeOrder.orderId, targetStatus)
+      const st = updated.status === 'DELIVERED' ? 'DELIVERED' : updated.status === 'PLATED' ? 'READY' : 'PREPARING'
+      setActiveOrder((prev) => prev ? {
+        ...prev,
+        status: st,
+        estimatedMinutes: updated.estimatedMinutes,
+      } : null)
+      if (st === 'READY') playKitchenChime('plated')
+      if (st === 'DELIVERED') playKitchenChime('delivered')
+      showNotice(`Kitchen status updated: ${updated.status}`)
     } catch (e) {
       console.warn('Failed to advance order status:', e)
     } finally {
@@ -490,7 +466,7 @@ function ConcessionsContent() {
       const item = menu.find((i) => i.id === itemId)
       return {
         name: item?.name || itemId,
-        qty,
+        quantity: qty,
         price: item?.price || 0,
       }
     })
@@ -498,36 +474,22 @@ function ConcessionsContent() {
     try {
       if (paymentMethod === 'WALLET') {
         try {
-          const wRes = await fetch(`${API_BASE}/api/v1/wallet/pay`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              amount: cartTotal,
-              type: 'CONCESSION_PAYMENT',
-              description: `Gourmet Concessions (${cartItemCount} items to ${deliverySeat})`,
-            }),
-          })
-          if (wRes.ok) {
-            const wTxn = await wRes.json()
-            setWalletBalance(wTxn.balanceAfter)
-          }
+          const wTxn = await walletService.pay(
+            cartTotal,
+            `Gourmet Concessions (${cartItemCount} items to ${deliverySeat})`
+          )
+          setWalletBalance(wTxn.balanceAfter)
         } catch {}
       }
 
-      const res = await fetch(`${API_BASE}/api/v1/concessions/order`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          items: orderItems,
-          deliverySeat,
-          total: cartTotal,
-        }),
+      const orderData = await concessionsService.placeOrder({
+        items: orderItems,
+        deliverySeat,
+        total: cartTotal,
       })
 
-      if (res.ok) {
-        const orderData = await res.json()
-        setActiveOrder({
-          orderId: orderData.orderId || '#FB-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
+      setActiveOrder({
+        orderId: orderData.orderId || '#FB-' + Math.random().toString(36).substring(2, 6).toUpperCase(),
           total: cartTotal,
           seat: deliverySeat,
           itemsCount: cartItemCount,
@@ -542,7 +504,6 @@ function ConcessionsContent() {
             ? `Paid $${cartTotal.toFixed(2)} via CineMind Wallet! Dispatched to kitchen.`
             : 'Gourmet concessions order dispatched to kitchen!'
         )
-      }
     } catch {
       // Local fallback
       setActiveOrder({

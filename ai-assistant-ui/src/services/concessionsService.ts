@@ -40,18 +40,17 @@ export const concessionsService = {
   getOrders: (): Promise<ConcessionOrder[]> =>
     apiClient.get<ConcessionOrder[]>('/api/v1/concessions/orders'),
 
-  recommendCombos: (movieGenre = 'Sci-Fi', partySize = 2): Promise<ConcessionCombo[]> =>
-    apiClient.get<ConcessionCombo[]>(
-      `/api/v1/concessions/recommend?movieGenre=${encodeURIComponent(movieGenre)}&partySize=${partySize}`
-    ),
+  recommendCombos: (genre = 'Sci-Fi', partySize = 2): Promise<ConcessionCombo[]> =>
+    apiClient.post<ConcessionCombo[]>('/api/v1/concessions/recommend', { genre, partySize }),
 
   placeOrder: (payload: {
     items: Array<{ name: string; quantity: number; price: number }>;
     deliverySeat: string;
     total: number;
+    createdAt?: string;
   }): Promise<ConcessionOrder> =>
     apiClient.post<ConcessionOrder>('/api/v1/concessions/order', payload),
 
   updateOrderStatus: (orderId: string, status: string): Promise<ConcessionOrder> =>
-    apiClient.put<ConcessionOrder>(`/api/v1/concessions/orders/${orderId}/status`, { status }),
+    apiClient.post<ConcessionOrder>(`/api/v1/concessions/orders/${orderId}/status`, { status }),
 };

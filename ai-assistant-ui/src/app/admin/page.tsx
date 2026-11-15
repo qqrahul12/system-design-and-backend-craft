@@ -29,6 +29,7 @@ import {
   UserCheck,
   Crown,
 } from 'lucide-react'
+import { adminService, movieService, authService } from '@/services'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -292,24 +293,21 @@ export default function AdminPage() {
     setIsLoading(true)
     try {
       // 1. Fetch live movies
-      const moviesRes = await fetch(`${API_BASE}/api/v1/movies`)
-      if (moviesRes.ok) {
-        const moviesData = await moviesRes.json()
-        setMovies(moviesData)
+      const moviesData = await movieService.getMovies()
+      if (moviesData) {
+        setMovies(moviesData as any)
       }
 
       // 2. Fetch live analytics
-      const analyticsRes = await fetch(`${API_BASE}/api/v1/admin/analytics`)
-      if (analyticsRes.ok) {
-        const analyticsData = await analyticsRes.json()
-        setAnalytics(analyticsData)
+      const analyticsData = await adminService.getAnalytics()
+      if (analyticsData) {
+        setAnalytics(analyticsData as any)
       }
 
       // 3. Fetch active user auth persona
-      const authRes = await fetch(`${API_BASE}/api/v1/auth/me`)
-      if (authRes.ok) {
-        const authData = await authRes.json()
-        setCurrentUser(authData)
+      const authData = await authService.getCurrentUser()
+      if (authData) {
+        setCurrentUser(authData as any)
       }
     } catch (err) {
       console.warn('Backend offline, using fallback state', err)
@@ -321,14 +319,9 @@ export default function AdminPage() {
   const switchToAdminPersona = async () => {
     setIsSwitchingPersona(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/auth/switch-role`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: 'EXECUTIVE_ADMIN' }),
-      })
-      if (res.ok) {
-        const u = await res.json()
-        setCurrentUser(u)
+      const u = await authService.switchRole('EXECUTIVE_ADMIN')
+      if (u) {
+        setCurrentUser(u as any)
         setActionNotice('Elevated session credentials to Executive Administrator (Marcus Kane)')
         setTimeout(() => setActionNotice(null), 4000)
       }
@@ -339,10 +332,9 @@ export default function AdminPage() {
 
   const fetchCircuitBreakerStatus = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/circuit-breaker/status`)
-      if (res.ok) {
-        const data = await res.json()
-        setCircuitBreakerData(data)
+      const data = await adminService.getCircuitBreakerStatus()
+      if (data) {
+        setCircuitBreakerData(data as any)
       }
     } catch (e) {
       console.warn('Failed to fetch circuit breaker status:', e)
@@ -352,12 +344,8 @@ export default function AdminPage() {
   const handleToggleCircuitFailure = async () => {
     setIsTogglingCircuitFailure(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/circuit-breaker/toggle-stripe-failure`, {
-        method: 'POST',
-      })
-      if (res.ok) {
-        await fetchCircuitBreakerStatus()
-      }
+      await adminService.toggleStripeFailure()
+      await fetchCircuitBreakerStatus()
     } catch (e) {
       console.warn('Failed to toggle stripe failure:', e)
     } finally {
@@ -466,13 +454,8 @@ export default function AdminPage() {
     }
     setIsDrafting(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/movies/ai-draft`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ title: newTitle, genre: newGenre }),
-      })
-      if (res.ok) {
-        const drafted = await res.json()
+      const drafted = await movieService.aiDraft(newTitle, newGenre)
+      if (drafted) {
         setNewGenre(drafted.genre || newGenre)
         setNewDuration(drafted.duration || '2h 15m')
         setNewPrice(drafted.price || 16.5)
@@ -517,14 +500,9 @@ export default function AdminPage() {
     }
 
     try {
-      const res = await fetch(`${API_BASE}/api/v1/movies`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      })
-      if (res.ok) {
-        const created = await res.json()
-        setMovies((prev) => [...prev, created])
+      const created = await movieService.createMovie(payload)
+      if (created) {
+        setMovies((prev) => [...prev, created as any])
         setIsAddModalOpen(false)
         resetForm()
         showNotice(`🎬 Movie "${created.title}" successfully added to catalog!`)
@@ -544,7 +522,7 @@ export default function AdminPage() {
       return
     }
     try {
-      await fetch(`${API_BASE}/api/v1/movies/${id}`, { method: 'DELETE' })
+      await movieService.deleteMovie(id)
       setMovies((prev) => prev.filter((m) => m.id !== id))
       showNotice(`🗑️ Movie "${title}" removed from catalog.`)
     } catch {
@@ -556,9 +534,8 @@ export default function AdminPage() {
   const handleGenerateBriefing = async () => {
     setIsBriefingLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/admin/briefing`, { method: 'POST' })
-      if (res.ok) {
-        const data = await res.json()
+      const data = await adminService.generateBriefing()
+      if (data) {
         setBriefing(parseBriefingPayload(data))
       } else {
         setBriefing(parseBriefingPayload(null))
