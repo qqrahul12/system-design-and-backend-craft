@@ -109,7 +109,7 @@ function ManagerPortalContent() {
 
   // Theatre & Seating State
   const [movies, setMovies] = useState<any[]>([])
-  const [selectedAuditorium, setSelectedAuditorium] = useState<'AUD-01' | 'AUD-02' | 'AUD-03'>('AUD-01')
+  const [selectedAuditorium, setSelectedAuditorium] = useState<string>('')
   const [dynamicSurge, setDynamicSurge] = useState<number>(2.5)
   const [activeSeatLocks, setActiveSeatLocks] = useState<string[]>(['C3', 'C4', 'D3'])
 
@@ -122,6 +122,12 @@ function ManagerPortalContent() {
   const availableAuditoriums = Array.from(
     new Set(movies.map((m) => m.auditorium).filter(Boolean) as string[])
   )
+
+  const effectiveAuditorium = selectedAuditorium || availableAuditoriums[0] || 'Auditorium 1 — Grand GT Laser'
+
+  const avgMoviePrice = movies.length > 0
+    ? movies.reduce((acc, m) => acc + (Number(m.price) || 18.5), 0) / movies.length
+    : 18.5
 
   const handleConfirmReallocation = async () => {
     if (!reallocatingMovie || !targetAuditorium || isReallocating) return
@@ -794,26 +800,28 @@ function ManagerPortalContent() {
                     <span>Auditorium Selector</span>
                     <Film className="h-4 w-4 text-purple-400" />
                   </div>
-                  <div className="flex gap-2">
-                    {[
-                      { id: 'AUD-01', name: 'Screen 1 (Dolby)' },
-                      { id: 'AUD-02', name: 'Screen 2 (IMAX 70mm)' },
-                      { id: 'AUD-03', name: 'Screen 3 (VIP Room)' },
-                    ].map((aud) => (
-                      <button
-                        key={aud.id}
-                        onClick={() => setSelectedAuditorium(aud.id as any)}
-                        className={`flex-1 py-1.5 px-2 rounded-lg text-xs font-mono font-bold transition ${
-                          selectedAuditorium === aud.id
-                            ? 'bg-purple-600 text-white shadow-md'
-                            : 'bg-zinc-800 text-zinc-400 hover:text-white'
-                        }`}
-                      >
-                        {aud.id}
-                      </button>
-                    ))}
+                  <div className="flex flex-wrap gap-1.5">
+                    {availableAuditoriums.slice(0, 4).map((audName, idx) => {
+                      const isSelected = effectiveAuditorium === audName
+                      return (
+                        <button
+                          key={audName}
+                          onClick={() => setSelectedAuditorium(audName)}
+                          title={audName}
+                          className={`flex-1 min-w-[65px] py-1.5 px-2 rounded-lg text-xs font-mono font-bold transition truncate ${
+                            isSelected
+                              ? 'bg-purple-600 text-white shadow-md'
+                              : 'bg-zinc-800 text-zinc-400 hover:text-white'
+                          }`}
+                        >
+                          Screen {idx + 1}
+                        </button>
+                      )
+                    })}
                   </div>
-                  <p className="text-[10px] text-zinc-500">48-64 motorized leather recliners with food trays</p>
+                  <p className="text-[10px] text-zinc-400 font-mono truncate" title={effectiveAuditorium}>
+                    {effectiveAuditorium}
+                  </p>
                 </div>
 
                 <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-2">
@@ -858,25 +866,28 @@ function ManagerPortalContent() {
               <div className="rounded-2xl border border-zinc-800 bg-zinc-900/40 p-5 space-y-4">
                 <h3 className="text-sm font-bold text-white flex items-center gap-2">
                   <Ticket className="h-4 w-4 text-purple-400" />
-                  Auditorium Seating Tiers & Pricing Multipliers
+                  Auditorium Seating Tiers & Dynamic Pricing Multipliers
                 </h3>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                   {[
-                    { tier: 'VIP_RECLINER', name: 'VIP Heated Leather Recliner', basePrice: 24.50, seats: 'Rows C & D (Center)', perk: 'Motorized footrest, swivel dinner tray, Dolby Atmos sweet-spot' },
-                    { tier: 'PRIME_RESERVED', name: 'Prime Stadium Reserved', basePrice: 19.50, seats: 'Rows B, C, D (Flanks)', perk: 'Extra 42" legroom, plush rockers, unobstructed sightlines' },
-                    { tier: 'CLASSIC_PLUSH', name: 'Classic Theatrical Rocker', basePrice: 14.50, seats: 'Rows A & E', perk: 'Standard plush cushioning, wide cup holders' },
-                  ].map((t) => (
-                    <div key={t.tier} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/80 space-y-2">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white">{t.name}</span>
-                        <span className="font-mono text-sm font-extrabold text-emerald-400">
-                          ${(t.basePrice + dynamicSurge).toFixed(2)}
-                        </span>
+                    { tier: 'VIP_RECLINER', name: 'VIP Heated Leather Recliner', multiplier: 1.30, seats: 'Rows C & D (Center)', perk: 'Motorized footrest, swivel dinner tray, Dolby Atmos sweet-spot' },
+                    { tier: 'PRIME_RESERVED', name: 'Prime Stadium Reserved', multiplier: 1.05, seats: 'Rows B, C, D (Flanks)', perk: 'Extra 42" legroom, plush rockers, unobstructed sightlines' },
+                    { tier: 'CLASSIC_PLUSH', name: 'Classic Theatrical Rocker', multiplier: 0.80, seats: 'Rows A & E', perk: 'Standard plush cushioning, wide cup holders' },
+                  ].map((t) => {
+                    const calculatedBase = avgMoviePrice * t.multiplier
+                    return (
+                      <div key={t.tier} className="p-4 rounded-xl border border-zinc-800 bg-zinc-900/80 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-bold text-white">{t.name}</span>
+                          <span className="font-mono text-sm font-extrabold text-emerald-400">
+                            ${(calculatedBase + dynamicSurge).toFixed(2)}
+                          </span>
+                        </div>
+                        <div className="text-[10px] font-mono text-purple-300">{t.seats}</div>
+                        <p className="text-[11px] text-zinc-400">{t.perk}</p>
                       </div>
-                      <div className="text-[10px] font-mono text-purple-300">{t.seats}</div>
-                      <p className="text-[11px] text-zinc-400">{t.perk}</p>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </div>
 
@@ -887,7 +898,7 @@ function ManagerPortalContent() {
                     <Film className="h-4 w-4 text-purple-400" />
                     Theatrical Film Slate & Programming Allocation
                   </h3>
-                  <span className="text-xs text-zinc-500 font-mono">27 Relational Features in PostgreSQL</span>
+                  <span className="text-xs text-zinc-400 font-mono">{movies.length} Relational Features in PostgreSQL</span>
                 </div>
                 <div className="overflow-x-auto">
                   <table className="w-full text-left text-xs">

@@ -334,6 +334,16 @@ function TicketsContent() {
     setTimeout(() => setActionNotice(null), 3500)
   }
 
+  const isStaff = Boolean(
+    currentUser &&
+    currentUser.isAuthenticated &&
+    (currentUser.role === 'AUDITORIUM_USHER' ||
+     currentUser.role === 'CINEMA_MANAGER' ||
+     currentUser.role === 'EXECUTIVE_ADMIN' ||
+     (currentUser.permissions && currentUser.permissions.includes('SCAN_GATE_PASS')))
+  )
+  const effectiveViewMode = isStaff ? viewMode : 'PATRON_PASS'
+
   return (
     <div className="mx-auto max-w-5xl space-y-8 pb-16">
       {/* Toast */}
@@ -418,51 +428,51 @@ function TicketsContent() {
         </div>
       )}
 
-      {/* Role-Aligned Mode Switcher: Patron Pass Wallet vs Usher Gate Scanner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 rounded-2xl bg-[#141414] border border-[#242424]">
-        <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-zinc-800/80">
-          <button
-            onClick={() => setViewMode('PATRON_PASS')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-              viewMode === 'PATRON_PASS'
-                ? 'bg-purple-600 text-white shadow-md'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Ticket className="h-3.5 w-3.5" />
-            <span>Patron Pass Wallet</span>
-          </button>
-          <button
-            onClick={() => setViewMode('GATE_SCANNER')}
-            className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
-              viewMode === 'GATE_SCANNER'
-                ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Scan className="h-3.5 w-3.5 text-emerald-300" />
-            <span>Turnstile Gate Scanner Mode</span>
-            {(currentUser?.role === 'AUDITORIUM_USHER' || currentUser?.role === 'CINEMA_MANAGER') && (
+      {/* Role-Aligned Mode Switcher: Patron Pass Wallet vs Usher Gate Scanner (Restricted strictly to Staff) */}
+      {isStaff && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-2 rounded-2xl bg-[#141414] border border-[#242424]">
+          <div className="flex items-center gap-1.5 p-1 rounded-xl bg-black/60 border border-zinc-800/80">
+            <button
+              onClick={() => setViewMode('PATRON_PASS')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                effectiveViewMode === 'PATRON_PASS'
+                  ? 'bg-purple-600 text-white shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Ticket className="h-3.5 w-3.5" />
+              <span>Patron Pass Wallet</span>
+            </button>
+            <button
+              onClick={() => setViewMode('GATE_SCANNER')}
+              className={`flex items-center gap-2 px-3.5 py-1.5 rounded-lg text-xs font-bold transition ${
+                effectiveViewMode === 'GATE_SCANNER'
+                  ? 'bg-gradient-to-r from-emerald-600 to-teal-600 text-white shadow-md'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Scan className="h-3.5 w-3.5 text-emerald-300" />
+              <span>Turnstile Gate Scanner Mode</span>
               <span className="text-[9px] bg-emerald-950/80 text-emerald-300 border border-emerald-500/30 px-1.5 py-0.5 rounded font-mono">
                 Staff
               </span>
+            </button>
+          </div>
+
+          <div className="flex items-center gap-2 text-xs text-zinc-400 px-2">
+            {effectiveViewMode === 'GATE_SCANNER' ? (
+              <div className="flex items-center gap-2">
+                <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                <span className="font-mono text-zinc-300">Station #02: Turnstile Scanner Ready</span>
+              </div>
+            ) : (
+              <span>Showing mobile admission vouchers & seat directions</span>
             )}
-          </button>
+          </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-2 text-xs text-zinc-400 px-2">
-          {viewMode === 'GATE_SCANNER' ? (
-            <div className="flex items-center gap-2">
-              <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
-              <span className="font-mono text-zinc-300">Station #02: Turnstile Scanner Ready</span>
-            </div>
-          ) : (
-            <span>Showing mobile admission vouchers & seat directions</span>
-          )}
-        </div>
-      </div>
-
-      {viewMode === 'GATE_SCANNER' ? (
+      {effectiveViewMode === 'GATE_SCANNER' ? (
         <div className="space-y-6 animate-fade-in">
           {/* Top Console Telemetry Card */}
           <div className="rounded-3xl border border-zinc-800 bg-gradient-to-br from-[#181818] via-[#121212] to-[#0d0d0d] p-6 shadow-2xl space-y-5">

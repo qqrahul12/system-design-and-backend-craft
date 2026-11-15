@@ -43,6 +43,17 @@ async function run() {
   await client.query('DELETE FROM concession_orders');
   await client.query('DELETE FROM tickets');
 
+  // Standardize Circuit Auditoriums
+  console.log('Aligning all movies with official circuit auditoriums...');
+  await client.query(`
+    UPDATE movies SET auditorium = 'Auditorium 1 — Grand GT Laser' WHERE auditorium LIKE '%Auditorium 1%' OR auditorium LIKE '%IMAX 70mm%' OR auditorium IS NULL;
+    UPDATE movies SET auditorium = 'Auditorium 2 — Laser Studio' WHERE auditorium LIKE '%Screen 2%' OR auditorium LIKE '%Standard 70mm%';
+    UPDATE movies SET auditorium = 'Auditorium 3 — Pavilion Dolby' WHERE auditorium LIKE '%Auditorium 3%' OR auditorium LIKE '%Dolby%';
+    UPDATE movies SET auditorium = 'Auditorium 4 — Intimate Studio' WHERE auditorium LIKE '%Studio 4%' OR auditorium LIKE '%Standard Digital%';
+    UPDATE movies SET auditorium = 'Auditorium 5 — ScreenX 270°' WHERE auditorium LIKE '%ScreenX%' OR auditorium LIKE '%Auditorium 5%';
+    UPDATE movies SET auditorium = 'Auditorium 6 — 3D Laser Dome' WHERE auditorium LIKE '%3D Laser%' OR auditorium LIKE '%Auditorium 6%';
+  `);
+
   // 2. Curate Digital Passes (8 clean, authentic production passes)
   console.log('2. Seeding clean production movie tickets...');
   const tickets = [
@@ -51,7 +62,7 @@ async function run() {
       movie: 'Dune: Part Two',
       show: '7:30 PM',
       fmt: 'IMAX 70mm',
-      aud: 'IMAX 70mm Auditorium 1',
+      aud: 'Auditorium 1 — Grand GT Laser',
       seats: 'C3,C4',
       paid: 54.0,
       status: 'ISSUED'
@@ -61,7 +72,7 @@ async function run() {
       movie: 'Oppenheimer',
       show: '6:15 PM',
       fmt: 'Standard 70mm',
-      aud: '70mm Large Format Screen 2',
+      aud: 'Auditorium 2 — Laser Studio',
       seats: 'B1,B2',
       paid: 48.0,
       status: 'CHECKED_IN'
@@ -71,7 +82,7 @@ async function run() {
       movie: 'Interstellar',
       show: '8:45 PM',
       fmt: 'IMAX 70mm',
-      aud: 'IMAX 70mm Auditorium 1',
+      aud: 'Auditorium 1 — Grand GT Laser',
       seats: 'C1,C2',
       paid: 50.0,
       status: 'CHECKED_IN'
@@ -81,7 +92,7 @@ async function run() {
       movie: 'Spider-Man: Across the Spider-Verse',
       show: '6:00 PM',
       fmt: 'Dolby Cinema',
-      aud: 'Dolby Cinema Auditorium 3',
+      aud: 'Auditorium 3 — Pavilion Dolby',
       seats: 'C2,C3',
       paid: 42.0,
       status: 'ISSUED'
@@ -91,7 +102,7 @@ async function run() {
       movie: 'Past Lives',
       show: '7:15 PM',
       fmt: 'Standard Digital',
-      aud: 'Indie Studio 4',
+      aud: 'Auditorium 4 — Intimate Studio',
       seats: 'B3,B4',
       paid: 32.0,
       status: 'CHECKED_IN'
@@ -101,7 +112,7 @@ async function run() {
       movie: 'Avatar: Fire and Ash',
       show: '5:15 PM',
       fmt: 'IMAX 3D Laser',
-      aud: 'IMAX 3D Laser Auditorium 1',
+      aud: 'Auditorium 6 — 3D Laser Dome',
       seats: 'C1,C2',
       paid: 58.0,
       status: 'ISSUED'
@@ -111,7 +122,7 @@ async function run() {
       movie: 'The Dark Knight',
       show: '7:00 PM',
       fmt: 'IMAX 70mm',
-      aud: 'IMAX 70mm Auditorium 1',
+      aud: 'Auditorium 1 — Grand GT Laser',
       seats: 'D1,D2',
       paid: 46.0,
       status: 'CHECKED_IN'
@@ -121,7 +132,7 @@ async function run() {
       movie: 'Blade Runner 2049',
       show: '11:00 AM',
       fmt: 'Dolby Cinema',
-      aud: 'Dolby Cinema Auditorium 3',
+      aud: 'Auditorium 3 — Pavilion Dolby',
       seats: 'E1,E2',
       paid: 30.0,
       status: 'EXPIRED'

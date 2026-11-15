@@ -282,7 +282,7 @@ export default function AdminPage() {
   const [newReleaseDate, setNewReleaseDate] = useState('2026-05-22')
   const [newDuration, setNewDuration] = useState('2h 20m')
   const [newPrice, setNewPrice] = useState(17.5)
-  const [newAuditorium, setNewAuditorium] = useState('IMAX 70mm Auditorium 1')
+  const [newAuditorium, setNewAuditorium] = useState('Auditorium 1 — Grand GT Laser')
   const [newShowtimes, setNewShowtimes] = useState('1:00 PM, 4:30 PM, 8:00 PM')
   const [newSynopsis, setNewSynopsis] = useState('')
   const [newPosterUrl, setNewPosterUrl] = useState('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop')
@@ -461,7 +461,7 @@ export default function AdminPage() {
         setNewDuration(drafted.duration || '2h 15m')
         setNewPrice(drafted.price || 16.5)
         setNewSynopsis(drafted.synopsis || '')
-        setNewAuditorium(drafted.auditorium || 'IMAX 70mm Auditorium 1')
+        setNewAuditorium(drafted.auditorium || 'Auditorium 1 — Grand GT Laser')
         setNewShowtimes(drafted.showtimes || '1:00 PM, 4:30 PM, 8:00 PM')
         if (drafted.trailerUrl) setNewTrailerUrl(drafted.trailerUrl)
         if (drafted.director) setNewDirector(drafted.director)
@@ -582,7 +582,7 @@ export default function AdminPage() {
     setNewDuration('2h 20m')
     setNewPrice(17.5)
     setNewSynopsis('')
-    setNewAuditorium('IMAX 70mm Auditorium 1')
+    setNewAuditorium('Auditorium 1 — Grand GT Laser')
     setNewShowtimes('1:00 PM, 4:30 PM, 8:00 PM')
     setNewTrailerUrl('https://www.youtube.com/watch?v=zSWdZVtXT7E')
     setNewDirector('Denis Villeneuve')
@@ -1049,7 +1049,7 @@ export default function AdminPage() {
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
             {[
               { id: 'screen-1', name: 'Screen 1', format: 'IMAX 70mm Auditorium', keyword: 'Auditorium 1' },
-              { id: 'screen-2', name: 'Screen 2', format: '70mm Large Format', keyword: 'Screen 2' },
+              { id: 'screen-2', name: 'Screen 2', format: '70mm Large Format', keyword: 'Auditorium 2' },
               { id: 'screen-3', name: 'Screen 3', format: 'Dolby Cinema Atmos', keyword: 'Auditorium 3' },
             ].map((scr, idx) => {
               const matchingMovies = movies.filter(

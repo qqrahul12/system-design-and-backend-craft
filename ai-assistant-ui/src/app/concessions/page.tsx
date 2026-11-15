@@ -700,69 +700,82 @@ function ConcessionsContent() {
     }
   }
 
+  const isUsher = currentUser?.role === 'AUDITORIUM_USHER'
+  const isManager = currentUser?.role === 'CINEMA_MANAGER' || currentUser?.role === 'EXECUTIVE_ADMIN'
+  const isStaff = isUsher || isManager
+  const effectiveViewMode = isManager
+    ? concessionsViewMode
+    : isUsher
+    ? (concessionsViewMode === 'POS_COUNTER' ? 'USHER_DISPATCH' : concessionsViewMode)
+    : 'PATRON'
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">
       {/* Toast Notification */}
       {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-      {/* Role / Mode Switcher Pill */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-2xl">
-        <div className="flex items-center gap-2">
-          <div className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
-          <span className="text-xs font-semibold text-zinc-300">
-            {concessionsViewMode === 'USHER_DISPATCH'
-              ? 'Auditorium Usher Delivery Run Sheet'
-              : concessionsViewMode === 'POS_COUNTER'
-              ? 'Cinema Manager Counter POS Terminal'
-              : 'Patron Self-Service F&B Studio'}
-          </span>
-          {currentUser && (
-            <span className="text-[10px] font-mono text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
-              Role: {currentUser.roleDisplayName || currentUser.role}
+      {/* Role / Mode Switcher Pill (Strictly for Staff: Managers & Ushers) */}
+      {isStaff && (
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-zinc-900/60 border border-zinc-800/80 p-2.5 rounded-2xl">
+          <div className="flex items-center gap-2">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-ping" />
+            <span className="text-xs font-semibold text-zinc-300">
+              {effectiveViewMode === 'USHER_DISPATCH'
+                ? 'Auditorium Usher Delivery Run Sheet'
+                : effectiveViewMode === 'POS_COUNTER'
+                ? 'Cinema Manager Counter POS Terminal'
+                : 'Patron Self-Service F&B Studio'}
             </span>
-          )}
+            {currentUser && (
+              <span className="text-[10px] font-mono text-zinc-500 bg-zinc-800 px-2 py-0.5 rounded border border-zinc-700">
+                Staff: {currentUser.roleDisplayName || currentUser.role}
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
+            <button
+              onClick={() => setConcessionsViewMode('PATRON')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                effectiveViewMode === 'PATRON'
+                  ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 font-bold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <UtensilsCrossed className="h-3.5 w-3.5" />
+              <span>Patron View</span>
+            </button>
+
+            {isManager && (
+              <button
+                onClick={() => setConcessionsViewMode('POS_COUNTER')}
+                className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                  effectiveViewMode === 'POS_COUNTER'
+                    ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 font-bold'
+                    : 'text-zinc-400 hover:text-white'
+                }`}
+              >
+                <Store className="h-3.5 w-3.5" />
+                <span>Counter POS (Manager)</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setConcessionsViewMode('USHER_DISPATCH')}
+              className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                effectiveViewMode === 'USHER_DISPATCH'
+                  ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-bold'
+                  : 'text-zinc-400 hover:text-white'
+              }`}
+            >
+              <Truck className="h-3.5 w-3.5" />
+              <span>Delivery Checklist (Usher)</span>
+            </button>
+          </div>
         </div>
+      )}
 
-        <div className="flex items-center gap-1.5 bg-zinc-950 p-1 rounded-xl border border-zinc-800">
-          <button
-            onClick={() => setConcessionsViewMode('PATRON')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
-              concessionsViewMode === 'PATRON'
-                ? 'bg-amber-500 text-black shadow-md shadow-amber-500/20 font-bold'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <UtensilsCrossed className="h-3.5 w-3.5" />
-            <span>Patron View</span>
-          </button>
-
-          <button
-            onClick={() => setConcessionsViewMode('POS_COUNTER')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
-              concessionsViewMode === 'POS_COUNTER'
-                ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30 font-bold'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Store className="h-3.5 w-3.5" />
-            <span>Counter POS (Manager)</span>
-          </button>
-
-          <button
-            onClick={() => setConcessionsViewMode('USHER_DISPATCH')}
-            className={`flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold transition ${
-              concessionsViewMode === 'USHER_DISPATCH'
-                ? 'bg-emerald-600 text-white shadow-md shadow-emerald-600/30 font-bold'
-                : 'text-zinc-400 hover:text-white'
-            }`}
-          >
-            <Truck className="h-3.5 w-3.5" />
-            <span>Delivery Checklist (Usher)</span>
-          </button>
-        </div>
-      </div>
-
-      {concessionsViewMode === 'USHER_DISPATCH' ? (
+      {effectiveViewMode === 'USHER_DISPATCH' ? (
         <div className="space-y-6 animate-fade-in">
           {/* Usher Delivery Header */}
           <div className="rounded-2xl border border-amber-500/40 bg-gradient-to-r from-amber-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
@@ -794,28 +807,44 @@ function ConcessionsContent() {
             </div>
           </div>
 
-          {/* Auditorium Filter Tabs */}
-          <div className="flex items-center gap-2 overflow-x-auto pb-1">
-            {[
+          {/* Auditorium Filter Tabs (Dynamically derived from live database orders) */}
+          {(() => {
+            const audSet = new Set<string>()
+            allOrders.forEach((o) => {
+              const seat = o.deliverySeat || ''
+              if (seat.toLowerCase().includes('counter')) {
+                audSet.add('Counter')
+              } else if (seat.includes('—')) {
+                audSet.add(seat.split('—')[0].trim())
+              } else if (seat.includes(',')) {
+                audSet.add(seat.split(',')[0].trim())
+              }
+            })
+            const filterTabs = [
               { id: 'ALL', label: 'All Auditoriums' },
-              { id: 'Auditorium 1', label: 'Auditorium 1 — IMAX GT' },
-              { id: 'Auditorium 2', label: 'Auditorium 2 — Dolby Prime' },
-              { id: 'Auditorium 3', label: 'Auditorium 3 — Laser Studio' },
-              { id: 'Counter', label: 'VIP Counter Pickups' },
-            ].map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setUsherAuditoriumFilter(tab.id)}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 ${
-                  usherAuditoriumFilter === tab.id
-                    ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
-                    : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
-                }`}
-              >
-                {tab.label}
-              </button>
-            ))}
-          </div>
+              ...Array.from(audSet).map((aud) => ({
+                id: aud,
+                label: aud === 'Counter' ? 'VIP Counter Pickups' : aud,
+              })),
+            ]
+            return (
+              <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                {filterTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setUsherAuditoriumFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl text-xs font-semibold transition shrink-0 ${
+                      usherAuditoriumFilter === tab.id
+                        ? 'bg-amber-500 text-black font-bold shadow-md shadow-amber-500/20'
+                        : 'bg-zinc-900 text-zinc-400 hover:text-white border border-zinc-800'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+            )
+          })()}
 
           {/* Delivery Run Sheet Cards */}
           {allOrders.length === 0 ? (
@@ -933,7 +962,7 @@ function ConcessionsContent() {
             </div>
           )}
         </div>
-      ) : concessionsViewMode === 'POS_COUNTER' ? (
+      ) : effectiveViewMode === 'POS_COUNTER' ? (
         <div className="space-y-6">
           {/* POS Terminal Status Bar */}
           <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-r from-purple-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl">
@@ -1181,15 +1210,7 @@ function ConcessionsContent() {
                               type="button"
                               onClick={() => {
                                 setPosCustomerName(p.fullName)
-                                setDeliverySeat(
-                                  p.fullName.includes('Elena')
-                                    ? 'Auditorium 1 — IMAX GT, Seat C3'
-                                    : p.fullName.includes('Marcus')
-                                    ? 'Auditorium 1 — IMAX GT, Seat D4'
-                                    : p.fullName.includes('Alex')
-                                    ? 'Auditorium 2 — Dolby Prime, Seat B2'
-                                    : 'Auditorium 1, Seat A1'
-                                )
+                                setDeliverySeat(p.defaultSeat || `Auditorium 1 — Grand GT Laser, Seat C${(personas.indexOf(p) % 6) + 1}`)
                               }}
                               className={`text-[10px] px-2 py-0.5 rounded border transition ${
                                 isMatch
