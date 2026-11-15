@@ -4,32 +4,191 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 
+import java.sql.ResultSet;
+import java.sql.SQLException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.stream.Collectors;
 
 /**
- * Thread-safe in-memory implementation of MovieCatalogService managing CineMind's live movie catalog.
+ * Relational PostgreSQL-backed implementation of MovieCatalogService managing CineMind's live theatrical catalog,
+ * critic intelligence, real-time showtimes, and automated blockbuster ingestion.
  */
 @Slf4j
 @Service
 public class MovieCatalogServiceImpl implements MovieCatalogService {
 
+    private final JdbcTemplate jdbcTemplate;
     private final Map<Long, Movie> movieStore = new ConcurrentHashMap<>();
     private final AtomicLong idSequence = new AtomicLong(100);
     private final ChatClient geminiChatClient;
     private final ChatClient groqChatClient;
 
     public MovieCatalogServiceImpl(
+            @Autowired(required = false) JdbcTemplate jdbcTemplate,
             @Autowired(required = false) @Qualifier("geminiChatClient") ChatClient geminiChatClient,
             @Autowired(required = false) @Qualifier("groqChatClient") ChatClient groqChatClient
     ) {
+        this.jdbcTemplate = jdbcTemplate;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
+        initDatabase();
+    }
+
+    private void initDatabase() {
+        if (jdbcTemplate != null) {
+            try {
+                jdbcTemplate.execute("""
+                    CREATE TABLE IF NOT EXISTS movies (
+                        id BIGINT PRIMARY KEY,
+                        title VARCHAR(255) NOT NULL,
+                        genre VARCHAR(100),
+                        rating DOUBLE PRECISION,
+                        year INT,
+                        release_date VARCHAR(64),
+                        duration VARCHAR(64),
+                        price DOUBLE PRECISION,
+                        ai_pick BOOLEAN,
+                        synopsis TEXT,
+                        suggested_seats_csv VARCHAR(255),
+                        poster_url TEXT,
+                        auditorium VARCHAR(255),
+                        status VARCHAR(64),
+                        occupancy_rate INT,
+                        showtimes VARCHAR(255),
+                        rotten_tomatoes INT,
+                        metacritic INT,
+                        imdb_rating DOUBLE PRECISION,
+                        critic_consensus TEXT,
+                        top_critic_quote TEXT,
+                        reviews_count INT,
+                        trailer_url TEXT,
+                        director VARCHAR(255),
+                        cast_members TEXT,
+                        age_rating VARCHAR(64)
+                    )
+                """);
+
+                Integer count = jdbcTemplate.queryForObject("SELECT COUNT(*) FROM movies", Integer.class);
+                if (count != null && count > 0) {
+                    log.info("🎬 Found {} persisted movies in PostgreSQL. Loading directly from database (zero hardcoded seeding needed)...", count);
+                    loadMoviesFromDatabase();
+                    return;
+                }
+                log.info("🎬 PostgreSQL 'movies' table is empty. Ingesting initial theatrical releases into database...");
+            } catch (Exception e) {
+                log.warn("⚠️ PostgreSQL movie table init error, falling back to local store: {}", e.getMessage());
+            }
+        }
         seedInitialCatalog();
+    }
+
+    private void loadMoviesFromDatabase() {
+        if (jdbcTemplate == null) return;
+        try {
+            List<Movie> movies = jdbcTemplate.query("SELECT * FROM movies ORDER BY id ASC", this::mapRow);
+            long maxId = 100;
+            for (Movie m : movies) {
+                movieStore.put(m.getId(), m);
+                if (m.getId() != null && m.getId() > maxId) {
+                    maxId = m.getId();
+                }
+            }
+            idSequence.set(maxId);
+            log.info("🎬 Successfully loaded {} movies from PostgreSQL into active catalog cache. Max ID: {}", movies.size(), maxId);
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to load movies from PostgreSQL: {}", e.getMessage());
+        }
+    }
+
+    private Movie mapRow(ResultSet rs, int rowNum) throws SQLException {
+        String seatsCsv = rs.getString("suggested_seats_csv");
+        List<String> seats = (seatsCsv != null && !seatsCsv.isBlank())
+                ? Arrays.stream(seatsCsv.split(",")).map(String::trim).toList()
+                : List.of("C3", "C4");
+
+        return Movie.builder()
+                .id(rs.getLong("id"))
+                .title(rs.getString("title"))
+                .genre(rs.getString("genre"))
+                .rating(rs.getDouble("rating"))
+                .year(rs.getInt("year"))
+                .releaseDate(rs.getString("release_date"))
+                .duration(rs.getString("duration"))
+                .price(rs.getDouble("price"))
+                .aiPick(rs.getBoolean("ai_pick"))
+                .synopsis(rs.getString("synopsis"))
+                .suggestedSeats(seats)
+                .posterUrl(rs.getString("poster_url"))
+                .auditorium(rs.getString("auditorium"))
+                .status(rs.getString("status"))
+                .occupancyRate(rs.getInt("occupancy_rate"))
+                .showtimes(rs.getString("showtimes"))
+                .rottenTomatoes(rs.getInt("rotten_tomatoes"))
+                .metacritic(rs.getInt("metacritic"))
+                .imdbRating(rs.getDouble("imdb_rating"))
+                .criticConsensus(rs.getString("critic_consensus"))
+                .topCriticQuote(rs.getString("top_critic_quote"))
+                .reviewsCount(rs.getInt("reviews_count"))
+                .trailerUrl(rs.getString("trailer_url"))
+                .director(rs.getString("director"))
+                .cast(rs.getString("cast_members"))
+                .ageRating(rs.getString("age_rating"))
+                .build();
+    }
+
+    private void saveMovieToDatabase(Movie m) {
+        if (jdbcTemplate == null) return;
+        try {
+            String seatsCsv = m.getSuggestedSeats() != null ? String.join(", ", m.getSuggestedSeats()) : "C3, C4";
+            jdbcTemplate.update("""
+                INSERT INTO movies (
+                    id, title, genre, rating, year, release_date, duration, price, ai_pick,
+                    synopsis, suggested_seats_csv, poster_url, auditorium, status, occupancy_rate,
+                    showtimes, rotten_tomatoes, metacritic, imdb_rating, critic_consensus,
+                    top_critic_quote, reviews_count, trailer_url, director, cast_members, age_rating
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT (id) DO UPDATE SET
+                    title = EXCLUDED.title,
+                    genre = EXCLUDED.genre,
+                    rating = EXCLUDED.rating,
+                    year = EXCLUDED.year,
+                    release_date = EXCLUDED.release_date,
+                    duration = EXCLUDED.duration,
+                    price = EXCLUDED.price,
+                    ai_pick = EXCLUDED.ai_pick,
+                    synopsis = EXCLUDED.synopsis,
+                    suggested_seats_csv = EXCLUDED.suggested_seats_csv,
+                    poster_url = EXCLUDED.poster_url,
+                    auditorium = EXCLUDED.auditorium,
+                    status = EXCLUDED.status,
+                    occupancy_rate = EXCLUDED.occupancy_rate,
+                    showtimes = EXCLUDED.showtimes,
+                    rotten_tomatoes = EXCLUDED.rotten_tomatoes,
+                    metacritic = EXCLUDED.metacritic,
+                    imdb_rating = EXCLUDED.imdb_rating,
+                    critic_consensus = EXCLUDED.critic_consensus,
+                    top_critic_quote = EXCLUDED.top_critic_quote,
+                    reviews_count = EXCLUDED.reviews_count,
+                    trailer_url = EXCLUDED.trailer_url,
+                    director = EXCLUDED.director,
+                    cast_members = EXCLUDED.cast_members,
+                    age_rating = EXCLUDED.age_rating
+            """,
+                m.getId(), m.getTitle(), m.getGenre(), m.getRating(), m.getYear(), m.getReleaseDate(),
+                m.getDuration(), m.getPrice(), m.getAiPick(), m.getSynopsis(), seatsCsv,
+                m.getPosterUrl(), m.getAuditorium(), m.getStatus(), m.getOccupancyRate(),
+                m.getShowtimes(), m.getRottenTomatoes(), m.getMetacritic(), m.getImdbRating(),
+                m.getCriticConsensus(), m.getTopCriticQuote(), m.getReviewsCount(),
+                m.getTrailerUrl(), m.getDirector(), m.getCast(), m.getAgeRating()
+            );
+        } catch (Exception e) {
+            log.warn("⚠️ Failed to persist movie {} '{}' to PostgreSQL: {}", m.getId(), m.getTitle(), e.getMessage());
+        }
     }
 
     private void seedInitialCatalog() {
@@ -166,6 +325,7 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
                 .cast(cast)
                 .ageRating(ageRating)
                 .build();
+        saveMovieToDatabase(movie);
         movieStore.put(id, movie);
     }
 
@@ -245,8 +405,9 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         if (movie.getAgeRating() == null || movie.getAgeRating().isBlank()) {
             movie.setAgeRating("PG-13");
         }
+        saveMovieToDatabase(movie);
         movieStore.put(movie.getId(), movie);
-        log.info("🎬 Created movie: id={}, title='{}', trailer='{}'", movie.getId(), movie.getTitle(), movie.getTrailerUrl());
+        log.info("🎬 Created & persisted movie: id={}, title='{}', trailer='{}'", movie.getId(), movie.getTitle(), movie.getTrailerUrl());
         return movie;
     }
 
@@ -256,16 +417,24 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
             return Optional.empty();
         }
         updated.setId(id);
+        saveMovieToDatabase(updated);
         movieStore.put(id, updated);
-        log.info("✏️ Updated movie: id={}, title='{}'", id, updated.getTitle());
+        log.info("✏️ Updated & persisted movie: id={}, title='{}'", id, updated.getTitle());
         return Optional.of(updated);
     }
 
     @Override
     public boolean deleteMovie(Long id) {
         Movie removed = movieStore.remove(id);
+        if (jdbcTemplate != null) {
+            try {
+                jdbcTemplate.update("DELETE FROM movies WHERE id = ?", id);
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to delete movie {} from PostgreSQL: {}", id, e.getMessage());
+            }
+        }
         if (removed != null) {
-            log.info("🗑️ Deleted movie: id={}, title='{}'", id, removed.getTitle());
+            log.info("🗑️ Deleted movie from DB and cache: id={}, title='{}'", id, removed.getTitle());
             return true;
         }
         return false;
