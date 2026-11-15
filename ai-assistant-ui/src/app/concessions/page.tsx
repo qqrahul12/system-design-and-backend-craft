@@ -491,20 +491,30 @@ function ConcessionsContent() {
     showNotice(`Added ${combo.name} combo to order!`)
   }
 
-  const handleAdvanceStatus = async (targetStatus: string) => {
-    if (!activeOrder || isAdvancingStatus) return
+  const handleAdvanceStatus = async (targetStatus: string, specificOrderId?: string) => {
+    const targetId = specificOrderId || activeOrder?.orderId
+    if (!targetId || isAdvancingStatus) return
     setIsAdvancingStatus(true)
     try {
-      const updated = await concessionsService.updateOrderStatus(activeOrder.orderId, targetStatus)
-      const st = updated.status === 'DELIVERED' ? 'DELIVERED' : updated.status === 'PLATED' ? 'READY' : 'PREPARING'
-      setActiveOrder((prev) => prev ? {
-        ...prev,
-        status: st,
-        estimatedMinutes: updated.estimatedMinutes,
-      } : null)
+      const updated = await concessionsService.updateOrderStatus(targetId, targetStatus)
+      const st = updated.status === 'DELIVERED' ? 'DELIVERED' : (updated.status === 'PLATED' || updated.status === 'READY') ? 'READY' : 'PREPARING'
+      if (activeOrder && activeOrder.orderId === targetId) {
+        setActiveOrder((prev) => prev ? {
+          ...prev,
+          status: st,
+          estimatedMinutes: updated.estimatedMinutes,
+        } : null)
+      }
+      setAllOrders((prev) =>
+        prev.map((o) =>
+          o.orderId === targetId
+            ? { ...o, status: updated.status, estimatedMinutes: updated.estimatedMinutes }
+            : o
+        )
+      )
       if (st === 'READY') playKitchenChime('plated')
       if (st === 'DELIVERED') playKitchenChime('delivered')
-      showNotice(`Kitchen status updated: ${updated.status}`)
+      showNotice(`Order #${targetId} status updated: ${updated.status}`)
     } catch (e) {
       console.warn('Failed to advance order status:', e)
     } finally {
@@ -900,7 +910,7 @@ function ConcessionsContent() {
 
                       {!isDelivered ? (
                         <button
-                          onClick={() => handleAdvanceStatus(isReady ? 'DELIVERED' : 'PLATED')}
+                          onClick={() => handleAdvanceStatus(isReady ? 'DELIVERED' : 'PLATED', ord.orderId)}
                           disabled={isAdvancingStatus}
                           className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition active:scale-95 ${
                             isReady
@@ -1003,7 +1013,7 @@ function ConcessionsContent() {
                     </div>
                     {ord.status === 'PREPARING' && (
                       <button
-                        onClick={() => handleAdvanceStatus('PLATED')}
+                        onClick={() => handleAdvanceStatus('PLATED', ord.orderId)}
                         disabled={isAdvancingStatus}
                         className="w-full py-1 rounded bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 font-semibold text-[10px] border border-amber-500/40 transition"
                       >
@@ -1012,7 +1022,7 @@ function ConcessionsContent() {
                     )}
                     {(ord.status === 'READY' || ord.status === 'PLATED') && (
                       <button
-                        onClick={() => handleAdvanceStatus('DELIVERED')}
+                        onClick={() => handleAdvanceStatus('DELIVERED', ord.orderId)}
                         disabled={isAdvancingStatus}
                         className="w-full py-1 rounded bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 font-semibold text-[10px] border border-emerald-500/40 transition"
                       >
@@ -1495,7 +1505,7 @@ function ConcessionsContent() {
                  (currentUser.permissions && (currentUser.permissions.includes('DISPATCH_FNB_ORDER') || currentUser.permissions.includes('MANAGE_FNB_MENU'))))
               ) && activeOrder.status === 'PREPARING' && (
                 <button
-                  onClick={() => handleAdvanceStatus('PLATED')}
+                  onClick={() => handleAdvanceStatus('PLATED', activeOrder.orderId)}
                   disabled={isAdvancingStatus}
                   className="flex items-center gap-1 rounded-xl bg-amber-500/20 border border-amber-500/40 px-2.5 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-500/30 transition"
                   title="Simulate kitchen chef finishing prep"
@@ -1512,7 +1522,7 @@ function ConcessionsContent() {
                  (currentUser.permissions && (currentUser.permissions.includes('DISPATCH_FNB_ORDER') || currentUser.permissions.includes('MANAGE_FNB_MENU'))))
               ) && activeOrder.status === 'READY' && (
                 <button
-                  onClick={() => handleAdvanceStatus('DELIVERED')}
+                  onClick={() => handleAdvanceStatus('DELIVERED', activeOrder.orderId)}
                   disabled={isAdvancingStatus}
                   className="flex items-center gap-1 rounded-xl bg-emerald-500/20 border border-emerald-500/40 px-2.5 py-1 text-xs font-semibold text-emerald-300 hover:bg-emerald-500/30 transition"
                   title="Simulate in-seat usher delivery"
