@@ -56,7 +56,19 @@ Before executing any git commit or push to remote repositories, you MUST run the
   - `TicketController` (`/api/v1/tickets/validate`): Guarded with `requirePermission("SCAN_GATE_PASS")`.
   - `WalletController` (`/topup`, `/pay`): Guarded with `requireAuthenticated()`.
 
-### 6. Automated Quality Gates
+### 6. Concurrency, Dual-Write & Transactional Integrity
+- **Single Source of Truth (SSOT)**:
+  - When persistent storage (PostgreSQL, Redis) is enabled, it is the sole authoritative Single Source of Truth.
+  - Queries (`getAll*`, `getById*`) must query the database directly.
+- **Zero Dual-Write Anti-Pattern**:
+  - Never dual-write to both a database (`JdbcTemplate` / JPA) and an ad-hoc local heap collection (`ConcurrentHashMap`, `ArrayList`).
+  - Dual-writing causes atomicity failures, thread race conditions (diverging DB vs memory states under concurrent writes), and distributed cache incoherence across multi-instance cloud containers.
+- **Spring `@Transactional` Enforcement**:
+  - All mutating business operations (`create*`, `update*`, `delete*`, and bulk ingestion pipelines) must be explicitly demarcated with `@Transactional`.
+- **Distributed Caching Standard**:
+  - If caching is required for performance, use Redis with explicit TTLs and cache invalidation policies (`@Cacheable`, `@CacheEvict`), never uncoordinated local JVM memory.
+
+### 7. Automated Quality Gates
 All code changes must pass:
 1. `cd ai-assistant-service && mvn test-compile` (0 errors)
 2. `cd ai-assistant-ui && ./node_modules/.bin/tsc --noEmit` (0 errors)

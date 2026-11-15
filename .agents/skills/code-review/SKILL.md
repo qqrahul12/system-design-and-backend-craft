@@ -4,8 +4,9 @@ description: >-
   Systematic pre-push code review and verification skill for CineMind. Enforces strict
   SOLID principles (Single Responsibility, Liskov Substitution, Interface Segregation,
   Dependency Inversion), feature-wise design pattern application, zero-secret git hygiene,
-  full-stack RBAC route and operation security, synchronized master/main branch pushes,
-  backend Java compilation, frontend TypeScript type-safety, and automated 57-test regression suite.
+  full-stack RBAC route and operation security, concurrency and transactional integrity
+  (zero dual-write hazards, Single Source of Truth architecture), synchronized master/main
+  branch pushes, backend Java compilation, frontend TypeScript type-safety, and automated 57-test regression suite.
   Always run this skill before pushing code.
 ---
 
@@ -15,7 +16,7 @@ This skill defines the mandatory pre-push architectural audit, feature-wise desi
 
 ## Pre-Push Verification Checklist
 
-Before staging or pushing code to remote branches, the agent must systematically execute the following 6 review gates:
+Before staging or pushing code to remote branches, the agent must systematically execute the following 7 review gates:
 
 ---
 
@@ -103,7 +104,29 @@ Controllers must **never** rely solely on frontend tab hiding. Every protected e
 
 ---
 
-### Gate 5: Automated Verification Pipeline
+### Gate 5: Concurrency, Dual-Write & Transactional Integrity
+
+Multi-tier distributed backends must safeguard state consistency across concurrent threads, distributed transactions, and multiple container instances:
+
+#### 1. Prohibition of Dual-Writes
+- **Anti-Pattern**: Writing concurrently to a relational database (`JdbcTemplate` / JPA) AND an in-memory JVM heap collection (`ConcurrentHashMap`, `ArrayList`) in the same mutating method (e.g. `saveToDatabase(entity); memoryMap.put(id, entity);`).
+- **Hazard Analysis**:
+  - *Atomicity Failure*: If the database write succeeds but the memory update or JVM fails (or vice versa), the storage layers permanently diverge.
+  - *Race Condition*: Under concurrent requests, two threads updating the same record can interleave their database and memory writes out of order, leaving stale data in memory.
+  - *Distributed Desynchronization*: In cloud/clustered deployments (Render, Kubernetes), local heap updates only affect the single container that served the request; all other peer containers serve stale data.
+- **Rule**: When a persistent store (PostgreSQL) is active, it must be the **Single Source of Truth (SSOT)**. Domain services must query and persist directly to the database. Local heap structures may only serve as non-production fallback when no database connection is present.
+
+#### 2. Declarative Transaction Boundaries (`@Transactional`)
+- All mutating service operations (`create*`, `update*`, `delete*`, and batch ingestion pipelines) must be explicitly annotated with Spring's `@Transactional`.
+- Rollback semantics ensure that if any statement in a checkout, wallet debit, or catalog update fails, no partial or corrupt state is committed.
+
+#### 3. Distributed vs In-Process Caching
+- High-throughput caching must utilize centralized distributed caches (Redis via Spring `@Cacheable`, `@CacheEvict` with explicit TTLs), never uncoordinated local JVM maps.
+- Redis-backed distributed locks (`StringRedisTemplate` with expiration TTLs) must be used for cross-instance resource locking (e.g. seat locking during checkout).
+
+---
+
+### Gate 6: Automated Verification Pipeline
 
 Execute the automated verification script:
 ```bash
@@ -132,7 +155,7 @@ Or run the three steps individually:
 
 ---
 
-### Gate 6: Dual Branch Synchronization
+### Gate 7: Dual Branch Synchronization
 
 - **Mandatory Constraint**: Both `master` and `main` branches must remain in exact synchronization.
 - **Push Command**:
