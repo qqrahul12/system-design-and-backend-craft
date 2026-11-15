@@ -1,5 +1,7 @@
 package com.skills.ai.admin;
 
+import com.fasterxml.jackson.core.type.TypeReference;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.skills.ai.concessions.ConcessionOrder;
 import com.skills.ai.concessions.ConcessionsService;
 import com.skills.ai.mcp.McpToolRegistry;
@@ -7,13 +9,16 @@ import com.skills.ai.movie.Movie;
 import com.skills.ai.movie.MovieCatalogService;
 import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
+import com.skills.ai.util.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 
 import java.time.DayOfWeek;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneId;
 import java.util.*;
@@ -22,10 +27,16 @@ import java.util.stream.Collectors;
 /**
  * Service calculating live box-office analytics, real-world industry trends,
  * and AI-driven predictive operational recommendations based on real ticketing and concessions transactions.
+ * Features L2 Distributed Redis caching with explicit TTLs (5m dashboard, 10m briefing).
  */
 @Slf4j
 @Service
 public class AdminAnalyticsService {
+
+    private static final String REDIS_KEY_DASHBOARD = "cinemind:analytics:dashboard";
+    private static final String REDIS_KEY_BRIEFING = "cinemind:analytics:briefing";
+    private static final Duration DASHBOARD_CACHE_TTL = Duration.ofMinutes(5);
+    private static final Duration BRIEFING_CACHE_TTL = Duration.ofMinutes(10);
 
     private final MovieCatalogService movieCatalogService;
     private final TicketService ticketService;
@@ -33,6 +44,8 @@ public class AdminAnalyticsService {
     private final CinemaInsightsService cinemaInsightsService;
     private final ChatClient geminiChatClient;
     private final ChatClient groqChatClient;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     public AdminAnalyticsService(
             MovieCatalogService movieCatalogService,
@@ -40,7 +53,9 @@ public class AdminAnalyticsService {
             ConcessionsService concessionsService,
             CinemaInsightsService cinemaInsightsService,
             @Autowired(required = false) @Qualifier("geminiChatClient") ChatClient geminiChatClient,
-            @Autowired(required = false) @Qualifier("groqChatClient") ChatClient groqChatClient
+            @Autowired(required = false) @Qualifier("groqChatClient") ChatClient groqChatClient,
+            @Autowired(required = false) StringRedisTemplate redisTemplate,
+            @Autowired(required = false) ObjectMapper objectMapper
     ) {
         this.movieCatalogService = movieCatalogService;
         this.ticketService = ticketService;
@@ -48,9 +63,26 @@ public class AdminAnalyticsService {
         this.cinemaInsightsService = cinemaInsightsService;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
+        this.redisTemplate = redisTemplate;
+        this.objectMapper = (objectMapper != null) ? objectMapper : JsonUtils.getMapper();
     }
 
     public Map<String, Object> getDashboardAnalytics() {
+        if (redisTemplate != null) {
+            try {
+                String cached = redisTemplate.opsForValue().get(REDIS_KEY_DASHBOARD);
+                if (cached != null && !cached.isBlank()) {
+                    Map<String, Object> cachedData = objectMapper.readValue(cached, new TypeReference<Map<String, Object>>() {});
+                    if (cachedData != null && !cachedData.isEmpty()) {
+                        log.debug("⚡ [Redis Cache HIT] Retrieved dashboard analytics in <1ms");
+                        return cachedData;
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis dashboard analytics lookup skipped: {}", e.getMessage());
+            }
+        }
+
         // Internal Operational Metrics Sourced 100% from CineMind Database Stores
         List<Movie> movies = movieCatalogService.getAllMovies(null, null, null);
         List<DigitalTicket> tickets = ticketService.listTickets();
@@ -220,7 +252,7 @@ public class AdminAnalyticsService {
                 )
         );
 
-        return Map.of(
+        Map<String, Object> result = Map.of(
                 "kpis", kpis,
                 "dailyRevenue", dailyRevenue,
                 "genreTrends", genreTrends,
@@ -228,6 +260,20 @@ public class AdminAnalyticsService {
                 "aiRecommendations", aiRecommendations,
                 "generatedAt", new Date().toString()
         );
+
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set(
+                        REDIS_KEY_DASHBOARD,
+                        objectMapper.writeValueAsString(result),
+                        DASHBOARD_CACHE_TTL
+                );
+            } catch (Exception e) {
+                log.debug("Redis dashboard analytics caching skipped: {}", e.getMessage());
+            }
+        }
+
+        return result;
     }
 
     /**
@@ -298,6 +344,21 @@ public class AdminAnalyticsService {
      * Returns structured briefing intelligence with live computed metrics for high-fidelity executive card rendering.
      */
     public Map<String, Object> getStructuredExecutiveBriefing() {
+        if (redisTemplate != null) {
+            try {
+                String cached = redisTemplate.opsForValue().get(REDIS_KEY_BRIEFING);
+                if (cached != null && !cached.isBlank()) {
+                    Map<String, Object> cachedData = objectMapper.readValue(cached, new TypeReference<Map<String, Object>>() {});
+                    if (cachedData != null && !cachedData.isEmpty()) {
+                        log.debug("⚡ [Redis Cache HIT] Retrieved executive briefing in <1ms");
+                        return cachedData;
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis executive briefing lookup skipped: {}", e.getMessage());
+            }
+        }
+
         String raw = generateExecutiveBriefing();
         Map<String, Object> dashboard = getDashboardAnalytics();
         @SuppressWarnings("unchecked")
@@ -353,7 +414,7 @@ public class AdminAnalyticsService {
                 attach
         );
 
-        return Map.of(
+        Map<String, Object> briefingResult = Map.of(
                 "title", "CineMind Executive Operations Briefing",
                 "briefing", raw,
                 "highlights", highlights,
@@ -362,5 +423,28 @@ public class AdminAnalyticsService {
                 "circuitStatus", "OPTIMAL",
                 "aiConfidence", "98.4%"
         );
+
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.opsForValue().set(
+                        REDIS_KEY_BRIEFING,
+                        objectMapper.writeValueAsString(briefingResult),
+                        BRIEFING_CACHE_TTL
+                );
+            } catch (Exception e) {
+                log.debug("Redis executive briefing caching skipped: {}", e.getMessage());
+            }
+        }
+
+        return briefingResult;
+    }
+
+    public void invalidateAnalyticsCache() {
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.delete(List.of(REDIS_KEY_DASHBOARD, REDIS_KEY_BRIEFING));
+                log.debug("🧹 Flushed executive analytics and briefing caches from Redis");
+            } catch (Exception ignored) {}
+        }
     }
 }

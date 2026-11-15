@@ -53,4 +53,24 @@ public interface ConcessionsService {
      * Lists all recent concessions orders ordered chronologically.
      */
     List<ConcessionOrder> listOrders();
+
+    /**
+     * Creates or updates a concession item in PostgreSQL.
+     */
+    ConcessionItem saveItem(ConcessionItem item);
+
+    /**
+     * Batch creates or updates concession items via administrative API.
+     */
+    List<ConcessionItem> saveItems(List<ConcessionItem> items);
+
+    /**
+     * Toggles stock availability (in stock vs sold out).
+     */
+    Optional<ConcessionItem> toggleStock(String itemId, boolean inStock);
+
+    /**
+     * Removes an item from the menu catalog.
+     */
+    boolean deleteItem(String itemId);
 }

@@ -17,7 +17,8 @@ import {
   Server,
   Code2,
 } from 'lucide-react'
-import { telemetryService } from '@/services'
+import { telemetryService, authService, type UserPersona } from '@/services'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 interface TraceSpan {
   traceId: string
@@ -47,6 +48,19 @@ export default function TracingPage() {
   const [selectedSpan, setSelectedSpan] = useState<TraceSpan | null>(null)
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [filterQuery, setFilterQuery] = useState('')
+
+  // Auth RBAC State
+  const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+
+  useEffect(() => {
+    authService.getCurrentUser()
+      .then((u) => {
+        setCurrentUser(u)
+        setIsLoadingAuth(false)
+      })
+      .catch(() => setIsLoadingAuth(false))
+  }, [])
 
   useEffect(() => {
     fetchTraces()
@@ -93,6 +107,21 @@ export default function TracingPage() {
   const maxLatency = traces.length > 0
     ? Math.max(...traces.map((t) => t.totalDurationMs))
     : 0
+
+  const isAuthorized = Boolean(
+    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+  )
+
+  if (!isAuthorized && !isLoadingAuth) {
+    return (
+      <RbacAccessShield
+        title="APM Waterfall Telemetry Clearance Required"
+        requiredRole="EXECUTIVE_ADMIN"
+        currentUser={currentUser}
+        description="Detailed APM OpenTelemetry waterfall traces are restricted to EXECUTIVE_ADMIN clearance. Inspection of distributed spans and LLM latency traces requires executive authorization."
+      />
+    )
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">

@@ -4,10 +4,10 @@ description: >-
   Systematic pre-push code review and verification skill for CineMind. Enforces strict
   SOLID principles (Single Responsibility, Liskov Substitution, Interface Segregation,
   Dependency Inversion), feature-wise design pattern application, zero-secret git hygiene,
-  full-stack RBAC route and operation security, concurrency and transactional integrity
-  (zero dual-write hazards, Single Source of Truth architecture), synchronized master/main
-  branch pushes, backend Java compilation, frontend TypeScript type-safety, and automated 57-test regression suite.
-  Always run this skill before pushing code.
+  full-stack RBAC route and operation security, zero hardcoded data / API-driven SSOT ingestion,
+  concurrency and transactional integrity (zero dual-write hazards, Single Source of Truth architecture),
+  synchronized master/main branch pushes, backend Java compilation, frontend TypeScript type-safety,
+  and automated 59-test regression suite. Always run this skill before pushing code.
 ---
 
 # CineMind Quality & Architecture Code Review Skill
@@ -16,7 +16,7 @@ This skill defines the mandatory pre-push architectural audit, feature-wise desi
 
 ## Pre-Push Verification Checklist
 
-Before staging or pushing code to remote branches, the agent must systematically execute the following 7 review gates:
+Before staging or pushing code to remote branches, the agent must systematically execute the following 8 review gates:
 
 ---
 
@@ -126,14 +126,45 @@ Multi-tier distributed backends must safeguard state consistency across concurre
 
 ---
 
-### Gate 6: Automated Verification Pipeline
+### Gate 6: Zero Hardcoded Data Policy & Externalized SSOT Ingestion
+
+CineMind enforces a strict, zero-tolerance policy against hardcoded data across both backend services and frontend applications:
+
+#### 1. Prohibition of Hardcoded Seed Fixtures & Mock Collections in Java
+- Service and controller classes must **NEVER** contain hardcoded domain collections, dummy data arrays, or static seed methods (e.g. `seedInitialMenuIntoDatabase`, `seedInitialSessions`, `seedInitialTraces`, `List.of(new ConcessionItem(...))`, `List.of(new Movie(...))`).
+- Hardcoded fixtures violate clean architecture, hide production edge cases, risk desynchronization with relational stores, and bloat Java bytecode.
+- Dynamic business logic (such as combo recommendations, discount bundling, or search ranking) must compute dynamically from database records retrieved via repository calls—never by hardcoding specific IDs (e.g. `pop-truffle` or `bev-coldbrew`).
+
+#### 2. Prohibition of Hardcoded Values in SQL Queries
+- SQL statements executed via `JdbcTemplate`, `NamedParameterJdbcTemplate`, or JPA must **never** embed hardcoded literal IDs or domain values in query strings (e.g. `UPDATE wallets SET wallet_id = ? WHERE wallet_id = 'WLT-CINEMIND-8842'` or `WHERE user_id = 'usr-001'`).
+- Every dynamic value must be parameterized with positional placeholders (`?`) or named parameters (`:walletId`). Hardcoded query values create severe maintenance hazards and bypass query plan caching.
+
+#### 3. Prohibition of Hardcoded Data Records & Persona Names in Frontend UI
+- Next.js React pages and components must **never** embed hardcoded mock entity arrays (e.g. hardcoded lists of movies, tickets, concessions, orders, or user personas) as substitutes for backend state.
+- Hardcoded persona names and roles (e.g. "Switch to Elena Rostova (Cinema Manager)", "Marcus Kane", "Alex Vance") in buttons, banners, or switcher cards are strictly prohibited.
+- All domain data and active authenticated personas displayed in the UI must be fetched asynchronously via typed domain service clients (`movieService`, `concessionsService`, `ticketService`, `walletService`, `authService`) connected to REST endpoints backed by PostgreSQL.
+
+#### 4. Authorized Ingestion Architecture (Single Source of Truth)
+- When PostgreSQL is active, the database is the **sole Single Source of Truth (SSOT)**.
+- Initial catalog datasets, menus, and system fixtures must be loaded dynamically through:
+  - Documented REST API endpoints (e.g. `POST /api/v1/concessions/seed`, `POST /api/v1/concessions/items/batch`, `POST /api/v1/movies/batch`, `POST /api/v1/rag/ingest`) executed with appropriate staff/admin credentials (`CINEMA_MANAGER` or `EXECUTIVE_ADMIN`).
+  - Standard database migration scripts (`schema.sql` / Flyway / Liquibase) applied during environment provisioning.
+- If data is missing from the database, the service must return an empty state or HTTP 404, prompting ingestion via the authorized API—never silently fall back to compiled mock constants.
+
+#### 5. Prohibition of Inline DDL in Java Application Code
+- Service and controller classes must **NEVER** execute DDL statements (`CREATE TABLE`, `ALTER TABLE`, `DROP TABLE`, `CREATE INDEX`) via inline `jdbcTemplate.execute(...)` inside Java service methods or constructors.
+- Schema definitions and migration scripts belong exclusively in external migration tooling (`schema.sql` / Flyway / Liquibase). Mixing DDL inside Java service constructors is an architectural anti-pattern that violates separation of concerns.
+
+---
+
+### Gate 7: Automated Verification Pipeline
 
 Execute the automated verification script:
 ```bash
 ./.agents/skills/code-review/scripts/verify-all.sh
 ```
 
-Or run the three steps individually:
+Or run the verification steps individually:
 
 1. **Backend Compilation**:
    ```bash
@@ -151,15 +182,15 @@ Or run the three steps individually:
    ```bash
    ./node_bin/node test-suite.mjs
    ```
-   *Requirement*: 100% pass rate (**57/57 tests passing**, including automated RBAC Security Gate checks).
+   *Requirement*: 100% pass rate (**59/59 tests passing**, including automated RBAC Security Gate checks).
 
 ---
 
-### Gate 7: Dual Branch Synchronization
+### Gate 8: Dual Branch Synchronization
 
 - **Mandatory Constraint**: Both `master` and `main` branches must remain in exact synchronization.
 - **Push Command**:
-  ```bash
-  git push origin master && git push origin master:main
-  ```
+   ```bash
+   git push origin master && git push origin master:main
+   ```
 - Verify with `git log -1` that both `origin/master` and `origin/main` point to the identical commit hash at `HEAD`.

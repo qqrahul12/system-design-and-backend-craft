@@ -1,6 +1,7 @@
 package com.skills.ai.wallet;
 
 import com.skills.ai.auth.AuthService;
+import com.skills.ai.cache.RedisCache;
 import com.skills.ai.persistence.queries.WalletSqlQueries;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,7 +34,7 @@ public class WalletServiceImpl implements WalletService {
 
     private final AuthService authService;
     private final JdbcTemplate jdbcTemplate;
-    private final StringRedisTemplate redisTemplate;
+    private final RedisCache cache;
 
     public WalletServiceImpl(
             @Autowired(required = false) AuthService authService,
@@ -42,24 +43,7 @@ public class WalletServiceImpl implements WalletService {
     ) {
         this.authService = authService;
         this.jdbcTemplate = jdbcTemplate;
-        this.redisTemplate = redisTemplate;
-        migrateLegacyWalletIfPresent();
-    }
-
-    private void migrateLegacyWalletIfPresent() {
-        if (jdbcTemplate != null) {
-            try {
-                String targetWalletId = resolveCurrentWalletId();
-                Integer legacyCount = jdbcTemplate.queryForObject(COUNT_WALLET_BY_ID, Integer.class, "WLT-CINEMIND-8842");
-                if (legacyCount != null && legacyCount > 0) {
-                    jdbcTemplate.update(MIGRATE_LEGACY_WALLET, targetWalletId);
-                    jdbcTemplate.update(MIGRATE_LEGACY_TRANSACTIONS, targetWalletId);
-                    log.info("💳 Migrated legacy static wallet WLT-CINEMIND-8842 to user-scoped wallet {}", targetWalletId);
-                }
-            } catch (Exception e) {
-                log.debug("Legacy wallet migration check skipped: {}", e.getMessage());
-            }
-        }
+        this.cache = RedisCache.of(redisTemplate);
     }
 
     private String resolveCurrentWalletId() {
@@ -88,17 +72,7 @@ public class WalletServiceImpl implements WalletService {
     }
 
     private void updateRedisCache(String walletId, double newBalance) {
-        if (redisTemplate != null) {
-            try {
-                redisTemplate.opsForValue().set(
-                        REDIS_BALANCE_KEY_PREFIX + walletId,
-                        String.valueOf(newBalance),
-                        BALANCE_CACHE_TTL
-                );
-            } catch (Exception e) {
-                log.debug("Redis wallet balance update skipped: {}", e.getMessage());
-            }
-        }
+        cache.set(REDIS_BALANCE_KEY_PREFIX + walletId, String.valueOf(newBalance), BALANCE_CACHE_TTL);
     }
 
     @Override
@@ -115,15 +89,23 @@ public class WalletServiceImpl implements WalletService {
 
         ensureWalletExists(targetWalletId);
 
+        String currency = "USD";
         Double currentBalance = null;
-        if (redisTemplate != null) {
-            try {
-                String cached = redisTemplate.opsForValue().get(REDIS_BALANCE_KEY_PREFIX + targetWalletId);
-                if (cached != null) {
-                    currentBalance = Double.parseDouble(cached);
+        try {
+            Map<String, Object> row = jdbcTemplate.queryForMap(SELECT_WALLET_BY_ID, targetWalletId);
+            if (row != null) {
+                currency = (String) row.getOrDefault("currency", "USD");
+                Object b = row.get("balance");
+                if (b instanceof Number n) {
+                    currentBalance = n.doubleValue();
                 }
-            } catch (Exception ignored) {}
-        }
+            }
+        } catch (Exception ignored) {}
+
+        // Override with Redis-cached balance if available (sub-millisecond read)
+        currentBalance = cache.get(REDIS_BALANCE_KEY_PREFIX + targetWalletId)
+                .map(Double::parseDouble)
+                .orElse(currentBalance);
 
         if (currentBalance == null) {
             currentBalance = jdbcTemplate.queryForObject(
@@ -138,7 +120,31 @@ public class WalletServiceImpl implements WalletService {
                 targetWalletId
         );
 
-        return new WalletSummary(targetWalletId, "USD", bal, txns.size(), txns);
+        return new WalletSummary(targetWalletId, currency, bal, txns.size(), txns);
+    }
+
+    @Override
+    @Transactional
+    public WalletSummary updateCurrency(String newCurrency) {
+        return updateCurrency(resolveCurrentWalletId(), newCurrency);
+    }
+
+    @Override
+    @Transactional
+    public WalletSummary updateCurrency(String walletId, String newCurrency) {
+        if (newCurrency == null || newCurrency.isBlank()) {
+            throw new IllegalArgumentException("Currency code cannot be blank");
+        }
+        String cleanCurrency = newCurrency.toUpperCase().trim();
+        Set<String> validCurrencies = Set.of("USD", "EUR", "GBP", "CAD", "AUD", "JPY");
+        if (!validCurrencies.contains(cleanCurrency)) {
+            throw new IllegalArgumentException("Unsupported currency: " + cleanCurrency + ". Supported: " + validCurrencies);
+        }
+        String targetWalletId = (walletId != null && !walletId.isBlank()) ? walletId : resolveCurrentWalletId();
+        ensureWalletExists(targetWalletId);
+        jdbcTemplate.update(UPDATE_WALLET_CURRENCY, cleanCurrency, Timestamp.from(Instant.now()), targetWalletId);
+        log.info("💱 Updated currency for wallet {} to {} in PostgreSQL (SSOT)", targetWalletId, cleanCurrency);
+        return getWalletSummary(targetWalletId);
     }
 
     @Override

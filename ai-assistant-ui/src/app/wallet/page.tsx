@@ -26,8 +26,11 @@ import {
   Copy,
   ChevronRight,
 } from 'lucide-react'
-import { walletService } from '@/services/walletService'
+import { walletService, formatCurrency, getCurrencySymbol } from '@/services/walletService'
+import { authService, UserPersona } from '@/services/authService'
 import { apiClient } from '@/services/apiClient'
+import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -68,12 +71,32 @@ export default function WalletPage() {
   const [showCardNumber, setShowCardNumber] = useState(false)
   const [circuitBreaker, setCircuitBreaker] = useState<CircuitBreakerStatus | null>(null)
   const [selectedTxn, setSelectedTxn] = useState<WalletTransaction | null>(null)
-  const [notice, setNotice] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
   const [copiedCard, setCopiedCard] = useState(false)
 
-  const showNotification = (msg: string) => {
-    setNotice(msg)
-    setTimeout(() => setNotice(null), 4000)
+  // Auth RBAC State
+  const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+
+  useEffect(() => {
+    authService.getCurrentUser()
+      .then((u) => {
+        setCurrentUser(u)
+        setIsLoadingAuth(false)
+      })
+      .catch(() => setIsLoadingAuth(false))
+  }, [])
+
+  const showNotification = (
+    msg: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'info',
+    title?: string
+  ) => {
+    setToast({
+      type,
+      title: title || (type === 'success' ? 'Wallet Credited' : type === 'error' ? 'Transaction Failed' : type === 'warning' ? 'Validation' : 'Wallet'),
+      message: msg,
+    })
   }
 
   const fetchWallet = async () => {
@@ -101,7 +124,7 @@ export default function WalletPage() {
   const handleTopUp = async () => {
     const finalAmt = customAmount ? parseFloat(customAmount) : topUpAmount
     if (!finalAmt || isNaN(finalAmt) || finalAmt <= 0) {
-      showNotification('⚠️ Please enter a valid top-up amount.')
+      showNotification('Please enter a valid top-up amount greater than 0.', 'warning', 'Invalid Amount')
       return
     }
 
@@ -111,13 +134,27 @@ export default function WalletPage() {
         finalAmt,
         paymentMethod === 'STRIPE_CARD' ? 'Stripe Gateway' : paymentMethod
       )
-      showNotification(`🎉 Successfully credited +$${finalAmt.toFixed(2)} CineCash via ${paymentMethod}!`)
+      showNotification(`Successfully credited +$${finalAmt.toFixed(2)} CineCash via ${paymentMethod}!`, 'success', 'Top-Up Successful')
       setCustomAmount('')
       await fetchWallet()
     } catch {
-      showNotification('❌ Top-up failed. Circuit breaker may be open or gateway unreachable.')
+      showNotification('Top-up failed. Circuit breaker may be open or payment gateway unreachable.', 'error', 'Payment Failed')
     } finally {
       setIsTopUpLoading(false)
+    }
+  }
+
+  const handleCurrencyChange = async (newCurrency: string) => {
+    try {
+      const updated = await walletService.setCurrency(newCurrency)
+      setWallet(updated)
+      showNotification(`Wallet currency switched to ${newCurrency} (${getCurrencySymbol(newCurrency)})`, 'success', 'Currency Switched')
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new Event('cinemind-auth-changed'))
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to switch currency'
+      showNotification(msg, 'error', 'Currency Update Failed')
     }
   }
 
@@ -126,7 +163,7 @@ export default function WalletPage() {
     navigator.clipboard.writeText(textToCopy)
     setCopiedCard(true)
     setTimeout(() => setCopiedCard(false), 2500)
-    showNotification(`📋 Wallet ID (${textToCopy}) copied to clipboard`)
+    showNotification(`Wallet ID (${textToCopy}) copied to clipboard`, 'info', 'Copied')
   }
 
   const filteredTransactions = (wallet?.recentTransactions ?? []).filter((tx) => {
@@ -138,15 +175,28 @@ export default function WalletPage() {
     return true
   })
 
+  const isAuthorized = Boolean(
+    currentUser &&
+    currentUser.isAuthenticated &&
+    currentUser.role !== 'ANONYMOUS' &&
+    currentUser.role !== 'AUDITORIUM_USHER'
+  )
+
+  if (!isAuthorized && !isLoadingAuth) {
+    return (
+      <RbacAccessShield
+        title="Patron Wallet Access Required"
+        requiredRoles={['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'EXECUTIVE_ADMIN']}
+        currentUser={currentUser}
+        description="The CineMind Digital Wallet requires an authenticated patron or manager session. Sign in to top up stored value, manage payment methods, and view double-entry ledger audits."
+      />
+    )
+  }
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 animate-fade-in pb-16">
       {/* Toast Notification */}
-      {notice && (
-        <div className="fixed top-20 right-8 z-50 flex items-center gap-3 rounded-2xl border border-purple-500/40 bg-zinc-950/95 px-5 py-3.5 text-xs font-semibold text-white shadow-2xl backdrop-blur-xl animate-slide-in">
-          <Sparkles className="h-4 w-4 text-purple-400 shrink-0" />
-          <span>{notice}</span>
-        </div>
-      )}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between border-b border-zinc-800/80 pb-6">
@@ -241,12 +291,12 @@ export default function WalletPage() {
                 Available Stored Balance
               </span>
               <div className="text-4xl font-extrabold tracking-tight text-white flex items-baseline gap-1 mt-0.5">
-                <span className="text-2xl text-purple-400 font-bold">$</span>
+                <span className="text-2xl text-purple-400 font-bold">{getCurrencySymbol(wallet?.currency || 'USD')}</span>
                 {(wallet?.balance ?? 0.0).toLocaleString(undefined, {
                   minimumFractionDigits: 2,
                   maximumFractionDigits: 2,
                 })}
-                <span className="text-xs font-mono text-zinc-400 ml-1.5 font-normal">USD</span>
+                <span className="text-xs font-mono text-zinc-400 ml-1.5 font-normal">{wallet?.currency || 'USD'}</span>
               </div>
             </div>
 
@@ -285,6 +335,31 @@ export default function WalletPage() {
                 </span>
                 <span className="font-mono text-xs text-zinc-200">11/29</span>
               </div>
+            </div>
+          </div>
+
+          {/* Multi-Currency Stored Value Selector */}
+          <div className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-4 space-y-3">
+            <div className="flex items-center justify-between">
+              <span className="text-xs font-semibold text-zinc-300">Wallet Currency</span>
+              <span className="font-mono text-xs font-bold text-purple-400">
+                {wallet?.currency || 'USD'} ({getCurrencySymbol(wallet?.currency || 'USD')})
+              </span>
+            </div>
+            <div className="grid grid-cols-6 gap-1.5">
+              {['USD', 'EUR', 'GBP', 'CAD', 'AUD', 'JPY'].map((curr) => (
+                <button
+                  key={curr}
+                  onClick={() => handleCurrencyChange(curr)}
+                  className={`py-1.5 px-2 rounded-lg text-xs font-mono font-bold transition ${
+                    (wallet?.currency || 'USD') === curr
+                      ? 'bg-purple-600 text-white shadow-md shadow-purple-600/30'
+                      : 'bg-zinc-800 text-zinc-400 hover:text-white hover:bg-zinc-700'
+                  }`}
+                >
+                  {curr}
+                </button>
+              ))}
             </div>
           </div>
 

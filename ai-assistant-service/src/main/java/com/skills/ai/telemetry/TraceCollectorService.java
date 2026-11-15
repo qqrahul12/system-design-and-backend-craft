@@ -23,7 +23,6 @@ public class TraceCollectorService {
     private final Map<String, TraceRecord> traceStore = new ConcurrentHashMap<>();
 
     public TraceCollectorService() {
-        seedInitialTraces();
     }
 
     public synchronized void recordTrace(TraceRecord record) {
@@ -55,36 +54,5 @@ public class TraceCollectorService {
 
     public Optional<TraceRecord> getTrace(String traceId) {
         return Optional.ofNullable(traceStore.get(traceId));
-    }
-
-    private void seedInitialTraces() {
-        // Seed a sample startup trace for immediate UI observability
-        String sampleTraceId = "trc-" + UUID.randomUUID().toString().substring(0, 8);
-        Instant now = Instant.now().minusSeconds(120);
-
-        List<TraceSpan> spans = List.of(
-                new TraceSpan(sampleTraceId, "spn-1", null, "prompt_guard_evaluation", "ai-assistant-service",
-                        now, 2, "OK", Map.of("rule", "jailbreak_check", "safe", true)),
-                new TraceSpan(sampleTraceId, "spn-2", "spn-1", "cache_lookup", "ai-assistant-service",
-                        now.plusMillis(3), 1, "OK", Map.of("cacheKey", "sha256-sample", "hit", false)),
-                new TraceSpan(sampleTraceId, "spn-3", "spn-2", "mcp_tool_search_movies", "ai-assistant-service",
-                        now.plusMillis(5), 18, "OK", Map.of("query", "Inception", "results", 3)),
-                new TraceSpan(sampleTraceId, "spn-4", "spn-2", "vector_embedding_gemini", "ai-assistant-service",
-                        now.plusMillis(24), 210, "OK", Map.of("model", "gemini-embedding-001", "dim", 3072)),
-                new TraceSpan(sampleTraceId, "spn-5", "spn-4", "vector_similarity_search", "ai-assistant-service",
-                        now.plusMillis(235), 4, "OK", Map.of("topK", 3, "topScore", 0.89)),
-                new TraceSpan(sampleTraceId, "spn-6", null, "llm_synthesis_groq", "ai-assistant-service",
-                        now.plusMillis(240), 38, "OK", Map.of("model", "qwen/qwen3.8-27b", "tokens", 312))
-        );
-
-        recordTrace(new TraceRecord(
-                sampleTraceId,
-                "multi_agent_swarm_execution",
-                now,
-                280,
-                "OK",
-                spans.size(),
-                spans
-        ));
     }
 }

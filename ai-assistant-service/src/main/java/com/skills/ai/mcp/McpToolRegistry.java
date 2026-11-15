@@ -49,27 +49,63 @@ public class McpToolRegistry {
         registerTool(
                 McpToolDefinition.builder()
                         .name("search_movies")
-                        .description("Search currently running movie shows, genres, and ratings in CineMind theaters.")
+                        .description("Search, filter, and sort currently running theatrical movies, genres, ratings, and ticket prices in CineMind theaters.")
                         .inputSchema(Map.of(
                                 "type", "object",
                                 "properties", Map.of(
-                                        "genre", Map.of("type", "string", "description", "Optional genre filter: Sci-Fi, Action, Drama, Horror"),
-                                        "query", Map.of("type", "string", "description", "Search keywords in movie title")
+                                        "genre", Map.of("type", "string", "description", "Optional genre filter: Sci-Fi, Action, Drama, Horror, Adventure"),
+                                        "query", Map.of("type", "string", "description", "Search keywords in movie title or synopsis"),
+                                        "sortBy", Map.of("type", "string", "description", "Sort field: rating (default), price, year, title"),
+                                        "sortOrder", Map.of("type", "string", "description", "Sort direction: asc or desc (default: desc)"),
+                                        "minRating", Map.of("type", "number", "description", "Optional minimum rating threshold (e.g. 8.0)"),
+                                        "maxPrice", Map.of("type", "number", "description", "Optional maximum ticket price threshold (e.g. 18.00)")
                                 )
                         ))
                         .build(),
                 args -> {
                     String q = (String) args.getOrDefault("query", "");
                     String genre = (String) args.getOrDefault("genre", "");
+                    String sortBy = (String) args.getOrDefault("sortBy", "rating");
+                    String sortOrder = (String) args.getOrDefault("sortOrder", "desc");
+                    Double minRating = args.containsKey("minRating") && args.get("minRating") instanceof Number n ? n.doubleValue() : null;
+                    Double maxPrice = args.containsKey("maxPrice") && args.get("maxPrice") instanceof Number n ? n.doubleValue() : null;
+
                     List<Movie> results = movieCatalogService.getAllMovies(genre, null, q);
                     if (results.isEmpty()) {
                         return McpToolDefinition.CallResult.text("No movies found matching criteria.");
                     }
-                    StringBuilder sb = new StringBuilder("Found " + results.size() + " theatrical releases in CineMind catalog:\n");
-                    for (int i = 0; i < Math.min(5, results.size()); i++) {
-                        Movie m = results.get(i);
-                        sb.append(String.format("%d. %s (%s, Rating: %.1f, $%.2f) - Auditorium: %s, Shows: %s\n",
-                                i + 1, m.getTitle(), m.getGenre(), m.getRating(), m.getPrice(), m.getAuditorium(), m.getShowtimes()));
+
+                    // Apply multi-attribute filtering
+                    java.util.stream.Stream<Movie> stream = results.stream();
+                    if (minRating != null) {
+                        stream = stream.filter(m -> m.getRating() >= minRating);
+                    }
+                    if (maxPrice != null) {
+                        stream = stream.filter(m -> m.getPrice() <= maxPrice);
+                    }
+
+                    // Apply dynamic sorting
+                    Comparator<Movie> comparator = switch (sortBy != null ? sortBy.toLowerCase().trim() : "rating") {
+                        case "price" -> Comparator.comparingDouble(Movie::getPrice);
+                        case "year" -> Comparator.comparingInt(m -> m.getYear() != null ? m.getYear() : 0);
+                        case "title" -> Comparator.comparing(Movie::getTitle, String.CASE_INSENSITIVE_ORDER);
+                        default -> Comparator.comparingDouble(Movie::getRating);
+                    };
+
+                    if ("desc".equalsIgnoreCase(sortOrder)) {
+                        comparator = comparator.reversed();
+                    }
+
+                    List<Movie> filtered = stream.sorted(comparator).toList();
+                    if (filtered.isEmpty()) {
+                        return McpToolDefinition.CallResult.text("No movies matched the specified filter thresholds.");
+                    }
+
+                    StringBuilder sb = new StringBuilder("Found " + filtered.size() + " theatrical releases (sorted by " + sortBy + " " + sortOrder.toUpperCase() + "):\n");
+                    for (int i = 0; i < Math.min(5, filtered.size()); i++) {
+                        Movie m = filtered.get(i);
+                        sb.append(String.format("%d. %s (%s, Year: %d, Rating: %.1f, $%.2f) - Auditorium: %s, Shows: %s\n",
+                                i + 1, m.getTitle(), m.getGenre(), m.getYear() != null ? m.getYear() : 2026, m.getRating(), m.getPrice(), m.getAuditorium(), m.getShowtimes()));
                     }
                     return McpToolDefinition.CallResult.text(sb.toString().trim());
                 }

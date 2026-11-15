@@ -19,8 +19,10 @@ import reactor.core.publisher.Sinks;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.*;
+import java.util.stream.Collectors;
 
 import static com.skills.ai.persistence.queries.ConcessionSqlQueries.*;
 
@@ -36,7 +38,9 @@ public class ConcessionsServiceImpl implements ConcessionsService {
     private final JdbcTemplate jdbcTemplate;
     private final ObjectMapper objectMapper;
     private final StringRedisTemplate redisTemplate;
-    private final List<ConcessionItem> menu = new ArrayList<>();
+    private static final String REDIS_KEY_MENU = "cinemind:concessions:menu";
+    private static final Duration CONCESSIONS_CACHE_TTL = Duration.ofMinutes(30);
+    private static final String REDIS_KEY_CONCESSIONS_COMBOS_PREFIX = "cinemind:concessions:combos:";
     private final Sinks.Many<ConcessionOrder> orderEventSink =
             Sinks.many().multicast().onBackpressureBuffer();
 
@@ -50,8 +54,19 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         this.jdbcTemplate = jdbcTemplate;
         this.objectMapper = objectMapper;
         this.redisTemplate = redisTemplate;
-        seedMenu();
+        logStartupInventory();
         initClusterPubSubListener(listenerContainer, orderEventsTopic);
+    }
+
+    private void logStartupInventory() {
+        if (jdbcTemplate != null) {
+            try {
+                Integer count = jdbcTemplate.queryForObject(COUNT_ITEMS, Integer.class);
+                log.info("🍿 Found {} persisted gourmet concession items in PostgreSQL (SSOT). Zero hardcoded startup seeding in code.", count != null ? count : 0);
+            } catch (Exception e) {
+                log.warn("⚠️ Failed to query concession_items count from PostgreSQL: {}", e.getMessage());
+            }
+        }
     }
 
     private void initClusterPubSubListener(RedisMessageListenerContainer container, ChannelTopic topic) {
@@ -103,12 +118,146 @@ public class ConcessionsServiceImpl implements ConcessionsService {
 
     @Override
     public List<ConcessionItem> getMenu() {
-        return Collections.unmodifiableList(menu);
+        if (redisTemplate != null) {
+            try {
+                String cached = redisTemplate.opsForValue().get(REDIS_KEY_MENU);
+                if (cached != null && !cached.isBlank()) {
+                    List<ConcessionItem> list = objectMapper.readValue(cached, new TypeReference<List<ConcessionItem>>() {});
+                    if (list != null && !list.isEmpty()) {
+                        return list;
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis menu cache check skipped: {}", e.getMessage());
+            }
+        }
+
+        if (jdbcTemplate != null) {
+            try {
+                List<ConcessionItem> items = jdbcTemplate.query(SELECT_ALL_ITEMS, this::mapRowToItem);
+                if (!items.isEmpty()) {
+                    if (redisTemplate != null) {
+                        try {
+                            redisTemplate.opsForValue().set(REDIS_KEY_MENU, objectMapper.writeValueAsString(items), CONCESSIONS_CACHE_TTL);
+                        } catch (Exception ignored) {}
+                    }
+                    return items;
+                }
+            } catch (Exception e) {
+                log.warn("⚠️ Error loading concession items from PostgreSQL: {}", e.getMessage());
+            }
+        }
+        return Collections.emptyList();
     }
 
     @Override
     public Optional<ConcessionItem> getItem(String id) {
-        return menu.stream().filter(i -> i.id().equalsIgnoreCase(id)).findFirst();
+        if (id == null || id.isBlank()) return Optional.empty();
+        if (jdbcTemplate != null) {
+            try {
+                List<ConcessionItem> results = jdbcTemplate.query(SELECT_ITEM_BY_ID, this::mapRowToItem, id);
+                if (!results.isEmpty()) {
+                    return Optional.of(results.get(0));
+                }
+            } catch (Exception e) {
+                log.debug("Error fetching concession item {}: {}", id, e.getMessage());
+            }
+        }
+        return getMenu().stream().filter(i -> i.id().equalsIgnoreCase(id)).findFirst();
+    }
+
+    @Override
+    @Transactional
+    public ConcessionItem saveItem(ConcessionItem item) {
+        if (item == null || jdbcTemplate == null) return item;
+        String id = (item.id() != null && !item.id().isBlank())
+                ? item.id()
+                : "cns-" + UUID.randomUUID().toString().substring(0, 8);
+
+        String dietaryCsv = (item.dietary() != null) ? String.join(", ", item.dietary()) : "";
+        String genreCsv = (item.genrePairings() != null) ? String.join(", ", item.genrePairings()) : "";
+        boolean inStock = item.inStock() == null || item.inStock();
+
+        jdbcTemplate.update(
+                UPSERT_ITEM,
+                id, item.name(), item.category(), item.price(), item.calories(),
+                item.icon() != null ? item.icon() : "🍿",
+                dietaryCsv, genreCsv, item.description(), inStock
+        );
+        invalidateConcessionsCache();
+        log.info("🍿 Persisted concession item to PostgreSQL (SSOT): id={}, name={}, price={}", id, item.name(), item.price());
+        return new ConcessionItem(id, item.name(), item.category(), item.price(), item.calories(),
+                item.icon() != null ? item.icon() : "🍿", item.dietary(), item.genrePairings(), item.description(), inStock);
+    }
+
+    @Override
+    @Transactional
+    public List<ConcessionItem> saveItems(List<ConcessionItem> items) {
+        if (items == null || items.isEmpty()) return List.of();
+        return items.stream().map(this::saveItem).toList();
+    }
+
+    @Override
+    @Transactional
+    public Optional<ConcessionItem> toggleStock(String itemId, boolean inStock) {
+        if (itemId == null || jdbcTemplate == null) return Optional.empty();
+        int rows = jdbcTemplate.update(UPDATE_ITEM_STOCK, inStock, itemId);
+        if (rows > 0) {
+            invalidateConcessionsCache();
+            log.info("📦 Toggled stock for concession item {} to {}", itemId, inStock);
+            return getItem(itemId);
+        }
+        return Optional.empty();
+    }
+
+    @Override
+    @Transactional
+    public boolean deleteItem(String itemId) {
+        if (itemId == null || jdbcTemplate == null) return false;
+        int rows = jdbcTemplate.update(DELETE_ITEM, itemId);
+        if (rows > 0) {
+            invalidateConcessionsCache();
+            log.info("🗑️ Deleted concession item {} from PostgreSQL", itemId);
+            return true;
+        }
+        return false;
+    }
+
+    private void invalidateConcessionsCache() {
+        if (redisTemplate != null) {
+            try {
+                redisTemplate.delete(REDIS_KEY_MENU);
+                Set<String> comboKeys = redisTemplate.keys(REDIS_KEY_CONCESSIONS_COMBOS_PREFIX + "*");
+                if (comboKeys != null && !comboKeys.isEmpty()) {
+                    redisTemplate.delete(comboKeys);
+                }
+            } catch (Exception ignored) {}
+        }
+    }
+
+    private ConcessionItem mapRowToItem(ResultSet rs, int rowNum) throws SQLException {
+        String dietaryCsv = rs.getString("dietary_tags_csv");
+        List<String> dietary = (dietaryCsv != null && !dietaryCsv.isBlank())
+                ? Arrays.stream(dietaryCsv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList()
+                : List.of();
+
+        String genreCsv = rs.getString("genre_pairings_csv");
+        List<String> pairings = (genreCsv != null && !genreCsv.isBlank())
+                ? Arrays.stream(genreCsv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList()
+                : List.of("All");
+
+        return new ConcessionItem(
+                rs.getString("id"),
+                rs.getString("name"),
+                rs.getString("category"),
+                rs.getDouble("price"),
+                rs.getInt("calories"),
+                rs.getString("icon"),
+                dietary,
+                pairings,
+                rs.getString("description"),
+                rs.getBoolean("in_stock")
+        );
     }
 
     @Override
@@ -116,140 +265,111 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         String genre = (movieGenre != null && !movieGenre.isBlank()) ? movieGenre.trim() : "Sci-Fi";
         int size = Math.max(1, partySize);
 
+        String cacheKey = REDIS_KEY_CONCESSIONS_COMBOS_PREFIX + genre.toLowerCase() + ":" + size;
+        if (redisTemplate != null) {
+            try {
+                String cached = redisTemplate.opsForValue().get(cacheKey);
+                if (cached != null && !cached.isBlank()) {
+                    List<ConcessionCombo> cachedCombos = objectMapper.readValue(cached, new TypeReference<List<ConcessionCombo>>() {});
+                    if (cachedCombos != null && !cachedCombos.isEmpty()) {
+                        log.debug("⚡ [Redis Cache HIT] Retrieved combos for genre={}, size={} in <1ms", genre, size);
+                        return cachedCombos;
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Redis combos cache check skipped: {}", e.getMessage());
+            }
+        }
+
         List<ConcessionCombo> combos = new ArrayList<>();
-
-        if (genre.equalsIgnoreCase("Sci-Fi") || genre.equalsIgnoreCase("Epic")) {
-            ConcessionItem item1 = getItem("pop-truffle").orElse(menu.get(0));
-            ConcessionItem item2 = getItem("bev-coldbrew").orElse(menu.get(1));
-            ConcessionItem item3 = getItem("snk-choc-dust").orElse(menu.get(2));
-            double orig = item1.price() + item2.price() + item3.price();
-            double combo = Math.round((orig * 0.8) * 100.0) / 100.0;
-
-            combos.add(new ConcessionCombo(
-                    "cmb-scifi-wormhole",
-                    "🚀 Interstellar Wormhole Combo",
-                    List.of(item1, item2, item3),
-                    orig,
-                    combo,
-                    orig - combo,
-                    "Curated for deep sensory immersion: savory black truffle pairs with cold-brew caffeine to maintain focus through 3-hour cosmic epics.",
-                    genre
-            ));
+        List<ConcessionItem> allItems = getMenu();
+        if (allItems.isEmpty()) {
+            return Collections.emptyList();
         }
 
-        if (genre.equalsIgnoreCase("Action") || genre.equalsIgnoreCase("Thriller")) {
-            ConcessionItem item1 = getItem("snk-nachos").orElse(menu.get(3));
-            ConcessionItem item2 = getItem("bev-craft-soda").orElse(menu.get(4));
-            double orig = (item1.price() + item2.price()) * Math.min(size, 2);
-            double combo = Math.round((orig * 0.85) * 100.0) / 100.0;
+        List<ConcessionItem> inStock = allItems.stream()
+                .filter(ConcessionItem::isInStock)
+                .toList();
+        final List<ConcessionItem> effectiveInStock = inStock.isEmpty() ? allItems : inStock;
 
-            combos.add(new ConcessionCombo(
-                    "cmb-action-adrenaline",
-                    "⚡ Adrenaline Crunch Pair",
-                    List.of(item1, item2),
-                    orig,
-                    combo,
-                    orig - combo,
-                    "High-energy zesty jalapeño crunch paired with artisan ginger-lime craft soda to match high-octane pacing.",
-                    genre
-            ));
+        // Dynamically find items matching the requested genre
+        List<ConcessionItem> genreMatched = effectiveInStock.stream()
+                .filter(i -> i.genrePairings() != null && i.genrePairings().stream().anyMatch(g -> g.equalsIgnoreCase(genre)))
+                .toList();
+
+        // 1. Curated Genre-Specific Feature Combo (Main snack/popcorn + beverage)
+        ConcessionItem snack = genreMatched.stream()
+                .filter(i -> "POPCORN".equalsIgnoreCase(i.category()) || "SNACKS".equalsIgnoreCase(i.category()) || "HOT_FOOD".equalsIgnoreCase(i.category()))
+                .findFirst()
+                .orElseGet(() -> effectiveInStock.stream().filter(i -> !"BEVERAGES".equalsIgnoreCase(i.category())).findFirst().orElse(effectiveInStock.get(0)));
+
+        ConcessionItem drink = genreMatched.stream()
+                .filter(i -> "BEVERAGES".equalsIgnoreCase(i.category()))
+                .findFirst()
+                .orElseGet(() -> effectiveInStock.stream().filter(i -> "BEVERAGES".equalsIgnoreCase(i.category())).findFirst().orElse(effectiveInStock.get(effectiveInStock.size() > 1 ? 1 : 0)));
+
+        List<ConcessionItem> comboItems = new ArrayList<>(List.of(snack, drink));
+        if (size >= 3) {
+            effectiveInStock.stream()
+                    .filter(i -> !comboItems.contains(i))
+                    .findFirst()
+                    .ifPresent(comboItems::add);
         }
 
-        // Universal VIP Duo
-        ConcessionItem p1 = getItem("pop-classic").orElse(menu.get(0));
-        ConcessionItem p2 = getItem("bev-craft-soda").orElse(menu.get(4));
-        double orig = (p1.price() + p2.price()) * 2;
-        double combo = Math.round((orig * 0.78) * 100.0) / 100.0;
+        double origPrice = comboItems.stream().mapToDouble(ConcessionItem::price).sum();
+        double discountedPrice = Math.round((origPrice * 0.82) * 100.0) / 100.0;
+        double savings = Math.round((origPrice - discountedPrice) * 100.0) / 100.0;
 
         combos.add(new ConcessionCombo(
-                "cmb-classic-vip",
-                "🍿 CineMind Gold Lounge Classic",
-                List.of(p1, p2),
-                orig,
-                combo,
-                orig - combo,
-                "Double-clarified warm butter popcorn and zero-sugar sparkling botanicals. The quintessential cinema indulgence.",
-                "Classic"
+                "cmb-" + genre.toLowerCase().replaceAll("[^a-z0-9]", "") + "-pairing",
+                "Sensory " + genre + " Experience Bundle",
+                comboItems,
+                origPrice,
+                discountedPrice,
+                savings,
+                "Curated sensory pairing: " + snack.name() + " paired with " + drink.name() + " formulated for " + genre + " theatrical screenings.",
+                genre
         ));
+
+        // 2. Chef's Tasting Flight (Top distinct category items)
+        Map<String, ConcessionItem> byCategory = effectiveInStock.stream()
+                .collect(Collectors.toMap(ConcessionItem::category, item -> item, (existing, replacement) -> existing));
+        List<ConcessionItem> flightItems = new ArrayList<>(byCategory.values()).stream().limit(3).toList();
+        if (flightItems.size() >= 2) {
+            double flightOrig = flightItems.stream().mapToDouble(ConcessionItem::price).sum();
+            double flightDiscounted = Math.round((flightOrig * 0.80) * 100.0) / 100.0;
+            combos.add(new ConcessionCombo(
+                    "cmb-gourmet-flight",
+                    "Gourmet Concessions Tasting Flight",
+                    flightItems,
+                    flightOrig,
+                    flightDiscounted,
+                    Math.round((flightOrig - flightDiscounted) * 100.0) / 100.0,
+                    "Multi-course culinary flight featuring fresh kitchen selections tailored for the ultimate VIP lounge experience.",
+                    "Culinary"
+            ));
+        }
+
+        if (redisTemplate != null && !combos.isEmpty()) {
+            try {
+                redisTemplate.opsForValue().set(cacheKey, objectMapper.writeValueAsString(combos), CONCESSIONS_CACHE_TTL);
+                log.debug("⚡ [Redis Cache SET] Cached combos for genre={}, size={} with 30m TTL", genre, size);
+            } catch (Exception e) {
+                log.debug("Redis combos cache store skipped: {}", e.getMessage());
+            }
+        }
 
         return combos;
     }
 
-    private void seedMenu() {
-        menu.add(new ConcessionItem(
-                "pop-classic",
-                "Artisan Warm Butter Popcorn",
-                "POPCORN",
-                8.50,
-                420,
-                "🍿",
-                List.of("Gluten-Free", "Vegetarian"),
-                List.of("Action", "Comedy", "Classic"),
-                "Organic kernels tossed in sea-salt and warm clarified butter."
-        ));
-        menu.add(new ConcessionItem(
-                "pop-truffle",
-                "Black Truffle & Rosemary Popcorn",
-                "POPCORN",
-                11.00,
-                460,
-                "✨",
-                List.of("Vegan", "Gluten-Free"),
-                List.of("Sci-Fi", "Drama", "Epic"),
-                "Fresh popped corn infused with white truffle oil, cracked black pepper, and dried rosemary."
-        ));
-        menu.add(new ConcessionItem(
-                "snk-nachos",
-                "Chipotle Queso Loaded Nachos",
-                "SNACKS",
-                10.50,
-                680,
-                "🧀",
-                List.of("Vegetarian"),
-                List.of("Action", "Thriller"),
-                "Crispy artisanal tortilla chips with warm chipotle cheddar queso and pickled jalapeños."
-        ));
-        menu.add(new ConcessionItem(
-                "snk-choc-dust",
-                "Dark Chocolate Sea Salt Pretzel Bites",
-                "SNACKS",
-                7.50,
-                380,
-                "🍫",
-                List.of("Vegetarian"),
-                List.of("Drama", "Romance"),
-                "Warm Bavarian pretzel nuggets draped in 70% dark Belgian chocolate and flaky Maldon salt."
-        ));
-        menu.add(new ConcessionItem(
-                "bev-craft-soda",
-                "Wild Blackberry Craft Soda",
-                "BEVERAGES",
-                6.00,
-                110,
-                "🥤",
-                List.of("Vegan", "Gluten-Free"),
-                List.of("Action", "Family"),
-                "Locally brewed sparkling soda sweetened with pure cane sugar and real Oregon blackberries."
-        ));
-        menu.add(new ConcessionItem(
-                "bev-coldbrew",
-                "Nitro Vanilla Sky Cold Brew",
-                "BEVERAGES",
-                7.00,
-                80,
-                "☕",
-                List.of("Vegan", "Dairy-Free"),
-                List.of("Sci-Fi", "Drama"),
-                "Nitrogen-infused single-origin Ethiopian cold brew with subtle Madagascar vanilla."
-        ));
-    }
-
     @Override
+    @Transactional
     public ConcessionOrder placeOrder(List<Map<String, Object>> items, String deliverySeat, double total) {
         return placeOrder(items, deliverySeat, total, Instant.now());
     }
 
     @Override
+    @Transactional
     public ConcessionOrder placeOrder(List<Map<String, Object>> items, String deliverySeat, double total, Instant createdAt) {
         String orderId = "FB-" + UUID.randomUUID().toString().substring(0, 5).toUpperCase();
         Instant orderTime = (createdAt != null) ? createdAt : Instant.now();

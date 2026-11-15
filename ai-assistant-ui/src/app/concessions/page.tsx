@@ -35,6 +35,7 @@ import {
   ticketService,
   walletService,
 } from '@/services'
+import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -44,13 +45,15 @@ const API_BASE =
 interface ConcessionItem {
   id: string
   name: string
-  category: 'POPCORN' | 'BEVERAGES' | 'SNACKS' | 'GOURMET'
+  category: string
   price: number
   calories: number
   icon: string
-  dietary: string[]
-  genrePairings: string[]
+  dietary?: string[]
+  dietaryTags?: string[]
+  genrePairings?: string[]
   description: string
+  inStock?: boolean
 }
 
 interface ConcessionCombo {
@@ -91,9 +94,10 @@ function ConcessionsContent() {
   )
   const [partySize, setPartySize] = useState(2)
   const [selectedCategory, setSelectedCategory] = useState<string>('ALL')
+  const [selectedDietary, setSelectedDietary] = useState<string>('ALL')
   const [cart, setCart] = useState<Record<string, number>>({})
   const [isLoadingCombos, setIsLoadingCombos] = useState(false)
-  const [addedNotice, setAddedNotice] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
 
   // Active Movie Passes & Seat Selector State
   const [userTickets, setUserTickets] = useState<UserTicket[]>([])
@@ -121,6 +125,13 @@ function ConcessionsContent() {
   const [isAdvancingStatus, setIsAdvancingStatus] = useState<boolean>(false)
   const [paymentMethod, setPaymentMethod] = useState<'WALLET' | 'CARD'>('WALLET')
   const [walletBalance, setWalletBalance] = useState<number>(175.00)
+  const [currentUser, setCurrentUser] = useState<any>(null)
+
+  useEffect(() => {
+    authService.getCurrentUser()
+      .then((u) => setCurrentUser(u))
+      .catch(() => setCurrentUser(null))
+  }, [])
 
   // SplitMoney Integration State
   const [isSplitModalOpen, setIsSplitModalOpen] = useState(false)
@@ -167,8 +178,11 @@ function ConcessionsContent() {
       const list = await splitService.getExpenses().catch(() => [])
       const updated = list.find((e: any) => e.id === expenseId)
       if (updated) setSplitExpenseData(updated)
-      setAddedNotice(`🎉 Squad member settled their F&B share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`)
-      setTimeout(() => setAddedNotice(null), 4000)
+      showNotice(
+        `🎉 Squad member settled their F&B share via ${method === 'WALLET' ? 'CineCash Wallet' : 'Stripe Card Gateway'}!`,
+        'success',
+        'Squad Share Settled'
+      )
     } catch (err) {
       console.warn('Failed to settle F&B share:', err)
     } finally {
@@ -473,13 +487,16 @@ function ConcessionsContent() {
 
     try {
       if (paymentMethod === 'WALLET') {
-        try {
-          const wTxn = await walletService.pay(
-            cartTotal,
-            `Gourmet Concessions (${cartItemCount} items to ${deliverySeat})`
-          )
+        const wTxn = await walletService.pay(
+          cartTotal,
+          `Gourmet Concessions (${cartItemCount} items to ${deliverySeat})`
+        )
+        if (wTxn) {
           setWalletBalance(wTxn.balanceAfter)
-        } catch {}
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('cinemind-auth-changed'))
+          }
+        }
       }
 
       const orderData = await concessionsService.placeOrder({
@@ -501,27 +518,38 @@ function ConcessionsContent() {
       setIsCheckoutOpen(false)
       showNotice(
         paymentMethod === 'WALLET'
-          ? `Paid $${cartTotal.toFixed(2)} via CineMind Wallet! Dispatched to kitchen.`
-          : 'Gourmet concessions order dispatched to kitchen!'
+          ? `Paid $${cartTotal.toFixed(2)} via CineCash Wallet! Dispatched to kitchen.`
+          : 'Gourmet concessions order dispatched to kitchen!',
+        'success',
+        'Order Confirmed'
       )
     } catch (err: unknown) {
       console.error('Failed to place concessions order:', err)
       const errorMsg = err instanceof Error ? err.message : 'Kitchen order submission failed'
-      showNotice(`Order Error: ${errorMsg}. Please try again.`)
+      showNotice(`${errorMsg}. Please verify your CineCash balance or payment method.`, 'error', 'Order Failed')
     } finally {
       setIsPlacingOrder(false)
     }
   }
 
-  const showNotice = (msg: string) => {
-    setAddedNotice(msg)
-    setTimeout(() => setAddedNotice(null), 3000)
+  const showNotice = (
+    msg: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success',
+    title?: string
+  ) => {
+    setToast({
+      type,
+      title: title || (type === 'success' ? 'Order Dispatched' : type === 'error' ? 'Order Failed' : 'Notice'),
+      message: msg,
+    })
   }
 
-  // Filtered menu
+  // Filtered menu with category & dietary tags
   const filteredMenu = menu.filter((item) => {
-    if (selectedCategory === 'ALL') return true
-    return item.category === selectedCategory
+    const matchCat = selectedCategory === 'ALL' || item.category === selectedCategory
+    const tags = item.dietary || item.dietaryTags || []
+    const matchDietary = selectedDietary === 'ALL' || tags.some((t) => t.toLowerCase() === selectedDietary.toLowerCase())
+    return matchCat && matchDietary
   })
 
   // Cart Calculations
@@ -538,12 +566,7 @@ function ConcessionsContent() {
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-16">
       {/* Toast Notification */}
-      {addedNotice && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-amber-500/30 bg-amber-950/90 px-5 py-3 text-sm text-amber-200 shadow-2xl backdrop-blur-md animate-fade-in">
-          <CheckCircle2 className="h-5 w-5 text-amber-400" />
-          <span>{addedNotice}</span>
-        </div>
-      )}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-[#222] pb-6">
@@ -626,8 +649,15 @@ function ConcessionsContent() {
                   : `PREP IN PROGRESS (~${activeOrder.estimatedMinutes} MIN)`}
               </span>
 
-              {/* Expediter Stage Fast-Forward Controls */}
-              {activeOrder.status === 'PREPARING' && (
+              {/* Expediter Stage Fast-Forward Controls (Restricted to Staff Roles) */}
+              {Boolean(
+                currentUser &&
+                currentUser.isAuthenticated &&
+                (currentUser.role === 'AUDITORIUM_USHER' ||
+                 currentUser.role === 'CINEMA_MANAGER' ||
+                 currentUser.role === 'EXECUTIVE_ADMIN' ||
+                 (currentUser.permissions && (currentUser.permissions.includes('DISPATCH_FNB_ORDER') || currentUser.permissions.includes('MANAGE_FNB_MENU'))))
+              ) && activeOrder.status === 'PREPARING' && (
                 <button
                   onClick={() => handleAdvanceStatus('PLATED')}
                   disabled={isAdvancingStatus}
@@ -637,7 +667,14 @@ function ConcessionsContent() {
                   <Sparkles className="h-3 w-3" /> Mark Plated
                 </button>
               )}
-              {activeOrder.status === 'READY' && (
+              {Boolean(
+                currentUser &&
+                currentUser.isAuthenticated &&
+                (currentUser.role === 'AUDITORIUM_USHER' ||
+                 currentUser.role === 'CINEMA_MANAGER' ||
+                 currentUser.role === 'EXECUTIVE_ADMIN' ||
+                 (currentUser.permissions && (currentUser.permissions.includes('DISPATCH_FNB_ORDER') || currentUser.permissions.includes('MANAGE_FNB_MENU'))))
+              ) && activeOrder.status === 'READY' && (
                 <button
                   onClick={() => handleAdvanceStatus('DELIVERED')}
                   disabled={isAdvancingStatus}
@@ -952,93 +989,133 @@ function ConcessionsContent() {
         )}
       </div>
 
-      {/* Menu Categories Bar */}
-      <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-        <h3 className="text-base font-bold text-white">Theatrical Menu</h3>
-        <div className="flex gap-2">
-          {['ALL', 'POPCORN', 'BEVERAGES', 'SNACKS'].map((cat) => (
-            <button
-              key={cat}
-              onClick={() => setSelectedCategory(cat)}
-              className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
-                selectedCategory === cat
-                  ? 'bg-zinc-700 text-white'
-                  : 'text-zinc-500 hover:text-zinc-300'
-              }`}
-            >
-              {cat}
-            </button>
-          ))}
+      {/* Menu Categories & Dietary Filter Bar */}
+      <div className="flex flex-col gap-3 border-b border-zinc-800 pb-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-base font-bold text-white">Theatrical Menu</h3>
+          <div className="flex flex-wrap gap-1.5">
+            {['ALL', 'POPCORN', 'BEVERAGES', 'SNACKS', 'HOT_FOOD', 'DESSERTS'].map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition ${
+                  selectedCategory === cat
+                    ? 'bg-zinc-700 text-white'
+                    : 'text-zinc-500 hover:text-zinc-300'
+                }`}
+              >
+                {cat.replace('_', ' ')}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 pt-1">
+          <span className="text-[11px] font-mono text-zinc-500">Dietary:</span>
+          <div className="flex flex-wrap gap-1.5">
+            {['ALL', 'Gluten-Free', 'Vegan', 'Vegetarian', 'Halal'].map((diet) => (
+              <button
+                key={diet}
+                onClick={() => setSelectedDietary(diet)}
+                className={`px-2.5 py-0.5 rounded-md text-[11px] font-medium transition ${
+                  selectedDietary === diet
+                    ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                    : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200 border border-zinc-800'
+                }`}
+              >
+                {diet}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Menu Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-        {filteredMenu.map((item) => (
-          <div
-            key={item.id}
-            className="rounded-2xl border border-zinc-800 bg-zinc-900/60 p-5 flex flex-col justify-between hover:border-zinc-700 transition space-y-4"
-          >
-            <div>
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex items-center gap-3">
-                  <span className="text-3xl">{item.icon}</span>
-                  <div>
-                    <h4 className="text-sm font-bold text-white">{item.name}</h4>
-                    <span className="text-[11px] text-zinc-500 font-mono">{item.calories} Calories</span>
+        {filteredMenu.map((item) => {
+          const dietaryList = item.dietary || item.dietaryTags || []
+          const pairingsList = item.genrePairings || []
+          const isAvailable = item.inStock !== false
+
+          return (
+            <div
+              key={item.id}
+              className={`rounded-2xl border bg-zinc-900/60 p-5 flex flex-col justify-between transition space-y-4 ${
+                isAvailable ? 'border-zinc-800 hover:border-zinc-700' : 'border-zinc-900 opacity-60'
+              }`}
+            >
+              <div>
+                <div className="flex items-start justify-between gap-2">
+                  <div className="flex items-center gap-3">
+                    <span className="text-3xl">{item.icon}</span>
+                    <div>
+                      <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                        {item.name}
+                        {!isAvailable && (
+                          <span className="text-[9px] uppercase tracking-wider font-bold text-rose-400 bg-rose-950/60 border border-rose-800 px-1.5 py-0.2 rounded">
+                            Sold Out
+                          </span>
+                        )}
+                      </h4>
+                      <span className="text-[11px] text-zinc-500 font-mono">{item.calories} Calories</span>
+                    </div>
                   </div>
-                </div>
-                <span className="text-xs font-bold text-emerald-400 font-mono bg-zinc-950 px-2.5 py-1 rounded-lg border border-zinc-800">
-                  ${item.price.toFixed(2)}
-                </span>
-              </div>
-
-              <p className="mt-3 text-xs text-zinc-400 leading-relaxed">{item.description}</p>
-
-              <div className="mt-3 flex flex-wrap gap-1.5">
-                {item.dietary.map((d, didx) => (
-                  <span
-                    key={didx}
-                    className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300"
-                  >
-                    {d}
+                  <span className="text-xs font-bold text-emerald-400 font-mono bg-zinc-950 px-2.5 py-1 rounded-lg border border-zinc-800">
+                    {walletService.formatCurrency(item.price)}
                   </span>
-                ))}
+                </div>
+
+                <p className="mt-3 text-xs text-zinc-400 leading-relaxed">{item.description}</p>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {dietaryList.map((d, didx) => (
+                    <span
+                      key={didx}
+                      className="text-[10px] font-semibold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300"
+                    >
+                      {d}
+                    </span>
+                  ))}
+                </div>
               </div>
-            </div>
 
-            <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
-              <span className="text-[11px] text-zinc-500">
-                Pairs with: {item.genrePairings.slice(0, 2).join(', ')}
-              </span>
+              <div className="pt-3 border-t border-zinc-800 flex items-center justify-between">
+                <span className="text-[11px] text-zinc-500">
+                  {pairingsList.length > 0 ? `Pairs with: ${pairingsList.slice(0, 2).join(', ')}` : 'Gourmet Selection'}
+                </span>
 
-              {cart[item.id] ? (
-                <div className="flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded-xl border border-zinc-800">
-                  <button
-                    onClick={() => decrementCart(item.id)}
-                    className="p-1 text-zinc-400 hover:text-white"
-                  >
-                    <Minus className="h-3 w-3" />
-                  </button>
-                  <span className="text-xs font-bold text-white">{cart[item.id]}</span>
+                {!isAvailable ? (
+                  <span className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-zinc-500 bg-zinc-950 border border-zinc-800 cursor-not-allowed">
+                    Sold Out
+                  </span>
+                ) : cart[item.id] ? (
+                  <div className="flex items-center gap-2 bg-zinc-950 px-2 py-1 rounded-xl border border-zinc-800">
+                    <button
+                      onClick={() => decrementCart(item.id)}
+                      className="p-1 text-zinc-400 hover:text-white"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="text-xs font-bold text-white">{cart[item.id]}</span>
+                    <button
+                      onClick={() => addToCart(item)}
+                      className="p-1 text-amber-400 hover:text-white"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+                ) : (
                   <button
                     onClick={() => addToCart(item)}
-                    className="p-1 text-amber-400 hover:text-white"
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-zinc-800 hover:bg-zinc-700 transition active:scale-95"
                   >
-                    <Plus className="h-3 w-3" />
+                    <Plus className="h-3.5 w-3.5" /> Add
                   </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => addToCart(item)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold text-white bg-zinc-800 hover:bg-zinc-700 transition"
-                >
-                  <Plus className="h-3.5 w-3.5" /> Add
-                </button>
-              )}
+                )}
+              </div>
             </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
 
       {/* Checkout Drawer / Modal */}

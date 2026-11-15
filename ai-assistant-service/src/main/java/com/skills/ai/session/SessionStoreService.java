@@ -33,10 +33,10 @@ public class SessionStoreService {
             @Autowired(required = false) JdbcTemplate jdbcTemplate
     ) {
         this.jdbcTemplate = jdbcTemplate;
-        initDatabase();
+        logStartupSessionMetrics();
     }
 
-    private void initDatabase() {
+    private void logStartupSessionMetrics() {
         if (jdbcTemplate != null) {
             try {
                 Integer count = jdbcTemplate.queryForObject(COUNT_SESSIONS, Integer.class);

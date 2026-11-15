@@ -108,6 +108,10 @@ public class RedisConfig {
                 .withCacheConfiguration("movies", defaultConfig.entryTtl(Duration.ofMinutes(30)))
                 .withCacheConfiguration("concessions", defaultConfig.entryTtl(Duration.ofMinutes(30)))
                 .withCacheConfiguration("analytics", defaultConfig.entryTtl(Duration.ofMinutes(5)))
+                .withCacheConfiguration("splitUsers", defaultConfig.entryTtl(Duration.ofMinutes(15)))
+                .withCacheConfiguration("splitGroups", defaultConfig.entryTtl(Duration.ofMinutes(15)))
+                .withCacheConfiguration("splitBalances", defaultConfig.entryTtl(Duration.ofMinutes(5)))
+                .withCacheConfiguration("splitExpenses", defaultConfig.entryTtl(Duration.ofMinutes(5)))
                 .build();
     }
 }

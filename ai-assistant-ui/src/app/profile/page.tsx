@@ -890,7 +890,7 @@ export default function ProfilePage() {
                     ) : isCurrent ? (
                       'Current Active Role'
                     ) : (
-                      `Switch to ${p.name.split(' ')[0]}`
+                      `Switch to ${(p.name || p.fullName || p.role).split(' ')[0]}`
                     )}
                   </button>
                 </div>

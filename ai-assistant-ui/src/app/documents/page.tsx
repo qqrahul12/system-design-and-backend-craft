@@ -1,8 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Upload, Search, Database, FileText, Cpu, MessageSquare, CheckCircle, Clock, Sparkles, BookOpen, FileUp } from 'lucide-react'
-import { ragService } from '@/services'
+import { ragService, authService, type UserPersona } from '@/services'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 interface Citation {
   source: string
@@ -42,6 +43,19 @@ export default function DocumentsPage() {
   const [isQuerying, setIsQuerying] = useState(false)
   const [ragResult, setRagResult] = useState<RagResponse | null>(null)
   const [queryError, setQueryError] = useState<string | null>(null)
+
+  // Auth RBAC State
+  const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+
+  useEffect(() => {
+    authService.getCurrentUser()
+      .then((u) => {
+        setCurrentUser(u)
+        setIsLoadingAuth(false)
+      })
+      .catch(() => setIsLoadingAuth(false))
+  }, [])
 
   const handleIngest = async (e?: React.FormEvent, customTitle?: string, customContent?: string) => {
     if (e) e.preventDefault()
@@ -99,6 +113,21 @@ export default function DocumentsPage() {
     } finally {
       setIsQuerying(false)
     }
+  }
+
+  const isAuthorized = Boolean(
+    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+  )
+
+  if (!isAuthorized && !isLoadingAuth) {
+    return (
+      <RbacAccessShield
+        title="Vector & Script Knowledge Ingestion Clearance Required"
+        requiredRole="EXECUTIVE_ADMIN"
+        currentUser={currentUser}
+        description="RAG knowledge base ingestion, semantic document chunking, and vector index mutations require EXECUTIVE_ADMIN clearance."
+      />
+    )
   }
 
   return (

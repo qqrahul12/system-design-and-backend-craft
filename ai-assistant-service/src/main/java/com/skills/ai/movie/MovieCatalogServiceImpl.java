@@ -50,10 +50,10 @@ public class MovieCatalogServiceImpl implements MovieCatalogService {
         this.redisTemplate = redisTemplate;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
-        initDatabase();
+        logStartupCatalogMetrics();
     }
 
-    private void initDatabase() {
+    private void logStartupCatalogMetrics() {
         if (jdbcTemplate != null) {
             try {
                 Integer count = jdbcTemplate.queryForObject(COUNT_MOVIES, Integer.class);

@@ -12,6 +12,7 @@ import org.springframework.data.redis.listener.ChannelTopic;
 import org.springframework.data.redis.listener.RedisMessageListenerContainer;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Sinks;
 
@@ -34,6 +35,9 @@ import static com.skills.ai.persistence.queries.TicketSqlQueries.*;
 @Slf4j
 @Service
 public class TicketServiceImpl implements TicketService {
+
+    private static final Duration SEAT_LOCK_TTL = Duration.ofSeconds(600);
+    private static final String REDIS_ACTIVE_SHOWTIMES_KEY = "cinemind:active_showtimes";
 
     private final String nodeId = UUID.randomUUID().toString().substring(0, 8);
     private final JdbcTemplate jdbcTemplate;
@@ -120,12 +124,17 @@ public class TicketServiceImpl implements TicketService {
             try {
                 String safeMovie = movieTitle != null ? movieTitle.replaceAll("\\s+", "_") : "ANY";
                 String safeShow = showTime != null ? showTime.replaceAll("\\s+", "_") : "ANY";
+                String showtimeSetKey = "cinemind:showtime:locked_seats:" + safeMovie + ":" + safeShow;
                 for (String seat : seats) {
                     String seatKey = "cinemind:seatlock:" + safeMovie + ":" + safeShow + ":" + seat;
-                    redisTemplate.opsForValue().set(seatKey, lockToken, Duration.ofSeconds(600));
+                    redisTemplate.opsForValue().set(seatKey, lockToken, SEAT_LOCK_TTL);
+                    redisTemplate.opsForSet().add(showtimeSetKey, seat);
                 }
+                redisTemplate.expire(showtimeSetKey, SEAT_LOCK_TTL);
+                redisTemplate.opsForSet().add(REDIS_ACTIVE_SHOWTIMES_KEY, showtimeSetKey);
+                redisTemplate.expire(REDIS_ACTIVE_SHOWTIMES_KEY, SEAT_LOCK_TTL);
                 String tokenKey = "cinemind:lock:" + lockToken;
-                redisTemplate.opsForValue().set(tokenKey, safeMovie + "|" + safeShow + "|" + String.join(",", seats), Duration.ofSeconds(600));
+                redisTemplate.opsForValue().set(tokenKey, safeMovie + "|" + safeShow + "|" + String.join(",", seats), SEAT_LOCK_TTL);
                 log.info("🔐 Acquired 10-minute distributed Redis seat lock: token={}, movie={}, seats={}", lockToken, movieTitle, seats);
             } catch (Exception e) {
                 log.warn("⚠️ Failed to write seat lock to Redis (falling back to memory): {}", e.getMessage());
@@ -162,8 +171,15 @@ public class TicketServiceImpl implements TicketService {
                         movie = parts[0];
                         show = parts[1];
                         releasedSeats = Arrays.asList(parts[2].split(","));
+                        String showtimeSetKey = "cinemind:showtime:locked_seats:" + movie + ":" + show;
                         for (String seat : releasedSeats) {
                             redisTemplate.delete("cinemind:seatlock:" + movie + ":" + show + ":" + seat);
+                            redisTemplate.opsForSet().remove(showtimeSetKey, seat);
+                        }
+                        Long remaining = redisTemplate.opsForSet().size(showtimeSetKey);
+                        if (remaining == null || remaining == 0) {
+                            redisTemplate.delete(showtimeSetKey);
+                            redisTemplate.opsForSet().remove(REDIS_ACTIVE_SHOWTIMES_KEY, showtimeSetKey);
                         }
                     }
                     redisTemplate.delete(tokenKey);
@@ -213,17 +229,28 @@ public class TicketServiceImpl implements TicketService {
 
         if (redisTemplate != null) {
             try {
-                String safeMovie = movieTitle != null ? movieTitle.replaceAll("\\s+", "_") : "*";
-                String safeShow = showTime != null ? showTime.replaceAll("\\s+", "_") : "*";
-                Set<String> keys = redisTemplate.keys("cinemind:seatlock:" + safeMovie + ":" + safeShow + ":*");
-                if (keys != null) {
-                    for (String k : keys) {
-                        String seat = k.substring(k.lastIndexOf(':') + 1);
-                        lockedSeats.add(seat);
+                String safeMovie = movieTitle != null ? movieTitle.replaceAll("\\s+", "_") : "ANY";
+                String safeShow = showTime != null ? showTime.replaceAll("\\s+", "_") : "ANY";
+                if (!"ANY".equals(safeMovie) && !"ANY".equals(safeShow)) {
+                    String showtimeSetKey = "cinemind:showtime:locked_seats:" + safeMovie + ":" + safeShow;
+                    Set<String> setMembers = redisTemplate.opsForSet().members(showtimeSetKey);
+                    if (setMembers != null && !setMembers.isEmpty()) {
+                        lockedSeats.addAll(setMembers);
+                    }
+                } else {
+                    // Non-blocking O(1) set member retrieval instead of keys()
+                    Set<String> activeShowtimes = redisTemplate.opsForSet().members(REDIS_ACTIVE_SHOWTIMES_KEY);
+                    if (activeShowtimes != null) {
+                        for (String stKey : activeShowtimes) {
+                            Set<String> seats = redisTemplate.opsForSet().members(stKey);
+                            if (seats != null) {
+                                lockedSeats.addAll(seats);
+                            }
+                        }
                     }
                 }
             } catch (Exception e) {
-                log.debug("Redis scan for locked seats skipped: {}", e.getMessage());
+                log.debug("Redis lookup for locked seats skipped: {}", e.getMessage());
             }
         }
 
@@ -267,11 +294,13 @@ public class TicketServiceImpl implements TicketService {
     }
 
     @Override
+    @Transactional
     public DigitalTicket issueTicket(String movieTitle, String showTime, String format, String auditorium, List<String> seats, double totalPaid) {
         return issueTicket(movieTitle, showTime, format, auditorium, seats, totalPaid, Instant.now());
     }
 
     @Override
+    @Transactional
     public DigitalTicket issueTicket(
             String movieTitle,
             String showTime,
@@ -346,6 +375,7 @@ public class TicketServiceImpl implements TicketService {
     }
 
     @Override
+    @Transactional
     public ValidationResult validateGatePass(String ticketId, String qrToken) {
         Optional<DigitalTicket> opt = getTicket(ticketId);
         if (opt.isEmpty()) {
@@ -387,6 +417,7 @@ public class TicketServiceImpl implements TicketService {
     }
 
     @Override
+    @Transactional
     public boolean deleteTicket(String ticketId) {
         int rows = jdbcTemplate.update(DELETE_TICKET_BY_ID, ticketId);
         if (rows > 0) {

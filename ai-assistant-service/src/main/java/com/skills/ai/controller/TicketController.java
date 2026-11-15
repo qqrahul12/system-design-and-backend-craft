@@ -1,9 +1,11 @@
 package com.skills.ai.controller;
 
 import com.skills.ai.auth.AuthService;
+import com.skills.ai.patterns.adapter.PaymentAdapterRegistry;
+import com.skills.ai.patterns.adapter.PaymentGatewayAdapter;
+import com.skills.ai.patterns.adapter.PaymentResult;
 import com.skills.ai.ticket.DigitalTicket;
 import com.skills.ai.ticket.TicketService;
-import com.skills.ai.wallet.WalletService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
@@ -18,6 +20,8 @@ import java.util.Optional;
 
 /**
  * REST Controller for issuing digital passes and auditorium gate scanning validation.
+ * Uses PaymentAdapterRegistry (Adapter / Strategy Pattern) to polymorphically authorize payments
+ * without hardcoding payment method branches or coupling to specific wallet services.
  */
 @Slf4j
 @RestController
@@ -27,7 +31,7 @@ public class TicketController {
 
     private final TicketService ticketService;
     private final AuthService authService;
-    private final WalletService walletService;
+    private final PaymentAdapterRegistry paymentAdapterRegistry;
 
     @GetMapping
     public List<DigitalTicket> listTickets() {
@@ -89,6 +93,21 @@ public class TicketController {
             } catch (Exception ignored) {}
         }
 
+        String paymentMethod = (String) req.getOrDefault("paymentMethod", "");
+        if (paymentMethod != null && !paymentMethod.isBlank() && amount > 0 && paymentAdapterRegistry != null) {
+            PaymentGatewayAdapter adapter = paymentAdapterRegistry.getAdapter(paymentMethod);
+            PaymentResult payment = adapter.processPayment(movie, amount, "Theatrical pass: " + movie + " (" + String.join(", ", seats) + ")");
+            if (!payment.success()) {
+                throw new IllegalStateException("Payment authorization failed: " + payment.message());
+            }
+            try {
+                return ticketService.issueTicket(movie, showTime, format, auditorium, seats, amount, issuedAt);
+            } catch (Exception e) {
+                adapter.refundPayment(payment.transactionId(), amount, "Automated rollback: ticket issuance failed for " + movie);
+                throw e;
+            }
+        }
+
         return ticketService.issueTicket(movie, showTime, format, auditorium, seats, amount, issuedAt);
     }
 
@@ -110,8 +129,9 @@ public class TicketController {
         DigitalTicket ticket = ticketOpt.get();
         boolean removed = ticketService.deleteTicket(id);
         if (removed) {
-            if (walletService != null && ticket.totalPaid() > 0) {
-                walletService.creditRefund(ticket.totalPaid(), "Automated refund for cancelled pass " + id);
+            if (paymentAdapterRegistry != null && ticket.totalPaid() > 0) {
+                PaymentGatewayAdapter adapter = paymentAdapterRegistry.getAdapter("WALLET");
+                adapter.refundPayment(id, ticket.totalPaid(), "Automated refund for cancelled pass " + id);
             }
             return ResponseEntity.ok(Map.of(
                     "success", true,

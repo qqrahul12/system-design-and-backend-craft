@@ -252,7 +252,7 @@ function TicketsContent() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 rounded-2xl border border-indigo-500/40 bg-indigo-950/30 text-xs text-indigo-200">
           <div className="flex items-center gap-2 font-semibold">
             <ShieldCheck className="h-4 w-4 text-indigo-400" />
-            <span>Staff Gate Attendant Mode: <strong>Sarah Jenkins</strong> (Lead Auditorium Usher)</span>
+            <span>Staff Gate Attendant Mode: <strong>{currentUser?.fullName || currentUser?.name || 'Floor Usher'}</strong> ({currentUser?.roleDisplayName || 'Auditorium Usher'})</span>
           </div>
           <span className="font-mono text-[11px] text-indigo-300 bg-indigo-900/50 px-2 py-0.5 rounded border border-indigo-700/50 self-start sm:self-auto">
             Optical Laser Turnstile Unit 01 Active
@@ -549,118 +549,154 @@ function TicketsContent() {
 
         {/* Right Column: Gate Validation Simulator & Wallet Drawer (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Gate Scanner Simulator Box */}
-          <div className="rounded-2xl border border-[#262626] bg-[#121212] p-5 shadow-xl space-y-4">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <Scan className="h-4 w-4 text-purple-400" />
-                <h3 className="text-xs font-bold uppercase tracking-wider text-white">
-                  Auditorium Gate Turnstile Scanner
-                </h3>
-              </div>
-              <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                Gate #2 Online
-              </span>
-            </div>
-
-            <p className="text-xs text-[#888] leading-relaxed">
-              Simulates the optical gate turnstile scanning the ticket&apos;s cryptographic token. Prevents gate fraud and duplicate admissions.
-            </p>
-
-            {/* Turnstile Visual Mechanism Status */}
-            <div
-              className={`p-3.5 rounded-xl border flex items-center justify-between transition-all duration-300 ${
-                turnstileState === 'OPEN'
-                  ? 'bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
-                  : turnstileState === 'DENIED'
-                  ? 'bg-rose-950/40 border-rose-500/50 shadow-lg shadow-rose-500/10'
-                  : turnstileState === 'UNLOCKING'
-                  ? 'bg-amber-950/40 border-amber-500/50'
-                  : 'bg-zinc-900/60 border-zinc-800'
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`h-4 w-4 rounded-full flex items-center justify-center shrink-0 ${
-                    turnstileState === 'OPEN'
-                      ? 'bg-emerald-400 animate-ping'
-                      : turnstileState === 'DENIED'
-                      ? 'bg-rose-500 animate-pulse'
-                      : turnstileState === 'UNLOCKING'
-                      ? 'bg-amber-400 animate-spin'
-                      : 'bg-zinc-600'
-                  }`}
-                />
-                <div>
-                  <p className="text-xs font-bold text-white tracking-wide">
-                    {turnstileState === 'OPEN'
-                      ? 'GATE UNLOCKED — PROCEED THROUGH'
-                      : turnstileState === 'DENIED'
-                      ? 'GATE LOCKED — ACCESS DENIED'
-                      : turnstileState === 'UNLOCKING'
-                      ? 'VERIFYING OPTICAL HMAC...'
-                      : 'PHYSICAL TURNSTILE BARRIER ENGAGED'}
-                  </p>
-                  <p className="text-[10px] text-zinc-400 font-mono">
-                    {turnstileState === 'OPEN'
-                      ? 'Turnstile Barrier #2: Open (Green LED)'
-                      : 'Turnstile Barrier #2: Locked (Red LED)'}
-                  </p>
+          {/* Gate Scanner Simulator Box (Restricted to Ushers / Managers / Admins with SCAN_GATE_PASS) */}
+          {Boolean(
+            currentUser &&
+            currentUser.isAuthenticated &&
+            (currentUser.role === 'AUDITORIUM_USHER' ||
+             currentUser.role === 'CINEMA_MANAGER' ||
+             currentUser.role === 'EXECUTIVE_ADMIN' ||
+             (currentUser.permissions && currentUser.permissions.includes('SCAN_GATE_PASS')))
+          ) ? (
+            <div className="rounded-2xl border border-[#262626] bg-[#121212] p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Scan className="h-4 w-4 text-purple-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                    Auditorium Gate Turnstile Scanner
+                  </h3>
                 </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Gate #2 Online
+                </span>
               </div>
+
+              <p className="text-xs text-[#888] leading-relaxed">
+                Simulates the optical gate turnstile scanning the ticket&apos;s cryptographic token. Prevents gate fraud and duplicate admissions.
+              </p>
+
+              {/* Turnstile Visual Mechanism Status */}
               <div
-                className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase ${
+                className={`p-3.5 rounded-xl border flex items-center justify-between transition-all duration-300 ${
                   turnstileState === 'OPEN'
-                    ? 'bg-emerald-500 text-black'
+                    ? 'bg-emerald-950/40 border-emerald-500/50 shadow-lg shadow-emerald-500/10'
                     : turnstileState === 'DENIED'
-                    ? 'bg-rose-500 text-white'
-                    : 'bg-zinc-800 text-zinc-400'
+                    ? 'bg-rose-950/40 border-rose-500/50 shadow-lg shadow-rose-500/10'
+                    : turnstileState === 'UNLOCKING'
+                    ? 'bg-amber-950/40 border-amber-500/50'
+                    : 'bg-zinc-900/60 border-zinc-800'
                 }`}
               >
-                {turnstileState === 'OPEN' ? 'OPEN' : 'LOCKED'}
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`h-4 w-4 rounded-full flex items-center justify-center shrink-0 ${
+                      turnstileState === 'OPEN'
+                        ? 'bg-emerald-400 animate-ping'
+                        : turnstileState === 'DENIED'
+                        ? 'bg-rose-500 animate-pulse'
+                        : turnstileState === 'UNLOCKING'
+                        ? 'bg-amber-400 animate-spin'
+                        : 'bg-zinc-600'
+                    }`}
+                  />
+                  <div>
+                    <p className="text-xs font-bold text-white tracking-wide">
+                      {turnstileState === 'OPEN'
+                        ? 'GATE UNLOCKED — PROCEED THROUGH'
+                        : turnstileState === 'DENIED'
+                        ? 'GATE LOCKED — ACCESS DENIED'
+                        : turnstileState === 'UNLOCKING'
+                        ? 'VERIFYING OPTICAL HMAC...'
+                        : 'PHYSICAL TURNSTILE BARRIER ENGAGED'}
+                    </p>
+                    <p className="text-[10px] text-zinc-400 font-mono">
+                      {turnstileState === 'OPEN'
+                        ? 'Turnstile Barrier #2: Open (Green LED)'
+                        : 'Turnstile Barrier #2: Locked (Red LED)'}
+                    </p>
+                  </div>
+                </div>
+                <div
+                  className={`px-2.5 py-1 rounded text-[10px] font-mono font-bold uppercase ${
+                    turnstileState === 'OPEN'
+                      ? 'bg-emerald-500 text-black'
+                      : turnstileState === 'DENIED'
+                      ? 'bg-rose-500 text-white'
+                      : 'bg-zinc-800 text-zinc-400'
+                  }`}
+                >
+                  {turnstileState === 'OPEN' ? 'OPEN' : 'LOCKED'}
+                </div>
+              </div>
+
+              <button
+                onClick={validateAtGate}
+                disabled={isValidating || !selectedTicket}
+                className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-lg shadow-purple-600/20 active:scale-95"
+              >
+                {isValidating ? (
+                  <>
+                    <RefreshCw className="h-4 w-4 animate-spin" /> Verifying Optical HMAC...
+                  </>
+                ) : (
+                  <>
+                    <Scan className="h-4 w-4" /> Simulate Optical Gate Scan
+                  </>
+                )}
+              </button>
+
+              {/* Validation Feedback Modal/Card */}
+              {validationResult && (
+                <div
+                  className={`rounded-xl border p-4 text-xs space-y-2 transition-all ${
+                    validationResult.valid
+                      ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
+                      : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between font-bold">
+                    <div className="flex items-center gap-2">
+                      {validationResult.valid ? (
+                        <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 text-rose-400" />
+                      )}
+                      <span>{validationResult.code}</span>
+                    </div>
+                    <span className="text-[10px] font-mono">Gate 2 Admitted</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-zinc-300">{validationResult.message}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            /* Patron Pass Presentation Box */
+            <div className="rounded-2xl border border-zinc-800 bg-[#121212] p-5 shadow-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Ticket className="h-4 w-4 text-purple-400" />
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-white">
+                    Patron Admission Gate Pass
+                  </h3>
+                </div>
+                <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                  Ready For Entry
+                </span>
+              </div>
+              <p className="text-xs text-zinc-400 leading-relaxed">
+                Present this digital pass to the floor usher or hold your mobile device up to the Optical Turnstile Scanner at the auditorium entrance.
+              </p>
+              <div className="p-3.5 rounded-xl border border-purple-500/30 bg-purple-950/20 text-xs text-purple-200 flex items-center gap-3">
+                <ShieldCheck className="h-5 w-5 text-purple-400 shrink-0" />
+                <div>
+                  <p className="font-bold text-white">Cryptographic Gate Token</p>
+                  <p className="text-[10px] text-purple-300 mt-0.5">
+                    Self-contained offline HMAC cryptographic pass verified at the turnstile.
+                  </p>
+                </div>
               </div>
             </div>
-
-            <button
-              onClick={validateAtGate}
-              disabled={isValidating || !selectedTicket}
-              className="w-full flex items-center justify-center gap-2 py-3 px-4 rounded-xl font-bold text-xs text-white bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 disabled:opacity-50 transition-all shadow-lg shadow-purple-600/20 active:scale-95"
-            >
-              {isValidating ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" /> Verifying Optical HMAC...
-                </>
-              ) : (
-                <>
-                  <Scan className="h-4 w-4" /> Simulate Optical Gate Scan
-                </>
-              )}
-            </button>
-
-            {/* Validation Feedback Modal/Card */}
-            {validationResult && (
-              <div
-                className={`rounded-xl border p-4 text-xs space-y-2 transition-all ${
-                  validationResult.valid
-                    ? 'border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                    : 'border-rose-500/40 bg-rose-500/10 text-rose-300'
-                }`}
-              >
-                <div className="flex items-center justify-between font-bold">
-                  <div className="flex items-center gap-2">
-                    {validationResult.valid ? (
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    ) : (
-                      <AlertTriangle className="h-4 w-4 text-rose-400" />
-                    )}
-                    <span>{validationResult.code}</span>
-                  </div>
-                  <span className="text-[10px] font-mono">Gate 2 Admitted</span>
-                </div>
-                <p className="text-[11px] leading-relaxed text-zinc-300">{validationResult.message}</p>
-              </div>
-            )}
-          </div>
+          )}
 
           {/* Wallet List */}
           <div className="space-y-3">

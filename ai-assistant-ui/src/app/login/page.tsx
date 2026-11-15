@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import {
@@ -9,86 +9,132 @@ import {
   Mail,
   ShieldCheck,
   CheckCircle2,
+  AlertCircle,
   ArrowRight,
   RefreshCw,
   UserCheck,
-  Crown,
-  Key,
+  Loader2,
 } from 'lucide-react'
-import { authService } from '@/services'
+import { authService, UserPersona, validateLoginInput, validateRegisterInput } from '@/services/authService'
 
-const DEMO_PERSONAS = [
-  {
-    name: 'Alex Vance',
-    email: 'alex.vance@cinemind.vip',
-    role: 'VIP_PATRON',
-    badge: '👑 VIP Patron',
-    tier: 'CineMind Founder Gold (20% Off)',
-    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop',
-  },
-  {
-    name: 'Marcus Kane',
-    email: 'marcus.kane@cinemind-hq.com',
-    role: 'EXECUTIVE_ADMIN',
-    badge: '🛡️ Circuit Director',
-    tier: 'Executive Box Office Operations',
-    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop',
-  },
-  {
-    name: 'Sarah Jenkins',
-    email: 'sarah.jenkins@cinemind-theaters.com',
-    role: 'AUDITORIUM_USHER',
-    badge: '🎟️ Floor Usher',
-    tier: 'Gate Scanning & Kitchen Delivery',
-    avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop',
-  },
-  {
-    name: 'Jordan Lee',
-    email: 'jordan.lee@example.com',
-    role: 'STANDARD_GUEST',
-    badge: '👤 General Guest',
-    tier: 'Standard Moviegoer',
-    avatar: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&auto=format&fit=crop',
-  },
-]
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+interface FieldErrors {
+  fullName?: string
+  email?: string
+  password?: string
+}
 
+// ---------------------------------------------------------------------------
+// Component
+// ---------------------------------------------------------------------------
 export default function LoginPage() {
   const router = useRouter()
   const [activeTab, setActiveTab] = useState<'signin' | 'register'>('signin')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [fullName, setFullName] = useState('')
+  const [fieldErrors, setFieldErrors] = useState<FieldErrors>({})
   const [loading, setLoading] = useState(false)
   const [statusMsg, setStatusMsg] = useState<string | null>(null)
+  const [statusType, setStatusType] = useState<'success' | 'error'>('success')
 
-  const handleLogin = async (e?: React.FormEvent, customEmail?: string) => {
+  // Personas loaded from API — no hardcoded arrays
+  const [personas, setPersonas] = useState<UserPersona[]>([])
+  const [personasLoading, setPersonasLoading] = useState(true)
+
+  useEffect(() => {
+    authService
+      .getPersonas()
+      .then(setPersonas)
+      .catch(() => setPersonas([]))
+      .finally(() => setPersonasLoading(false))
+  }, [])
+
+  // -------------------------------------------------------------------------
+  // Field-level blur validators
+  // -------------------------------------------------------------------------
+  const validateFieldOnBlur = (field: keyof FieldErrors) => {
+    if (field === 'email') {
+      const errs = validateLoginInput(email, 'placeholder')
+      setFieldErrors((prev) => ({ ...prev, email: errs.find((e) => e.field === 'email')?.message }))
+    }
+    if (field === 'password') {
+      const errs = validateLoginInput('a@b.co', password)
+      setFieldErrors((prev) => ({ ...prev, password: errs.find((e) => e.field === 'password')?.message }))
+    }
+    if (field === 'fullName') {
+      if (activeTab === 'register') {
+        const errs = validateRegisterInput(fullName, 'a@b.co', 'placeholder')
+        setFieldErrors((prev) => ({ ...prev, fullName: errs.find((e) => e.field === 'fullName')?.message }))
+      }
+    }
+  }
+
+  // -------------------------------------------------------------------------
+  // Login handler (manual form + 1-click persona)
+  // -------------------------------------------------------------------------
+  const handleLogin = async (e?: React.FormEvent, quickPersonaEmail?: string, quickPersonaRole?: string) => {
     if (e) e.preventDefault()
+
+    const targetEmail = quickPersonaEmail ?? email
+    const targetRole  = quickPersonaRole  ?? ''
+
+    // Skip password validation for 1-click persona buttons (they are pre-trusted demo accounts)
+    const isQuickLogin = Boolean(quickPersonaEmail)
+
+    const errors = isQuickLogin
+      ? [] // 1-click persona bypasses password — it authenticates by known email+role
+      : activeTab === 'register'
+        ? validateRegisterInput(fullName, targetEmail, password)
+        : validateLoginInput(targetEmail, password)
+
+    if (errors.length > 0) {
+      const mapped: FieldErrors = {}
+      errors.forEach((err) => { mapped[err.field as keyof FieldErrors] = err.message })
+      setFieldErrors(mapped)
+      setStatusType('error')
+      setStatusMsg('Please fix the highlighted fields before continuing.')
+      return
+    }
+
+    setFieldErrors({})
     setLoading(true)
-    const targetEmail = customEmail || email
+    setStatusMsg(null)
 
     try {
-      const user = await authService.login(targetEmail)
-      setStatusMsg(`Welcome back, ${user.name || 'Patron'}! Redirecting...`)
+      const user = await authService.login(targetEmail, targetRole, fullName || undefined)
+      setStatusType('success')
+      setStatusMsg(`Welcome, ${user.fullName || user.name || 'Patron'}! Redirecting...`)
       setTimeout(() => {
         if (user.role === 'EXECUTIVE_ADMIN') {
           router.push('/admin')
         } else if (user.role === 'AUDITORIUM_USHER') {
           router.push('/tickets')
+        } else if (user.role === 'CINEMA_MANAGER') {
+          router.push('/manager')
         } else {
           router.push('/booking')
         }
       }, 600)
     } catch {
-      setStatusMsg('Connection error reaching Auth microservice.')
+      setStatusType('error')
+      setStatusMsg('Authentication failed. Please check your credentials and try again.')
     } finally {
       setLoading(false)
     }
   }
 
-  const handleSelectQuickAccount = (p: typeof DEMO_PERSONAS[0]) => {
-    setEmail(p.email)
-    handleLogin(undefined, p.email)
-  }
+  // -------------------------------------------------------------------------
+  // Render helpers
+  // -------------------------------------------------------------------------
+  const inputClass = (field: keyof FieldErrors) =>
+    `w-full rounded-xl bg-[#1c1c1c] border pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#555] focus:outline-none transition ${
+      fieldErrors[field]
+        ? 'border-red-500/70 focus:border-red-500'
+        : 'border-[#333] focus:border-purple-500'
+    }`
 
   return (
     <div className="min-h-screen bg-[#0d0d0d] flex items-center justify-center p-6">
@@ -106,7 +152,7 @@ export default function LoginPage() {
                   SECURITY
                 </span>
               </div>
-              <p className="text-xs text-[#666] font-mono">Unified Identity & Access Gateway</p>
+              <p className="text-xs text-[#666] font-mono">Unified Identity &amp; Access Gateway</p>
             </div>
           </div>
 
@@ -119,33 +165,49 @@ export default function LoginPage() {
             </p>
           </div>
 
-          {/* Quick Demo Switcher Cards */}
+          {/* Quick Demo Switcher Cards — loaded from API */}
           <div className="space-y-2.5">
             <span className="text-[11px] font-mono uppercase tracking-wider text-[#666] font-semibold">
               Instant 1-Click Persona Login
             </span>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {DEMO_PERSONAS.map((p) => (
-                <button
-                  key={p.role}
-                  type="button"
-                  onClick={() => handleSelectQuickAccount(p)}
-                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#161616] hover:bg-[#202020] border border-[#252525] hover:border-purple-500/40 text-left transition group"
-                >
-                  <img
-                    src={p.avatar}
-                    alt={p.name}
-                    className="w-8 h-8 rounded-full object-cover border border-[#333]"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white truncate group-hover:text-purple-300">
-                      {p.name}
-                    </p>
-                    <p className="text-[10px] text-[#888] truncate">{p.badge}</p>
-                  </div>
-                </button>
-              ))}
-            </div>
+            {personasLoading ? (
+              <div className="flex items-center gap-2 text-xs text-[#666] py-2">
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                <span>Loading personas from server…</span>
+              </div>
+            ) : personas.length === 0 ? (
+              <p className="text-xs text-[#666] py-2">No demo personas available. Use the form to sign in.</p>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                {personas.map((p) => (
+                  <button
+                    key={p.role}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleLogin(undefined, p.email, p.role)}
+                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#161616] hover:bg-[#202020] border border-[#252525] hover:border-purple-500/40 text-left transition group disabled:opacity-50"
+                  >
+                    {(p.avatarUrl || p.avatar) ? (
+                      <img
+                        src={p.avatarUrl ?? p.avatar}
+                        alt={p.fullName ?? p.name ?? p.role}
+                        className="w-8 h-8 rounded-full object-cover border border-[#333]"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-purple-800/40 flex items-center justify-center border border-[#333]">
+                        <UserCheck className="h-4 w-4 text-purple-400" />
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white truncate group-hover:text-purple-300">
+                        {p.fullName ?? p.name ?? p.role}
+                      </p>
+                      <p className="text-[10px] text-[#888] truncate">{p.roleDisplayName ?? p.role}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs text-[#666] pt-2">
@@ -159,7 +221,7 @@ export default function LoginPage() {
           {/* Tab Switcher */}
           <div className="flex border-b border-[#242424] mb-6">
             <button
-              onClick={() => setActiveTab('signin')}
+              onClick={() => { setActiveTab('signin'); setFieldErrors({}); setStatusMsg(null) }}
               className={`pb-3 text-xs font-bold transition border-b-2 mr-6 ${
                 activeTab === 'signin'
                   ? 'border-purple-500 text-white'
@@ -169,7 +231,7 @@ export default function LoginPage() {
               Sign In
             </button>
             <button
-              onClick={() => setActiveTab('register')}
+              onClick={() => { setActiveTab('register'); setFieldErrors({}); setStatusMsg(null) }}
               className={`pb-3 text-xs font-bold transition border-b-2 ${
                 activeTab === 'register'
                   ? 'border-purple-500 text-white'
@@ -180,14 +242,25 @@ export default function LoginPage() {
             </button>
           </div>
 
+          {/* Status banner — distinct styles for success vs error */}
           {statusMsg && (
-            <div className="rounded-xl bg-purple-950/60 border border-purple-500/40 p-3 text-xs text-purple-200 flex items-center gap-2 mb-4">
-              <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
+            <div
+              className={`rounded-xl border p-3 text-xs flex items-center gap-2 mb-4 ${
+                statusType === 'success'
+                  ? 'bg-purple-950/60 border-purple-500/40 text-purple-200'
+                  : 'bg-red-950/60 border-red-500/40 text-red-200'
+              }`}
+            >
+              {statusType === 'success' ? (
+                <CheckCircle2 className="h-4 w-4 text-purple-400 shrink-0" />
+              ) : (
+                <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+              )}
               <span>{statusMsg}</span>
             </div>
           )}
 
-          <form onSubmit={(e) => handleLogin(e)} className="space-y-4">
+          <form onSubmit={(e) => handleLogin(e)} className="space-y-4" noValidate>
             {activeTab === 'register' && (
               <div>
                 <label className="block text-xs font-medium text-[#aaa] mb-1.5">
@@ -198,12 +271,18 @@ export default function LoginPage() {
                   <input
                     type="text"
                     value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    required
-                    className="w-full rounded-xl bg-[#1c1c1c] border border-[#333] pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-purple-500 transition"
-                    placeholder="Alex Vance"
+                    onChange={(e) => { setFullName(e.target.value); setFieldErrors((prev) => ({ ...prev, fullName: undefined })) }}
+                    onBlur={() => validateFieldOnBlur('fullName')}
+                    autoComplete="name"
+                    className={inputClass('fullName')}
+                    placeholder="Enter your full name"
                   />
                 </div>
+                {fieldErrors.fullName && (
+                  <p className="mt-1 text-[11px] text-red-400 flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3 shrink-0" />{fieldErrors.fullName}
+                  </p>
+                )}
               </div>
             )}
 
@@ -216,12 +295,19 @@ export default function LoginPage() {
                 <input
                   type="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="w-full rounded-xl bg-[#1c1c1c] border border-[#333] pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-purple-500 transition"
+                  onChange={(e) => { setEmail(e.target.value); setFieldErrors((prev) => ({ ...prev, email: undefined })) }}
+                  onBlur={() => validateFieldOnBlur('email')}
+                  autoComplete="email"
+                  inputMode="email"
+                  className={inputClass('email')}
                   placeholder="name@cinemind.vip"
                 />
               </div>
+              {fieldErrors.email && (
+                <p className="mt-1 text-[11px] text-red-400 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3 shrink-0" />{fieldErrors.email}
+                </p>
+              )}
             </div>
 
             <div>
@@ -233,12 +319,18 @@ export default function LoginPage() {
                 <input
                   type="password"
                   value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  required
-                  className="w-full rounded-xl bg-[#1c1c1c] border border-[#333] pl-10 pr-4 py-2.5 text-xs text-white placeholder-[#555] focus:outline-none focus:border-purple-500 transition"
+                  onChange={(e) => { setPassword(e.target.value); setFieldErrors((prev) => ({ ...prev, password: undefined })) }}
+                  onBlur={() => validateFieldOnBlur('password')}
+                  autoComplete={activeTab === 'register' ? 'new-password' : 'current-password'}
+                  className={inputClass('password')}
                   placeholder="••••••••••••"
                 />
               </div>
+              {fieldErrors.password && (
+                <p className="mt-1 text-[11px] text-red-400 flex items-center gap-1">
+                  <AlertCircle className="h-3 w-3 shrink-0" />{fieldErrors.password}
+                </p>
+              )}
             </div>
 
             <div className="flex items-center justify-between text-xs text-[#888] pt-1">

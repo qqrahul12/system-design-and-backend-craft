@@ -30,6 +30,8 @@ import {
   Crown,
 } from 'lucide-react'
 import { adminService, movieService, authService } from '@/services'
+import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -232,7 +234,7 @@ export default function AdminPage() {
   const [isDrafting, setIsDrafting] = useState(false)
   const [briefing, setBriefing] = useState<ExecutiveBriefing | null>(null)
   const [isBriefingLoading, setIsBriefingLoading] = useState(false)
-  const [actionNotice, setActionNotice] = useState<string | null>(null)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
   const [copiedMemo, setCopiedMemo] = useState(false)
   const [isSurgeActive, setIsSurgeActive] = useState<boolean>(false)
   const [currentUser, setCurrentUser] = useState<any>(null)
@@ -322,8 +324,7 @@ export default function AdminPage() {
       const u = await authService.switchRole('EXECUTIVE_ADMIN')
       if (u) {
         setCurrentUser(u as any)
-        setActionNotice('Elevated session credentials to Executive Administrator (Marcus Kane)')
-        setTimeout(() => setActionNotice(null), 4000)
+        showNotice(`Elevated session credentials to ${u.roleDisplayName || 'Executive Administrator'} (${u.fullName || u.name || 'Admin'})`, 'success', 'Persona Switched')
       }
     } catch {} finally {
       setIsSwitchingPersona(false)
@@ -449,7 +450,7 @@ export default function AdminPage() {
 
   const handleAiDraft = async () => {
     if (!newTitle.trim()) {
-      alert('Please enter a movie title first!')
+      showNotice('Please enter a movie title first before generating AI metadata!', 'warning', 'Movie Title Required')
       return
     }
     setIsDrafting(true)
@@ -466,9 +467,12 @@ export default function AdminPage() {
         if (drafted.director) setNewDirector(drafted.director)
         if (drafted.cast) setNewCast(drafted.cast)
         if (drafted.ageRating) setNewAgeRating(drafted.ageRating)
+        showNotice(`AI draft generated for "${newTitle}"!`, 'success', 'Draft Ready')
       }
-    } catch (err) {
+    } catch (err: unknown) {
       console.error('Drafting failed', err)
+      const errorMsg = err instanceof Error ? err.message : 'AI drafting service unavailable'
+      showNotice(`Failed to draft metadata: ${errorMsg}`, 'error', 'AI Drafting Error')
     } finally {
       setIsDrafting(false)
     }
@@ -558,9 +562,16 @@ export default function AdminPage() {
     setTimeout(() => setCopiedMemo(false), 3000)
   }
 
-  const showNotice = (msg: string) => {
-    setActionNotice(msg)
-    setTimeout(() => setActionNotice(null), 4000)
+  const showNotice = (
+    msg: string,
+    type: 'success' | 'error' | 'warning' | 'info' = 'success',
+    title?: string
+  ) => {
+    setToast({
+      type,
+      title: title || (type === 'success' ? 'Operation Completed' : type === 'error' ? 'Operation Failed' : type === 'warning' ? 'Attention' : 'Notice'),
+      message: msg,
+    })
   }
 
   const resetForm = () => {
@@ -587,86 +598,39 @@ export default function AdminPage() {
     return matchesSearch && matchesGenre
   })
 
-  // Role-Based UI Gating: Require EXECUTIVE_ADMIN privileges
-  if (currentUser && currentUser.role !== 'EXECUTIVE_ADMIN') {
+  // Role-Based UI Gating: Strictly require authenticated EXECUTIVE_ADMIN privileges
+  const isExecutiveAdmin = Boolean(
+    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+  )
+
+  if (!isExecutiveAdmin) {
     return (
       <div className="mx-auto max-w-3xl py-12 px-4 space-y-6">
-        {actionNotice && (
-          <div className="fixed top-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-5 py-3 text-sm text-emerald-200 shadow-2xl backdrop-blur-md animate-fade-in">
-            <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-            <span>{actionNotice}</span>
-          </div>
-        )}
+        {/* Toast Notification */}
+        {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
-        <div className="rounded-3xl border border-amber-500/30 bg-gradient-to-b from-amber-950/20 via-zinc-900 to-zinc-950 p-8 text-center space-y-6 shadow-2xl">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-400">
-            <Lock className="h-8 w-8" />
-          </div>
-          <div className="space-y-2">
-            <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-300 uppercase tracking-wider">
-              <ShieldCheck className="h-3.5 w-3.5 text-amber-400" />
-              Restricted Executive Operations Zone
-            </div>
-            <h2 className="text-2xl font-black text-white">Executive Clearance Required</h2>
-            <p className="text-sm text-zinc-400 max-w-lg mx-auto">
-              You are currently signed in as <span className="font-semibold text-white">{currentUser.fullName}</span> (<span className="text-amber-400 font-semibold">{currentUser.roleDisplayName}</span>). The Executive Studio requires <span className="text-purple-400 font-semibold">EXECUTIVE_ADMIN</span> clearance to access Box Office telemetry, Dynamic Yield Surge controls, and Catalog publishing.
-            </p>
-          </div>
-
-          <div className="p-4 rounded-2xl bg-zinc-900/80 border border-zinc-800 text-left space-y-3 max-w-md mx-auto">
-            <div className="flex items-center justify-between text-xs">
-              <span className="text-zinc-500">Current Session Persona:</span>
-              <span className="font-mono text-zinc-400">{currentUser.role}</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <img src={currentUser.avatarUrl} alt="" className="h-10 w-10 rounded-full border border-zinc-700 object-cover" />
-              <div>
-                <div className="font-bold text-white text-sm">{currentUser.fullName}</div>
-                <div className="text-xs text-zinc-400">{currentUser.membershipTier || currentUser.department || 'Standard Patron'}</div>
-              </div>
-            </div>
-          </div>
-
-          <div className="pt-2">
-            <button
-              onClick={switchToAdminPersona}
-              disabled={isSwitchingPersona}
-              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 via-indigo-600 to-amber-600 hover:from-purple-500 hover:to-amber-500 text-white font-bold text-sm shadow-xl shadow-purple-600/30 transition-all active:scale-95 disabled:opacity-50"
-            >
-              {isSwitchingPersona ? (
-                <>
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                  Switching Credentials...
-                </>
-              ) : (
-                <>
-                  <Crown className="h-4 w-4 text-amber-300" />
-                  Switch to Marcus Kane (Executive Admin)
-                </>
-              )}
-            </button>
-          </div>
-        </div>
+        <RbacAccessShield
+          title="Executive Clearance Required"
+          requiredRoles={['EXECUTIVE_ADMIN']}
+          currentUser={currentUser}
+          description="Access to Circuit Executive Operations, Yield Multipliers, APM Telemetry, and Circuit Analytics is strictly restricted to EXECUTIVE_ADMIN clearance."
+          onRoleSwitched={switchToAdminPersona}
+        />
       </div>
     )
   }
 
   return (
     <div className="space-y-8 pb-16">
-      {/* Action Notification Toast */}
-      {actionNotice && (
-        <div className="fixed top-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-500/30 bg-emerald-950/90 px-5 py-3 text-sm text-emerald-200 shadow-2xl backdrop-blur-md animate-fade-in">
-          <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-          <span>{actionNotice}</span>
-        </div>
-      )}
+      {/* Toast Notification */}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
       {/* Verified Executive Session Banner */}
       {currentUser?.role === 'EXECUTIVE_ADMIN' && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 rounded-2xl border border-purple-500/30 bg-purple-950/20 text-xs">
           <div className="flex items-center gap-2 text-purple-300 font-semibold">
             <ShieldCheck className="h-4 w-4 text-purple-400" />
-            <span>Verified Executive Session: <strong>Marcus Kane</strong> (Chief Revenue Officer) • Clearance Level 5</span>
+            <span>Verified Executive Session: <strong>{currentUser?.fullName || currentUser?.name || 'Circuit Executive'}</strong> ({currentUser?.membershipTier || currentUser?.roleDisplayName || 'Executive Operations'}) • Clearance Level 5</span>
           </div>
           <span className="font-mono text-[11px] text-zinc-400 bg-zinc-900/80 px-2 py-0.5 rounded border border-zinc-800 self-start sm:self-auto">
             RBAC: EXECUTIVE_ADMIN

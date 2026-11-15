@@ -8,15 +8,25 @@ import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * REST Controller exposing CineMind authentication and demo multi-role switching.
+ *
+ * <p>Validation rules enforced before any service call:
+ * <ul>
+ *   <li>POST /login — email must be non-blank and match RFC 5322 format; role, if supplied, must be a known UserRole enum value.</li>
+ *   <li>POST /switch-role — role must be non-blank and a known UserRole enum value.</li>
+ * </ul>
  */
 @Slf4j
 @RestController
 @RequestMapping("/api/v1/auth")
 @RequiredArgsConstructor
 public class AuthController {
+
+    private static final Pattern EMAIL_PATTERN =
+            Pattern.compile("^[^\\s@]+@[^\\s@]+\\.[^\\s@]{2,}$");
 
     private final AuthService authService;
 
@@ -30,31 +40,70 @@ public class AuthController {
         return ResponseEntity.ok(authService.getAvailablePersonas());
     }
 
+    @PostMapping("/users/batch")
+    public ResponseEntity<Map<String, Object>> batchUpsertUsers(@RequestBody List<AuthService.UserProfile> profiles) {
+        authService.requireRole(AuthService.UserRole.EXECUTIVE_ADMIN, AuthService.UserRole.CINEMA_MANAGER);
+        int count = 0;
+        for (AuthService.UserProfile p : profiles) {
+            authService.upsertUserProfile(p);
+            count++;
+        }
+        return ResponseEntity.ok(Map.of("status", "SUCCESS", "upserted", count));
+    }
+
     @PostMapping("/switch-role")
     public ResponseEntity<AuthService.UserProfile> switchRole(@RequestBody Map<String, String> req) {
-        String roleStr = req.getOrDefault("role", "VIP_PATRON");
+        String roleStr = req.getOrDefault("role", "").trim();
+        if (roleStr.isBlank()) {
+            return ResponseEntity.badRequest().build();
+        }
         try {
-            AuthService.UserRole targetRole = AuthService.UserRole.valueOf(roleStr.toUpperCase().trim());
+            AuthService.UserRole targetRole = AuthService.UserRole.valueOf(roleStr.toUpperCase());
             return ResponseEntity.ok(authService.switchRole(targetRole));
         } catch (IllegalArgumentException e) {
+            log.warn("switchRole: unknown role '{}' rejected with 400", roleStr);
             return ResponseEntity.badRequest().build();
         }
     }
 
     @PostMapping("/login")
     public ResponseEntity<AuthService.UserProfile> login(@RequestBody Map<String, String> req) {
-        String roleStr = req.get("role");
-        if (roleStr != null && !roleStr.isBlank()) {
+        // --- Explicit role-based login (persona switcher) ---
+        String roleStr = req.getOrDefault("role", "").trim();
+        if (!roleStr.isBlank()) {
             try {
-                AuthService.UserRole targetRole = AuthService.UserRole.valueOf(roleStr.toUpperCase().trim());
+                AuthService.UserRole targetRole = AuthService.UserRole.valueOf(roleStr.toUpperCase());
                 return ResponseEntity.ok(authService.switchRole(targetRole));
-            } catch (IllegalArgumentException ignored) {
+            } catch (IllegalArgumentException e) {
+                log.warn("login: unknown role '{}' rejected with 400", roleStr);
+                return ResponseEntity.badRequest().build();
             }
         }
-        String email = req.getOrDefault("email", "").toLowerCase().trim();
-        AuthService.UserRole role = email.contains("admin") ? AuthService.UserRole.EXECUTIVE_ADMIN
-                : email.contains("usher") ? AuthService.UserRole.AUDITORIUM_USHER
+
+        // --- Email-based login ---
+        String email = req.getOrDefault("email", "").trim().toLowerCase();
+
+        // Validate: email must be present and well-formed
+        if (email.isBlank()) {
+            log.warn("login: rejected — email field is blank");
+            return ResponseEntity.badRequest()
+                    .body(null); // 400 Bad Request: email is required
+        }
+        if (!EMAIL_PATTERN.matcher(email).matches()) {
+            log.warn("login: rejected — malformed email '{}'", email);
+            return ResponseEntity.badRequest().body(null); // 400 Bad Request: invalid email format
+        }
+
+        // Derive role from email domain — extend this to a real user-store lookup in production
+        AuthService.UserRole role = email.contains("admin")
+                ? AuthService.UserRole.EXECUTIVE_ADMIN
+                : email.contains("manager")
+                ? AuthService.UserRole.CINEMA_MANAGER
+                : email.contains("usher") || email.contains("theater") || email.contains("theatre")
+                ? AuthService.UserRole.AUDITORIUM_USHER
                 : AuthService.UserRole.VIP_PATRON;
+
+        log.info("login: email='{}' resolved to role={}", email, role);
         return ResponseEntity.ok(authService.switchRole(role));
     }
 
@@ -64,7 +113,7 @@ public class AuthController {
         return ResponseEntity.ok(Map.of(
                 "status", "LOGGED_OUT",
                 "message", "Successfully signed out of CineMind session",
-                "user", guest
+                "currentUser", guest
         ));
     }
 }

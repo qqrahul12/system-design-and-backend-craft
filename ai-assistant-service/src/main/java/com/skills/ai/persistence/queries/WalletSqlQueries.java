@@ -14,17 +14,20 @@ public final class WalletSqlQueries {
     public static final String INSERT_WALLET =
             "INSERT INTO wallets (wallet_id, currency, balance, updated_at) VALUES (?, 'USD', 0.00, CURRENT_TIMESTAMP)";
 
-    public static final String MIGRATE_LEGACY_WALLET =
-            "UPDATE wallets SET wallet_id = ? WHERE wallet_id = 'WLT-CINEMIND-8842'";
-
-    public static final String MIGRATE_LEGACY_TRANSACTIONS =
-            "UPDATE wallet_transactions SET wallet_id = ? WHERE wallet_id = 'WLT-CINEMIND-8842'";
-
     public static final String SELECT_BALANCE_BY_ID =
             "SELECT balance FROM wallets WHERE wallet_id = ?";
 
+    public static final String SELECT_WALLET_BY_ID =
+            "SELECT wallet_id, currency, balance FROM wallets WHERE wallet_id = ?";
+
     public static final String SELECT_BALANCE_FOR_UPDATE =
             "SELECT balance FROM wallets WHERE wallet_id = ? FOR UPDATE";
+
+    public static final String SELECT_WALLET_FOR_UPDATE =
+            "SELECT wallet_id, currency, balance FROM wallets WHERE wallet_id = ? FOR UPDATE";
+
+    public static final String UPDATE_WALLET_CURRENCY =
+            "UPDATE wallets SET currency = ?, updated_at = ? WHERE wallet_id = ?";
 
     public static final String SELECT_RECENT_TRANSACTIONS =
             "SELECT transaction_id, type, amount, balance_after, description, created_at " +

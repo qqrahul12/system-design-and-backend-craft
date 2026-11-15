@@ -68,8 +68,21 @@ Before executing any git commit or push to remote repositories, you MUST run the
 - **Distributed Caching Standard**:
   - If caching is required for performance, use Redis with explicit TTLs and cache invalidation policies (`@Cacheable`, `@CacheEvict`), never uncoordinated local JVM memory.
 
-### 7. Automated Quality Gates
+### 7. Zero Hardcoded Data Policy & Externalized SSOT Ingestion
+- **Zero Mock / Seed Arrays in Code**:
+  - Never embed hardcoded seed fixtures, mock collections, dummy data arrays, or hardcoded persona names in Java service classes, controllers, or React UI pages (`List.of(...)`, `seedInitial...`, hardcoded persona strings like "Switch to Elena Rostova").
+  - Business recommendations (such as combos or bundle discounts) must be computed dynamically against database records, never by hardcoding specific IDs.
+- **Zero Hardcoded Values in SQL Queries**:
+  - All SQL queries (`JdbcTemplate`, JPA) must be parameterized (`?` or `:namedParam`). Never hardcode literal identifiers or domain values inside query strings (`WHERE id = '...'`).
+- **Zero Inline DDL in Application Java Code**:
+  - Never execute DDL statements (`CREATE TABLE`, `ALTER TABLE`, `DROP TABLE`, `CREATE INDEX`) via inline `jdbcTemplate.execute(...)` inside Java service methods or constructors.
+  - All database schemas and initial migration seeds must reside strictly in dedicated database initialization scripts (`schema.sql`) or Flyway migration scripts.
+- **API-Driven Ingestion & DB Migrations**:
+  - All catalog items, menus, user personas, and initial entities must be ingested dynamically through documented REST API endpoints (`POST /seed`, `POST /items/batch`, `POST /api/v1/auth/users/batch`) or database migration scripts (`schema.sql`).
+  - PostgreSQL is the sole Single Source of Truth. If records are missing, return 404/empty rather than falling back to in-memory fixtures.
+
+### 8. Automated Quality Gates
 All code changes must pass:
 1. `cd ai-assistant-service && mvn test-compile` (0 errors)
 2. `cd ai-assistant-ui && ./node_modules/.bin/tsc --noEmit` (0 errors)
-3. `./node_bin/node test-suite.mjs` (57/57 tests passing, 100%)
+3. `./node_bin/node test-suite.mjs` (59/59 tests passing, 100%)

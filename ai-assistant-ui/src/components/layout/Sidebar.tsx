@@ -27,8 +27,11 @@ import {
   Key,
   LogIn,
   Shield,
+  Layers,
 } from 'lucide-react'
 import { clsx } from 'clsx'
+import { authService, walletService, apiClient } from '@/services'
+import { formatCurrency } from '@/services/walletService'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -54,7 +57,7 @@ interface NavSection {
 
 const navSections: NavSection[] = [
   {
-    title: 'Guest Experience',
+    title: 'Customer View',
     items: [
       {
         href: '/booking',
@@ -72,36 +75,29 @@ const navSections: NavSection[] = [
         requiresAuth: false,
       },
       {
-        href: '/tickets',
-        label: 'Pass Wallet & Gate Scan',
-        icon: Ticket,
-        description: 'HMAC QR gate check-in',
-        badge: 'NEW',
-        requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'AUDITORIUM_USHER', 'STANDARD_GUEST'],
-      },
-      {
         href: '/chat',
         label: 'AI Cinema Concierge',
         icon: MessageSquare,
         description: 'Dual Gemini 3.8 + Groq LPU',
         requiresAuth: false,
       },
-    ],
-  },
-  {
-    title: 'Fintech & Social Hub',
-    requiresAuth: true,
-    allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'STANDARD_GUEST'],
-    items: [
+      {
+        href: '/tickets',
+        label: 'Pass Wallet & Gate Scan',
+        icon: Ticket,
+        description: 'HMAC QR gate check-in',
+        badge: 'VIP',
+        requiresAuth: true,
+        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'AUDITORIUM_USHER', 'EXECUTIVE_ADMIN'],
+      },
       {
         href: '/wallet',
         label: 'CineCash Digital Wallet',
         icon: Wallet,
-        description: 'Instant top-up & cashback',
+        description: 'Multi-currency stored value',
         badge: 'VIP',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'STANDARD_GUEST'],
+        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
       },
       {
         href: '/split',
@@ -110,28 +106,76 @@ const navSections: NavSection[] = [
         description: 'Group bill splitting & settle',
         badge: 'NEW',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'STANDARD_GUEST'],
+        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
       },
       {
         href: '/profile',
-        label: 'Profile & RBAC Security',
+        label: 'Profile & Persona Hub',
         icon: User,
-        description: 'Persona switch & permissions',
+        description: 'Switch persona & roles',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'EXECUTIVE_ADMIN', 'AUDITORIUM_USHER', 'STANDARD_GUEST'],
+        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'AUDITORIUM_USHER', 'EXECUTIVE_ADMIN'],
       },
     ],
   },
   {
-    title: 'Enterprise Operations',
+    title: 'Manager View',
     requiresAuth: true,
-    allowedRoles: ['EXECUTIVE_ADMIN'], // Only visible to Executive Operations Directors
+    allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+    items: [
+      {
+        href: '/manager',
+        label: 'Operations Control Hub',
+        icon: Sliders,
+        description: 'All-in-one cinema operations',
+        badge: 'MGR',
+        requiresAuth: true,
+        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+      },
+      {
+        href: '/manager?tab=auth',
+        label: 'Auth Flow Manager',
+        icon: Key,
+        description: 'Sessions, tokens & revocation',
+        requiresAuth: true,
+        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+      },
+      {
+        href: '/manager?tab=rbac',
+        label: 'RBAC Security Matrix',
+        icon: Shield,
+        description: 'Role-permission governance',
+        requiresAuth: true,
+        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+      },
+      {
+        href: '/manager?tab=menu',
+        label: 'F&B Menu Manager',
+        icon: UtensilsCrossed,
+        description: 'Dishes, stock & AI combos',
+        requiresAuth: true,
+        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+      },
+      {
+        href: '/manager?tab=theatre',
+        label: 'Movie & Theatre Manager',
+        icon: Film,
+        description: 'Auditoriums, seats & surge',
+        requiresAuth: true,
+        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+      },
+    ],
+  },
+  {
+    title: 'Admin View',
+    requiresAuth: true,
+    allowedRoles: ['EXECUTIVE_ADMIN'],
     items: [
       {
         href: '/admin',
         label: 'Executive Studio & Intel',
-        icon: Sliders,
-        description: 'Box office, yield & catalog',
+        icon: BarChart3,
+        description: 'Box office, yield & POs',
         badge: 'PRO',
         requiresAuth: true,
         allowedRoles: ['EXECUTIVE_ADMIN'],
@@ -155,15 +199,15 @@ const navSections: NavSection[] = [
       },
       {
         href: '/analytics',
-        label: 'LLMOps & Telemetry',
-        icon: BarChart3,
-        description: 'Semantic cache & firewall',
+        label: 'LLMOps & Firewall',
+        icon: Zap,
+        description: 'Semantic cache & injection filter',
         requiresAuth: true,
         allowedRoles: ['EXECUTIVE_ADMIN'],
       },
       {
         href: '/documents',
-        label: 'Script & Catalog Knowledge',
+        label: 'Script & Vector Knowledge',
         icon: FileText,
         description: 'Vector embeddings & RAG',
         requiresAuth: true,
@@ -194,44 +238,29 @@ export default function Sidebar() {
   )
 
   const fetchAuthAndWallet = async () => {
-    if (pathname === '/logout') {
+    const storedRole = typeof window !== 'undefined' ? localStorage.getItem('cinemind_role') : null
+    if (pathname === '/logout' || storedRole === 'ANONYMOUS') {
       setCurrentUser(null)
       setWalletBalance(0)
       return
     }
     try {
-      const authRes = await fetch(`${API_BASE}/api/v1/auth/me`)
-      if (authRes.ok) {
-        const u = await authRes.json()
-        if (u && u.isAuthenticated && u.role !== 'ANONYMOUS') {
-          setCurrentUser(u)
-        } else {
-          setCurrentUser(null)
-        }
+      const u = await authService.getCurrentUser()
+      if (u && u.isAuthenticated && u.role !== 'ANONYMOUS') {
+        setCurrentUser(u)
+        const w = await walletService.getWalletSummary().catch(() => null)
+        if (w) setWalletBalance(w.balance || 0)
       } else {
         setCurrentUser(null)
-      }
-
-      const personasRes = await fetch(`${API_BASE}/api/v1/auth/personas`)
-      if (personasRes.ok) {
-        const p = await personasRes.json()
-        setPersonas(p)
-      }
-
-      const walletRes = await fetch(`${API_BASE}/api/v1/wallet`)
-      if (walletRes.ok) {
-        const w = await walletRes.json()
-        setWalletBalance(w.balance || 0)
-      } else {
         setWalletBalance(0)
       }
 
-      const analyticsRes = await fetch(`${API_BASE}/api/v1/admin/analytics/dashboard`)
-      if (analyticsRes.ok) {
-        const a = await analyticsRes.json()
-        if (a?.kpis?.circuitOccupancyRate) {
-          setCircuitOccupancy(a.kpis.circuitOccupancyRate)
-        }
+      const p = await authService.getPersonas().catch(() => [])
+      if (Array.isArray(p)) setPersonas(p)
+
+      const a: any = await apiClient.get('/api/v1/admin/analytics/dashboard').catch(() => null)
+      if (a?.kpis?.circuitOccupancyRate) {
+        setCircuitOccupancy(a.kpis.circuitOccupancyRate)
       }
     } catch {
       setCurrentUser(null)
@@ -310,19 +339,16 @@ export default function Sidebar() {
 
   const handleRoleSwitch = async (roleName: string) => {
     try {
-      const res = await fetch(`${API_BASE}/api/v1/auth/switch-role`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ role: roleName }),
-      })
-      if (res.ok) {
-        const u = await res.json()
-        setCurrentUser(u)
-        setNotice(`Switched persona to ${u.fullName} (${u.roleDisplayName})`)
+      const u = await authService.switchRole(roleName)
+      if (u) {
         if (typeof window !== 'undefined') {
-          window.dispatchEvent(new Event('cinemind-auth-changed'))
+          localStorage.setItem('cinemind_role', u.role)
         }
+        setCurrentUser(u.role === 'ANONYMOUS' ? null : u)
+        setNotice(`Switched persona to ${u.name || (u as any).fullName} (${(u as any).roleDisplayName || u.role})`)
         setTimeout(() => setNotice(null), 3000)
+        const w = await walletService.getWalletSummary().catch(() => null)
+        if (w) setWalletBalance(w.balance || 0)
       }
     } catch {}
   }
@@ -330,16 +356,14 @@ export default function Sidebar() {
   const handleWalletTopUp = async (amount: number) => {
     setIsTopUpLoading(true)
     try {
-      const res = await fetch(`${API_BASE}/api/v1/wallet/topup`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ amount, paymentMethod: 'Stripe Instant ACH / Card' }),
-      })
-      if (res.ok) {
-        const txn = await res.json()
+      const txn = await walletService.topUp(amount, 'Stripe Instant ACH / Card')
+      if (txn) {
         setWalletBalance(txn.balanceAfter)
         setNotice(`Added $${amount.toFixed(2)} to CineMind Wallet!`)
         setTimeout(() => setNotice(null), 3000)
+        if (typeof window !== 'undefined') {
+          window.dispatchEvent(new Event('cinemind-auth-changed'))
+        }
       }
     } catch {} finally {
       setIsTopUpLoading(false)
@@ -428,6 +452,8 @@ export default function Sidebar() {
                     ? '👑 VIP Member'
                     : currentUser?.role === 'EXECUTIVE_ADMIN'
                     ? '🛡️ Director'
+                    : currentUser?.role === 'CINEMA_MANAGER'
+                    ? '📋 Operations Manager'
                     : currentUser?.role === 'AUDITORIUM_USHER'
                     ? '🎟️ Floor Usher'
                     : '👤 Member'}
@@ -437,7 +463,7 @@ export default function Sidebar() {
             {currentUser?.role !== 'AUDITORIUM_USHER' && (
               <div className="text-right shrink-0">
                 <span className="text-[11px] font-mono font-bold text-emerald-400 block">
-                  ${walletBalance.toFixed(2)}
+                  {formatCurrency(walletBalance, currentUser?.currency || 'USD')}
                 </span>
                 <span className="text-[9px] text-[#666] font-mono">Wallet</span>
               </div>
@@ -611,9 +637,9 @@ export default function Sidebar() {
               <div className="flex items-baseline justify-between pt-1">
                 <div>
                   <span className="text-2xl font-mono font-extrabold text-white">
-                    ${walletBalance.toFixed(2)}
+                    {formatCurrency(walletBalance, currentUser?.currency || 'USD')}
                   </span>
-                  <span className="text-xs text-zinc-400 ml-1.5 font-mono">USD</span>
+                  <span className="text-xs text-zinc-400 ml-1.5 font-mono">{currentUser?.currency || 'USD'}</span>
                 </div>
                 <span className="text-xs text-zinc-400 font-mono">1-Click Booking Ready</span>
               </div>
@@ -628,7 +654,7 @@ export default function Sidebar() {
                     disabled={isTopUpLoading}
                     className="flex-1 py-1 px-2 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 text-xs font-mono font-bold transition disabled:opacity-50"
                   >
-                    +${amt}
+                    +{formatCurrency(amt, currentUser?.currency || 'USD')}
                   </button>
                 ))}
               </div>
@@ -644,33 +670,11 @@ export default function Sidebar() {
               </div>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {[
-                  {
-                    role: 'VIP_PATRON',
-                    title: 'Alex Vance',
-                    badge: '👑 VIP Patron',
-                    desc: '20% F&B discount, heated recliners, stored wallet',
-                  },
-                  {
-                    role: 'EXECUTIVE_ADMIN',
-                    title: 'Marcus Kane',
-                    badge: '🛡️ Circuit Director',
-                    desc: 'Executive Studio, Dynamic Yield surge, APM traces',
-                  },
-                  {
-                    role: 'AUDITORIUM_USHER',
-                    title: 'Sarah Jenkins',
-                    badge: '🎟️ Floor Usher',
-                    desc: 'Optical Turnstile Gate scan, Wayfinder, expediter',
-                  },
-                  {
-                    role: 'STANDARD_GUEST',
-                    title: 'Jordan Lee',
-                    badge: '👤 Guest Patron',
-                    desc: 'Standard catalog, mobile ticketing, concessions',
-                  },
-                ].map((p) => {
+                {(personas && personas.length > 0 ? personas : []).map((p) => {
                   const isCurrent = currentUser?.role === p.role
+                  const displayName = p.fullName || p.name || p.roleDisplayName || p.role
+                  const badgeText = p.roleDisplayName || p.role
+                  const descText = p.membershipTier || p.roleDisplayName || p.role
                   return (
                     <button
                       key={p.role}
@@ -682,10 +686,10 @@ export default function Sidebar() {
                       }`}
                     >
                       <div className="flex items-center justify-between">
-                        <span className="text-xs font-bold text-white">{p.title}</span>
-                        <span className="text-[10px] font-mono text-purple-300 font-semibold">{p.badge}</span>
+                        <span className="text-xs font-bold text-white">{displayName}</span>
+                        <span className="text-[10px] font-mono text-purple-300 font-semibold">{badgeText}</span>
                       </div>
-                      <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">{p.desc}</p>
+                      <p className="text-[10px] text-zinc-400 mt-1 leading-relaxed">{descText}</p>
                     </button>
                   )
                 })}

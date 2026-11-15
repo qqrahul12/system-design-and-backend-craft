@@ -32,7 +32,8 @@ import {
   Ticket,
   UtensilsCrossed,
 } from 'lucide-react'
-import { agentService } from '@/services'
+import { agentService, authService, type UserPersona } from '@/services'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -269,6 +270,19 @@ export default function MultiAgentOrchestratorPage() {
   const [isMcpExecuting, setIsMcpExecuting] = useState(false)
   const [mcpRawOutput, setMcpRawOutput] = useState<string | null>(null)
   const [showMcpConsole, setShowMcpConsole] = useState(false)
+
+  // Auth RBAC State
+  const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+
+  useEffect(() => {
+    authService.getCurrentUser()
+      .then((u) => {
+        setCurrentUser(u)
+        setIsLoadingAuth(false)
+      })
+      .catch(() => setIsLoadingAuth(false))
+  }, [])
 
   // Initialize WebSocket if protocol is websocket
   useEffect(() => {
@@ -556,6 +570,21 @@ export default function MultiAgentOrchestratorPage() {
 
   // Visual Topology Node Order
   const topologyOrder = ['supervisor', 'catalog', 'inventory', 'rag_policy', 'billing', 'critic']
+
+  const isAuthorized = Boolean(
+    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+  )
+
+  if (!isAuthorized && !isLoadingAuth) {
+    return (
+      <RbacAccessShield
+        title="Autonomous Swarm Clearance Required"
+        requiredRole="EXECUTIVE_ADMIN"
+        currentUser={currentUser}
+        description="The Autonomous Agent Swarm is restricted to EXECUTIVE_ADMIN clearance. Multi-agent DAG orchestration and low-level MCP tool dispatch require executive credentials."
+      />
+    )
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 pb-12">

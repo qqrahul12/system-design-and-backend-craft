@@ -58,32 +58,77 @@ fi
 echo "✅ [PASS] Single Source of Truth verified (Zero dual-write hazards)."
 
 # -----------------------------------------------------------------------------
-# Gate 4: Backend Spring Boot Maven Compilation
+# Gate 4: Zero Hardcoded Data & Parameterized SQL Queries
 # -----------------------------------------------------------------------------
-echo "🔍 Gate 4: Verifying Spring Boot backend compilation (mvn test-compile)..."
+echo "🔍 Gate 4: Verifying Zero Hardcoded Data Policy..."
+
+# 4A: Check for forbidden static seed methods in Java services
+FORBIDDEN_SEED_METHODS=$(grep -rnE "(private|public|protected)\s+void\s+seedInitial" ai-assistant-service/src/main/java/ || true)
+if [ -n "$FORBIDDEN_SEED_METHODS" ]; then
+    echo "❌ [FAIL] Hardcoded Data Violation: Found forbidden 'seedInitial' methods in backend services:"
+    echo "$FORBIDDEN_SEED_METHODS"
+    echo "All data must be ingested dynamically via documented REST API endpoints or DB migrations."
+    exit 1
+fi
+echo "✅ [PASS] Gate 4A: Zero hardcoded seedInitial methods in Java services."
+
+# 4B: Check for hardcoded literal identifiers in SQL WHERE clauses (must use ? or :params)
+FORBIDDEN_SQL_LITERALS=$(grep -rnE "WHERE\s+[a-zA-Z0-9_.]+\s*=\s*'[A-Za-z0-9_-]+'" ai-assistant-service/src/main/java/com/skills/ai/ || true)
+if [ -n "$FORBIDDEN_SQL_LITERALS" ]; then
+    echo "❌ [FAIL] Hardcoded SQL Query Value Violation: Found literal string match in SQL WHERE clause:"
+    echo "$FORBIDDEN_SQL_LITERALS"
+    echo "All SQL queries must be parameterized using '?' or named parameters."
+    exit 1
+fi
+echo "✅ [PASS] Gate 4B: All SQL queries parameterized (zero hardcoded literal values in WHERE clauses)."
+
+# 4C: Check for forbidden hardcoded persona names in frontend source code
+FORBIDDEN_UI_PERSONAS=$(grep -rnE "(Elena Rostova|Marcus Kane|Alex Vance|Sarah Jenkins|Jordan Lee)" ai-assistant-ui/src/ || true)
+if [ -n "$FORBIDDEN_UI_PERSONAS" ]; then
+    echo "❌ [FAIL] Hardcoded Persona Name Violation: Found hardcoded persona names in frontend UI:"
+    echo "$FORBIDDEN_UI_PERSONAS"
+    echo "All personas must be fetched dynamically from PostgreSQL via authService.getPersonas()."
+    exit 1
+fi
+echo "✅ [PASS] Gate 4C: Zero hardcoded persona names in frontend UI (all loaded dynamically from DB)."
+
+# 4D: Check for inline DDL in Java application code (CREATE TABLE, DROP TABLE, ALTER TABLE)
+FORBIDDEN_JAVA_DDL=$(grep -rnE "(CREATE\s+TABLE|DROP\s+TABLE|ALTER\s+TABLE|CREATE\s+INDEX)" ai-assistant-service/src/main/java/com/skills/ai/ | grep -v "SqlInjectionSecurityFilter" || true)
+if [ -n "$FORBIDDEN_JAVA_DDL" ]; then
+    echo "❌ [FAIL] Inline Java DDL Violation: Found DDL statements inside Java source code:"
+    echo "$FORBIDDEN_JAVA_DDL"
+    echo "All database schemas must be managed via schema.sql or migration scripts, never inside Java service methods."
+    exit 1
+fi
+echo "✅ [PASS] Gate 4D: Zero inline DDL in Java code (all schemas managed via schema.sql)."
+
+# -----------------------------------------------------------------------------
+# Gate 5: Backend Spring Boot Maven Compilation
+# -----------------------------------------------------------------------------
+echo "🔍 Gate 5: Verifying Spring Boot backend compilation (mvn test-compile)..."
 (cd ai-assistant-service && mvn test-compile -q)
 echo "✅ [PASS] Backend compiled successfully (0 errors)."
 
 # -----------------------------------------------------------------------------
-# Gate 5: Frontend Next.js TypeScript Type-Safety
+# Gate 6: Frontend Next.js TypeScript Type-Safety
 # -----------------------------------------------------------------------------
-echo "🔍 Gate 5: Verifying Next.js TypeScript type-check (tsc --noEmit)..."
+echo "🔍 Gate 6: Verifying Next.js TypeScript type-check (tsc --noEmit)..."
 export PATH="$ROOT_DIR/node_bin:$PATH"
 (cd ai-assistant-ui && ./node_modules/.bin/tsc --noEmit)
 echo "✅ [PASS] Frontend TypeScript type-safety verified (0 errors)."
 
 # -----------------------------------------------------------------------------
-# Gate 6: Automated End-to-End Regression Test Suite (57/57 Tests)
+# Gate 7: Automated End-to-End Regression Test Suite (59/59 Tests)
 # -----------------------------------------------------------------------------
-echo "🔍 Gate 6: Running full-stack automated regression test suite (including RBAC Security Gates)..."
+echo "🔍 Gate 7: Running full-stack automated regression test suite (including RBAC Security Gates)..."
 "$ROOT_DIR/node_bin/node" "$ROOT_DIR/test-suite.mjs"
-echo "✅ [PASS] All automated regression tests passed (57/57, 100%)."
+echo "✅ [PASS] All automated regression tests passed (59/59, 100%)."
 
 # -----------------------------------------------------------------------------
-# Gate 7: Dual Branch Synchronization Notice
+# Gate 8: Dual Branch Synchronization Notice
 # -----------------------------------------------------------------------------
 echo "=========================================================="
-echo "🎉 ALL 6 PRE-PUSH QUALITY GATES PASSED! READY TO COMMIT & PUSH."
+echo "🎉 ALL 7 PRE-PUSH QUALITY GATES PASSED! READY TO COMMIT & PUSH."
 echo "📌 Mandatory Step: Always push to both branches together:"
 echo "   git push origin master && git push origin master:main"
 echo "=========================================================="

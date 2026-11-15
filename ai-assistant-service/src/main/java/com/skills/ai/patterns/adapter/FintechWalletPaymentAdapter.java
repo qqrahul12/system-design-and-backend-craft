@@ -39,6 +39,27 @@ public class FintechWalletPaymentAdapter implements PaymentGatewayAdapter {
     }
 
     @Override
+    public PaymentResult refundPayment(String transactionId, double amount, String reason) {
+        try {
+            WalletService.WalletTransaction txn = walletService.creditRefund(
+                    amount,
+                    reason != null ? reason : "Refund for txn " + transactionId
+            );
+            log.info("💰 [FintechWalletPaymentAdapter] Refund credited ${} for txn={}, newBal={}", amount, transactionId, txn.balanceAfter());
+            return PaymentResult.success(
+                    txn.txnId(),
+                    getProviderName(),
+                    amount,
+                    txn.balanceAfter(),
+                    "Refund credited to CineMind wallet"
+            );
+        } catch (Exception ex) {
+            log.warn("❌ [FintechWalletPaymentAdapter] Refund failed: {}", ex.getMessage());
+            return PaymentResult.failure(getProviderName(), amount, ex.getMessage());
+        }
+    }
+
+    @Override
     public String getProviderName() {
         return "CINEMIND_WALLET";
     }

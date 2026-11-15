@@ -7,9 +7,12 @@ export interface ConcessionItem {
   price: number;
   calories: number;
   icon: string;
-  dietaryTags: string[];
-  genrePairing: string[];
+  dietaryTags?: string[];
+  dietary?: string[];
+  genrePairing?: string[];
+  genrePairings?: string[];
   description: string;
+  inStock?: boolean;
 }
 
 export interface ConcessionCombo {
@@ -53,4 +56,16 @@ export const concessionsService = {
 
   updateOrderStatus: (orderId: string, status: string): Promise<ConcessionOrder> =>
     apiClient.post<ConcessionOrder>(`/api/v1/concessions/orders/${orderId}/status`, { status }),
+
+  saveItem: (item: Partial<ConcessionItem>): Promise<ConcessionItem> =>
+    apiClient.post<ConcessionItem>('/api/v1/concessions/items', item),
+
+  seedItems: (items: Partial<ConcessionItem>[]): Promise<ConcessionItem[]> =>
+    apiClient.post<ConcessionItem[]>('/api/v1/concessions/seed', items),
+
+  toggleStock: (id: string, inStock: boolean): Promise<ConcessionItem> =>
+    apiClient.patch<ConcessionItem>(`/api/v1/concessions/items/${id}/stock`, { inStock }),
+
+  deleteItem: (id: string): Promise<void> =>
+    apiClient.delete<void>(`/api/v1/concessions/items/${id}`),
 };

@@ -62,4 +62,21 @@ public class WalletController {
         String desc = (String) req.getOrDefault("description", "CineMind 1-Click Wallet Checkout");
         return ResponseEntity.ok(walletService.debit(amount, type, desc));
     }
+
+    @PostMapping("/currency")
+    public ResponseEntity<?> setCurrency(@RequestBody Map<String, String> req) {
+        AuthService.UserProfile user = authService.getCurrentUser();
+        if (user == null || !user.isAuthenticated()) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(Map.of("error", "Sign in required to change wallet currency"));
+        }
+        String currency = req.get("currency");
+        if (currency == null || currency.isBlank()) {
+            return ResponseEntity.badRequest().body(Map.of("error", "Currency field is required"));
+        }
+        try {
+            return ResponseEntity.ok(walletService.updateCurrency(currency));
+        } catch (IllegalArgumentException e) {
+            return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
 }

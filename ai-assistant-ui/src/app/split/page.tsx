@@ -38,6 +38,7 @@ import {
   SplitBalanceSummary,
 } from '@/services/splitService'
 import { authService, UserPersona } from '@/services/authService'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 const QUICK_PRESETS = [
   { label: '🎟️ 4x IMAX 70mm Passes', name: 'Dune: Part Two IMAX 70mm (4 Passes)', amount: '78.00', icon: Film },
@@ -294,6 +295,24 @@ export default function SplitPage() {
     ) || users[0]
     return activePatron?.id || ''
   }, [currentUser, users])
+
+  const isAuthorized = Boolean(
+    currentUser &&
+    currentUser.isAuthenticated &&
+    currentUser.role !== 'ANONYMOUS' &&
+    currentUser.role !== 'AUDITORIUM_USHER'
+  )
+
+  if (!isAuthorized && !isLoading) {
+    return (
+      <RbacAccessShield
+        title="SplitMoney Squad Access Required"
+        requiredRoles={['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'EXECUTIVE_ADMIN']}
+        currentUser={currentUser}
+        description="SplitMoney cooperative bill splitting and squad settlements require an authenticated patron session. Sign in to create cinema squads, itemize expenses, and settle balances with CineCash."
+      />
+    )
+  }
 
   return (
     <div className="mx-auto max-w-6xl space-y-8 animate-fade-in pb-16">

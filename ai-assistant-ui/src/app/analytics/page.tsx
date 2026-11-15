@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react'
 import { TrendingUp, Zap, Layers, DollarSign, RefreshCw, Trash2, ShieldAlert } from 'lucide-react'
-import { llmopsService } from '@/services'
+import { llmopsService, authService, type UserPersona } from '@/services'
+import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 interface MetricsData {
   totalRequests: number
@@ -19,6 +20,19 @@ export default function AnalyticsPage() {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [testSecurityInput, setTestSecurityInput] = useState('')
   const [securityOutput, setSecurityOutput] = useState<string | null>(null)
+
+  // Auth RBAC State
+  const [currentUser, setCurrentUser] = useState<UserPersona | null>(null)
+  const [isLoadingAuth, setIsLoadingAuth] = useState(true)
+
+  useEffect(() => {
+    authService.getCurrentUser()
+      .then((u) => {
+        setCurrentUser(u)
+        setIsLoadingAuth(false)
+      })
+      .catch(() => setIsLoadingAuth(false))
+  }, [])
 
   const fetchMetrics = async () => {
     setIsRefreshing(true)
@@ -59,6 +73,21 @@ export default function AnalyticsPage() {
     } catch (err: unknown) {
       setSecurityOutput(`Error: ${err instanceof Error ? err.message : 'Failed'}`)
     }
+  }
+
+  const isAuthorized = Boolean(
+    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+  )
+
+  if (!isAuthorized && !isLoadingAuth) {
+    return (
+      <RbacAccessShield
+        title="LLMOps & Telemetry Clearance Required"
+        requiredRole="EXECUTIVE_ADMIN"
+        currentUser={currentUser}
+        description="LLMOps telemetry metrics, prompt injection firewall logs, and cache eviction controls require EXECUTIVE_ADMIN clearance."
+      />
+    )
   }
 
   return (

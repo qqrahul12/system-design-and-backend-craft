@@ -49,6 +49,18 @@ public class ResilientCardPaymentAdapter implements PaymentGatewayAdapter {
     }
 
     @Override
+    public PaymentResult refundPayment(String transactionId, double amount, String reason) {
+        log.info("💳 [ResilientCardPaymentAdapter] Stripe refund initiated for txn {}: ${} ({})", transactionId, amount, reason);
+        return PaymentResult.success(
+                "REF-" + java.util.UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
+                getProviderName(),
+                amount,
+                0.0,
+                "Stripe card payment refund processed"
+        );
+    }
+
+    @Override
     public String getProviderName() {
         return "STRIPE_CARD";
     }

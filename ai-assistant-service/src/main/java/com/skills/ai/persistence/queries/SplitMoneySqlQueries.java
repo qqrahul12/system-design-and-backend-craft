@@ -63,6 +63,9 @@ public final class SplitMoneySqlQueries {
     public static final String SELECT_SHARES_BY_EXPENSE_ID =
             "SELECT user_id, user_name, share_amount, is_paid, payment_method, paid_at FROM split_shares WHERE expense_id = ?";
 
+    public static final String SELECT_ALL_SHARES =
+            "SELECT expense_id, user_id, user_name, share_amount, is_paid, payment_method, paid_at FROM split_shares";
+
     public static final String UPDATE_SHARE_SETTLED =
             "UPDATE split_shares SET is_paid = TRUE, payment_method = ?, paid_at = ? WHERE expense_id = ? AND user_id = ?";
 }

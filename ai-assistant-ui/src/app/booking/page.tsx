@@ -40,6 +40,7 @@ import {
   ticketService,
   llmopsService,
 } from '@/services'
+import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -161,7 +162,15 @@ export default function BookingPage() {
         if (u) setCurrentUser(u as any)
       })
       .catch(() => {})
+
+    authService.getPersonas()
+      .then((p) => {
+        if (p && Array.isArray(p)) setPersonas(p as any)
+      })
+      .catch(() => {})
   }, [])
+
+  const [personas, setPersonas] = useState<any[]>([])
 
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedGenre, setSelectedGenre] = useState('All')
@@ -178,6 +187,7 @@ export default function BookingPage() {
   const [selectedMovie, setSelectedMovie] = useState<Movie | null>(null)
   const [selectedSeats, setSelectedSeats] = useState<string[]>([])
   const [isProcessing, setIsProcessing] = useState(false)
+  const [toast, setToast] = useState<ToastMessage | null>(null)
 
   // Real-Time Distributed Seat Inventory & 10-Minute Lock State
   const [occupiedSeats, setOccupiedSeats] = useState<string[]>([])
@@ -509,6 +519,11 @@ REASON: <1 sentence why it matches>`
         setLockWarning(
           '⏰ Your 10-minute seat lock expired. Seats have been returned to the public booking pool.'
         )
+        setToast({
+          type: 'warning',
+          title: 'Seat Hold Expired',
+          message: 'Your 10-minute temporary seat lock expired and seats were released. Please re-select your seats.',
+        })
         if (selectedMovie) {
           ticketService.getAuditoriumSeats(
             selectedMovie.title,
@@ -715,15 +730,16 @@ REASON: <1 sentence why it matches>`
 
     try {
       if (paymentMethod === 'WALLET') {
-        try {
-          const wTxn = await walletService.pay(
-            totalAmount,
-            `${selectedMovie.title} (${selectedSeats.join(', ')})`
-          )
-          if (wTxn) {
-            setWalletBalance(wTxn.balanceAfter)
+        const wTxn = await walletService.pay(
+          totalAmount,
+          `${selectedMovie.title} (${selectedSeats.join(', ')})`
+        )
+        if (wTxn) {
+          setWalletBalance(wTxn.balanceAfter)
+          if (typeof window !== 'undefined') {
+            window.dispatchEvent(new Event('cinemind-auth-changed'))
           }
-        } catch {}
+        }
       }
 
       const ticket = await ticketService.issueTicket({
@@ -755,6 +771,11 @@ REASON: <1 sentence why it matches>`
           setSecondsRemaining(0)
         }
         setOccupiedSeats((prev) => [...prev, ...selectedSeats])
+        setToast({
+          type: 'success',
+          title: 'VIP Pass Issued',
+          message: `Confirmed ${selectedMovie.title} (${selectedSeats.join(', ')}). Your cryptographic pass is ready!`,
+        })
         setSelectedSeats([])
       } else {
         throw new Error('Ticket issue failed')
@@ -762,7 +783,11 @@ REASON: <1 sentence why it matches>`
     } catch (err: unknown) {
       console.error('Ticket checkout failed:', err)
       const errorMsg = err instanceof Error ? err.message : 'Unable to complete ticket reservation'
-      alert(`Booking Error: ${errorMsg}. Please verify your payment balance or seat availability.`)
+      setToast({
+        type: 'error',
+        title: 'Booking Failed',
+        message: `${errorMsg}. Please verify your CineCash wallet balance or seat availability.`,
+      })
     } finally {
       setIsProcessing(false)
     }
@@ -770,6 +795,9 @@ REASON: <1 sentence why it matches>`
 
   return (
     <div className="mx-auto max-w-6xl space-y-8">
+      {/* Toast Notification */}
+      {toast && <Toast {...toast} onClose={() => setToast(null)} />}
+
       {/* Page Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
@@ -2030,39 +2058,33 @@ REASON: <1 sentence why it matches>`
                 Instant 1-Click Sign In
               </span>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleLoginAndBook('VIP_PATRON')}
-                  disabled={isAuthLoading}
-                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-zinc-800 hover:border-purple-500/40 text-left transition group"
-                >
-                  <img
-                    src="https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop"
-                    alt="Alex"
-                    className="w-8 h-8 rounded-full object-cover border border-purple-500/50"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white group-hover:text-purple-300">Alex Vance</p>
-                    <p className="text-[10px] text-amber-400">👑 VIP Founder (20% Off)</p>
-                  </div>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => handleLoginAndBook('EXECUTIVE_ADMIN')}
-                  disabled={isAuthLoading}
-                  className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-zinc-800 hover:border-purple-500/40 text-left transition group"
-                >
-                  <img
-                    src="https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop"
-                    alt="Marcus"
-                    className="w-8 h-8 rounded-full object-cover border border-zinc-700"
-                  />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-white group-hover:text-purple-300">Marcus Kane</p>
-                    <p className="text-[10px] text-zinc-400">🛡️ Circuit Director</p>
-                  </div>
-                </button>
+                {(personas && personas.length > 0 ? personas : []).slice(0, 2).map((p: any) => (
+                  <button
+                    key={p.role}
+                    type="button"
+                    onClick={() => handleLoginAndBook(p.role)}
+                    disabled={isAuthLoading}
+                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-zinc-800 hover:border-purple-500/40 text-left transition group"
+                  >
+                    {p.avatarUrl || p.avatar ? (
+                      <img
+                        src={p.avatarUrl || p.avatar}
+                        alt={p.fullName || p.name || p.role}
+                        className="w-8 h-8 rounded-full object-cover border border-purple-500/50"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-purple-900/40 border border-purple-500/50 flex items-center justify-center text-xs">
+                        👤
+                      </div>
+                    )}
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-white group-hover:text-purple-300">
+                        {p.fullName || p.name || p.roleDisplayName || p.role}
+                      </p>
+                      <p className="text-[10px] text-amber-400">{p.roleDisplayName || p.role}</p>
+                    </div>
+                  </button>
+                ))}
               </div>
             </div>
 

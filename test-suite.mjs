@@ -48,7 +48,7 @@ async function runTestSuite() {
 
   // 1. Frontend Route Tests
   console.log('--- 1. Frontend Route Availability (Port 3000) ---');
-  for (const path of ['/admin', '/booking', '/concessions', '/tickets', '/documents', '/agent', '/tracing', '/analytics', '/chat', '/wallet', '/split', '/profile', '/login', '/logout']) {
+  for (const path of ['/admin', '/manager', '/booking', '/concessions', '/tickets', '/documents', '/agent', '/tracing', '/analytics', '/chat', '/wallet', '/split', '/profile', '/login', '/logout']) {
     await test(`GET http://127.0.0.1:3000${path}`, async () => {
       const res = await request({
         hostname: '127.0.0.1',
@@ -88,6 +88,36 @@ async function runTestSuite() {
     const json = JSON.parse(res.body);
     if (!json.result?.tools || json.result.tools.length < 4) {
       throw new Error(`Expected at least 4 tools, got ${json.result?.tools?.length}`);
+    }
+  });
+
+  await test('MCP tools/call execution (search_movies with sort and filter)', async () => {
+    const payload = JSON.stringify({
+      jsonrpc: '2.0',
+      id: 11,
+      method: 'tools/call',
+      params: {
+        name: 'search_movies',
+        arguments: {
+          genre: 'Sci-Fi',
+          sortBy: 'price',
+          sortOrder: 'asc',
+          minRating: 4.0,
+        },
+      },
+    });
+    const res = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/mcp',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(payload) },
+    }, payload);
+    const json = JSON.parse(res.body);
+    if (json.result?.isError) throw new Error('Tool returned error');
+    const text = json.result?.content?.[0]?.text || '';
+    if (!text.includes('theatrical releases') && !text.includes('sorted by price')) {
+      throw new Error(`Expected search_movies to return sorted releases, got: ${text}`);
     }
   });
 
