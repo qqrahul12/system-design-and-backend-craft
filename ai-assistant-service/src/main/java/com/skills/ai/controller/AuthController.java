@@ -68,8 +68,21 @@ public class AuthController {
 
     @PostMapping("/login")
     public ResponseEntity<AuthService.UserProfile> login(@RequestBody Map<String, String> req) {
-        // --- Explicit role-based login (persona switcher) ---
+        String email = req.getOrDefault("email", "").trim().toLowerCase();
+        String password = req.getOrDefault("password", "");
         String roleStr = req.getOrDefault("role", "").trim();
+
+        // 1. Real cryptographic password authentication (Email + Password)
+        if (!email.isBlank() && !password.isBlank()) {
+            if (!EMAIL_PATTERN.matcher(email).matches()) {
+                log.warn("login: rejected — malformed email '{}'", email);
+                return ResponseEntity.badRequest().build();
+            }
+            AuthService.UserProfile authenticatedUser = authService.authenticateWithPassword(email, password);
+            return ResponseEntity.ok(authenticatedUser);
+        }
+
+        // 2. Demo 1-Click Persona Switcher (for instant demo exploration)
         if (!roleStr.isBlank()) {
             try {
                 AuthService.UserRole targetRole = AuthService.UserRole.valueOf(roleStr.toUpperCase());
@@ -80,31 +93,8 @@ public class AuthController {
             }
         }
 
-        // --- Email-based login ---
-        String email = req.getOrDefault("email", "").trim().toLowerCase();
-
-        // Validate: email must be present and well-formed
-        if (email.isBlank()) {
-            log.warn("login: rejected — email field is blank");
-            return ResponseEntity.badRequest()
-                    .body(null); // 400 Bad Request: email is required
-        }
-        if (!EMAIL_PATTERN.matcher(email).matches()) {
-            log.warn("login: rejected — malformed email '{}'", email);
-            return ResponseEntity.badRequest().body(null); // 400 Bad Request: invalid email format
-        }
-
-        // Derive role from email domain — extend this to a real user-store lookup in production
-        AuthService.UserRole role = email.contains("admin")
-                ? AuthService.UserRole.EXECUTIVE_ADMIN
-                : email.contains("manager")
-                ? AuthService.UserRole.CINEMA_MANAGER
-                : email.contains("usher") || email.contains("theater") || email.contains("theatre")
-                ? AuthService.UserRole.AUDITORIUM_USHER
-                : AuthService.UserRole.VIP_PATRON;
-
-        log.info("login: email='{}' resolved to role={}", email, role);
-        return ResponseEntity.ok(authService.switchRole(role));
+        log.warn("login: rejected — missing credentials");
+        return ResponseEntity.status(401).build();
     }
 
     @PostMapping("/logout")

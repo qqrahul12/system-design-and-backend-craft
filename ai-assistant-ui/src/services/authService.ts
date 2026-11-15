@@ -69,16 +69,15 @@ export const authService = {
   getPersonas: (): Promise<UserPersona[]> => apiClient.get<UserPersona[]>('/api/v1/auth/personas'),
 
   /**
-   * Authenticates by email + role. Callers MUST validate inputs via
-   * validateLoginInput() before invoking this method. Empty email/role
-   * will be rejected with a 400 by the backend.
+   * Authenticates by email + password (standard login) or role (1-click demo).
    */
-  login: async (email: string, role: string, name?: string): Promise<UserPersona> => {
-    if (!email.trim()) throw new Error('Email is required before calling authService.login().');
+  login: async (email: string, role?: string, name?: string, password?: string): Promise<UserPersona> => {
+    if (!email.trim() && !role?.trim()) throw new Error('Email or role is required before calling authService.login().');
     const user = await apiClient.post<UserPersona>('/api/v1/auth/login', {
       email: email.trim().toLowerCase(),
-      role: role.trim(),
+      role: (role ?? '').trim(),
       name: (name ?? '').trim(),
+      password: password ?? '',
     });
     if (typeof window !== 'undefined' && user?.role) {
       localStorage.setItem('cinemind_role', user.role);

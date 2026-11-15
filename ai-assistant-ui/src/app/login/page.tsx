@@ -104,7 +104,12 @@ export default function LoginPage() {
     setStatusMsg(null)
 
     try {
-      const user = await authService.login(targetEmail, targetRole, fullName || undefined)
+      const user = await authService.login(
+        targetEmail,
+        isQuickLogin ? targetRole : undefined,
+        fullName || undefined,
+        isQuickLogin ? undefined : password
+      )
       setStatusType('success')
       setStatusMsg(`Welcome, ${user.fullName || user.name || 'Patron'}! Redirecting...`)
       setTimeout(() => {
@@ -118,9 +123,9 @@ export default function LoginPage() {
           router.push('/booking')
         }
       }, 600)
-    } catch {
+    } catch (err: any) {
       setStatusType('error')
-      setStatusMsg('Authentication failed. Please check your credentials and try again.')
+      setStatusMsg(err?.response?.data?.message || err?.message || 'Invalid email or password. Please verify your credentials.')
     } finally {
       setLoading(false)
     }

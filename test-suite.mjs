@@ -786,7 +786,30 @@ async function runTestSuite() {
     const logoutData = JSON.parse(logoutRes.body);
     if (logoutData.status !== 'LOGGED_OUT') throw new Error('Expected status LOGGED_OUT');
 
-    // 5. Restore to VIP_PATRON for subsequent tests
+    // 5. Test BCrypt password verification (Valid + Invalid)
+    const validLoginPayload = JSON.stringify({ email: 'marcus.kane@cinemind-hq.com', password: 'CineMind@2026!' });
+    const validLoginRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/login',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(validLoginPayload) },
+    }, validLoginPayload);
+    if (validLoginRes.statusCode !== 200) throw new Error(`Valid password login failed: ${validLoginRes.statusCode}`);
+    const validUser = JSON.parse(validLoginRes.body);
+    if (validUser.role !== 'EXECUTIVE_ADMIN') throw new Error(`Expected role EXECUTIVE_ADMIN, got ${validUser.role}`);
+
+    const badLoginPayload = JSON.stringify({ email: 'marcus.kane@cinemind-hq.com', password: 'WrongPassword999!' });
+    const badLoginRes = await request({
+      hostname: '127.0.0.1',
+      port: 8080,
+      path: '/api/v1/auth/login',
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(badLoginPayload) },
+    }, badLoginPayload);
+    if (badLoginRes.statusCode !== 401) throw new Error(`Expected 401 for wrong password, got ${badLoginRes.statusCode}`);
+
+    // 6. Restore to VIP_PATRON for subsequent tests
     await request({
       hostname: '127.0.0.1',
       port: 8080,

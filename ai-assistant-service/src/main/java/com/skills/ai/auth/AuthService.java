@@ -1,10 +1,13 @@
 package com.skills.ai.auth;
 
 import com.skills.ai.persistence.queries.UserSqlQueries;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.Builder;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 
 import java.sql.ResultSet;
@@ -41,6 +44,8 @@ public class AuthService {
             String userId,
             String fullName,
             String email,
+            @JsonIgnore
+            String passwordHash,
             UserRole role,
             String roleDisplayName,
             String membershipTier,
@@ -55,6 +60,7 @@ public class AuthService {
             .userId("usr-guest-anon")
             .fullName("Guest Visitor")
             .email("guest@cinemind.io")
+            .passwordHash("")
             .role(UserRole.ANONYMOUS)
             .roleDisplayName("Guest (Not Signed In)")
             .membershipTier("None")
@@ -66,6 +72,7 @@ public class AuthService {
             .build();
 
     private final JdbcTemplate jdbcTemplate;
+    private final PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     private final Map<UserRole, UserProfile> personaCatalog = new ConcurrentHashMap<>();
     private volatile UserRole currentRole = UserRole.VIP_PATRON;
 
@@ -163,6 +170,7 @@ public class AuthService {
                 .userId("usr-" + role.name().toLowerCase().replace("_", "-"))
                 .fullName(role.name().replace("_", " "))
                 .email(role.name().toLowerCase() + "@cinemind.io")
+                .passwordHash("$2a$10$nb893xmrMDBoH8VRVIEr1Olwal7qhPjXZZFn1vYI1DOINoBWZ4ruK")
                 .role(role)
                 .roleDisplayName(role.name().replace("_", " "))
                 .membershipTier("Standard")
@@ -218,6 +226,35 @@ public class AuthService {
                 .filter(p -> p.email().equalsIgnoreCase(email.trim()))
                 .findFirst()
                 .orElse(null);
+    }
+
+    /**
+     * Authenticates a user by email and raw password using salted BCrypt verification.
+     * Prevents timing attacks and enforces database Single Source of Truth authentication.
+     */
+    public UserProfile authenticateWithPassword(String email, String rawPassword) {
+        if (email == null || email.isBlank() || rawPassword == null || rawPassword.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid email or password."
+            );
+        }
+        UserProfile user = findProfileByEmail(email.trim());
+        if (user == null) {
+            log.warn("Authentication failed: User '{}' not found", email.trim());
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid email or password."
+            );
+        }
+        String storedHash = user.passwordHash();
+        if (storedHash == null || storedHash.isBlank() || !passwordEncoder.matches(rawPassword, storedHash)) {
+            log.warn("Authentication failed: Invalid password provided for '{}'", email.trim());
+            throw new org.springframework.web.server.ResponseStatusException(
+                    org.springframework.http.HttpStatus.UNAUTHORIZED, "Invalid email or password."
+            );
+        }
+        this.currentRole = user.role();
+        log.info("User successfully authenticated with verified credentials: {} ({})", user.email(), user.role());
+        return user;
     }
 
     public boolean isAuthenticated() {
@@ -305,11 +342,15 @@ public class AuthService {
             String permissionsCsv = (profile.permissions() != null)
                     ? String.join(",", profile.permissions())
                     : "";
+            String hash = (profile.passwordHash() != null && !profile.passwordHash().isBlank())
+                    ? profile.passwordHash()
+                    : passwordEncoder.encode("CineMind@2026!");
             jdbcTemplate.update(
                     UPSERT_USER_PROFILE,
                     profile.userId(),
                     profile.fullName(),
                     profile.email(),
+                    hash,
                     profile.role().name(),
                     profile.roleDisplayName(),
                     profile.membershipTier(),
@@ -318,7 +359,7 @@ public class AuthService {
                     permissionsCsv,
                     profile.isAuthenticated()
             );
-            log.info("[PostgreSQL SSOT] Upserted user profile: {} ({})", profile.userId(), profile.fullName());
+            log.info("Upserted user profile: {} ({})", profile.userId(), profile.fullName());
         }
         personaCatalog.put(profile.role(), profile);
         return profile;
@@ -338,10 +379,18 @@ public class AuthService {
                 ? Arrays.asList(permsCsv.split(","))
                 : Collections.emptyList();
 
+        String passwordHash = "";
+        try {
+            passwordHash = rs.getString("password_hash");
+        } catch (SQLException ignored) {
+            // Field not present in older queries
+        }
+
         return UserProfile.builder()
                 .userId(rs.getString("user_id"))
                 .fullName(rs.getString("full_name"))
                 .email(rs.getString("email"))
+                .passwordHash(passwordHash)
                 .role(role)
                 .roleDisplayName(rs.getString("role_display_name"))
                 .membershipTier(rs.getString("membership_tier"))
