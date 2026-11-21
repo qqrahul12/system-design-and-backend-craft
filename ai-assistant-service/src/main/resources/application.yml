@@ -12,13 +12,13 @@ spring:
     username: ${SPRING_DATASOURCE_USERNAME:postgres}
     password: ${SPRING_DATASOURCE_PASSWORD:}
     hikari:
-      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:3}
-      minimum-idle: ${HIKARI_MIN_IDLE:1}
-      idle-timeout: 60000
-      max-lifetime: 300000
-      connection-timeout: 30000
-      keepalive-time: 30000
-      validation-timeout: 3000
+      maximum-pool-size: ${HIKARI_MAX_POOL_SIZE:10}
+      minimum-idle: ${HIKARI_MIN_IDLE:2}
+      idle-timeout: 30000
+      max-lifetime: 180000
+      connection-timeout: 10000
+      keepalive-time: 20000
+      validation-timeout: 2500
   sql:
     init:
       mode: ${SPRING_SQL_INIT_MODE:always}
