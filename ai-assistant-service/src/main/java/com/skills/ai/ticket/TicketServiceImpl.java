@@ -278,8 +278,8 @@ public class TicketServiceImpl implements TicketService {
         );
 
         return Map.of(
-                "movieTitle", movieTitle != null ? movieTitle : "Interstellar",
-                "showTime", showTime != null ? showTime : "7:30 PM",
+                "movieTitle", movieTitle != null ? movieTitle : "",
+                "showTime", showTime != null ? showTime : "",
                 "totalSeats", 30,
                 "rows", List.of("A", "B", "C", "D", "E"),
                 "cols", List.of(1, 2, 3, 4, 5, 6),
@@ -311,13 +311,16 @@ public class TicketServiceImpl implements TicketService {
         String prefix = cleanTitle.substring(0, Math.min(5, cleanTitle.length()));
         String ticketId = "TKT-" + prefix + "-" + UUID.randomUUID().toString().substring(0, 6).toUpperCase();
 
-        List<String> safeSeats = (seats != null && !seats.isEmpty()) ? seats : List.of("C3");
+        if (seats == null || seats.isEmpty()) {
+            throw new IllegalArgumentException("Seats cannot be empty for ticket issuance");
+        }
+        List<String> safeSeats = seats;
         String rawPayload = String.format("%s:%s:%s:%s", ticketId, safeTitle, String.join(",", safeSeats), totalPaid);
         String signature = signatureService.sign(rawPayload);
         Instant issueTime = (issuedAt != null) ? issuedAt : Instant.now();
-        String formatVal = (format != null) ? format : "IMAX 70mm";
-        String audVal = (auditorium != null) ? auditorium : "Auditorium 1";
-        String showTimeVal = (showTime != null) ? showTime : "7:30 PM";
+        String formatVal = (format != null && !format.isBlank()) ? format : "Standard Digital";
+        String audVal = (auditorium != null && !auditorium.isBlank()) ? auditorium : "";
+        String showTimeVal = (showTime != null && !showTime.isBlank()) ? showTime : "";
 
         DigitalTicket ticket = new DigitalTicket(
                 ticketId,

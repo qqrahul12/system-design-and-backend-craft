@@ -124,7 +124,7 @@ function ManagerPortalContent() {
     ? circuitAuditoriums.map((a) => a.name)
     : Array.from(new Set(movies.map((m) => m.auditorium).filter(Boolean) as string[]))
 
-  const effectiveAuditorium = selectedAuditorium || availableAuditoriums[0] || 'Auditorium 1 — Grand GT Laser'
+  const effectiveAuditorium = selectedAuditorium || availableAuditoriums[0] || (circuitAuditoriums[0]?.name ?? '')
 
   const avgMoviePrice = movies.length > 0
     ? movies.reduce((acc, m) => acc + (Number(m.price) || 18.5), 0) / movies.length
@@ -928,7 +928,7 @@ function ManagerPortalContent() {
                             </span>
                           </td>
                           <td className="py-3 px-4 text-zinc-300 font-mono text-[11px]">
-                            {m.auditorium || 'Auditorium 1 (Dolby)'}
+                            {m.auditorium || (circuitAuditoriums[0]?.name ?? 'Unassigned Screen')}
                           </td>
                           <td className="py-3 px-4 font-mono font-bold text-emerald-400">
                             {m.occupancyRate || 88}%
@@ -937,7 +937,7 @@ function ManagerPortalContent() {
                             <button
                               onClick={() => {
                                 setReallocatingMovie(m)
-                                setTargetAuditorium(m.auditorium || 'IMAX 70mm Auditorium 1')
+                                setTargetAuditorium(m.auditorium || (circuitAuditoriums[0]?.name ?? ''))
                               }}
                               className="px-2.5 py-1 rounded-lg bg-purple-900/40 hover:bg-purple-800/60 text-purple-200 text-[10px] font-semibold border border-purple-500/40 transition flex items-center gap-1 ml-auto"
                             >
@@ -967,7 +967,7 @@ function ManagerPortalContent() {
                 </span>
                 <h3 className="text-base font-bold text-white mt-0.5">{reallocatingMovie.title}</h3>
                 <p className="text-xs text-zinc-400 mt-0.5">
-                  Current: <span className="font-mono text-purple-300">{reallocatingMovie.auditorium || 'Auditorium 1 (Dolby)'}</span> • Occupancy: <span className="font-bold text-emerald-400">{reallocatingMovie.occupancyRate || 88}%</span>
+                  Current: <span className="font-mono text-purple-300">{reallocatingMovie.auditorium || (circuitAuditoriums[0]?.name ?? 'Unassigned Screen')}</span> • Occupancy: <span className="font-bold text-emerald-400">{reallocatingMovie.occupancyRate || 88}%</span>
                 </p>
               </div>
               <button

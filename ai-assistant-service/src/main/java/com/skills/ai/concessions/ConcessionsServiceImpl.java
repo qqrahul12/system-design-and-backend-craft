@@ -232,7 +232,7 @@ public class ConcessionsServiceImpl implements ConcessionsService {
         String genreCsv = rs.getString("genre_pairings_csv");
         List<String> pairings = (genreCsv != null && !genreCsv.isBlank())
                 ? Arrays.stream(genreCsv.split(",")).map(String::trim).filter(s -> !s.isEmpty()).toList()
-                : List.of("All");
+                : Collections.emptyList();
 
         return new ConcessionItem(
                 rs.getString("id"),

@@ -527,35 +527,36 @@ public class McpToolRegistry {
                     Number yearNum = (Number) args.getOrDefault("year", 2026);
                     Number priceNum = (Number) args.getOrDefault("price", 18.0);
                     Number ratingNum = (Number) args.getOrDefault("rating", 4.8);
-                    String auditorium = (String) args.getOrDefault("auditorium", "IMAX 70mm Auditorium 1");
-                    String showtimes = (String) args.getOrDefault("showtimes", "1:30 PM, 5:00 PM, 8:45 PM");
-                    String synopsis = (String) args.getOrDefault("synopsis", "A thrilling theatrical presentation.");
-                    String director = (String) args.getOrDefault("director", "Visionary Director");
+                    String auditorium = (String) args.getOrDefault("auditorium", "");
+                    String showtimes = (String) args.getOrDefault("showtimes", "");
+                    String synopsis = (String) args.getOrDefault("synopsis", "");
+                    String director = (String) args.getOrDefault("director", "");
+                    String duration = (String) args.getOrDefault("duration", "");
 
                     Movie created = movieCatalogService.createMovie(Movie.builder()
                             .title(title)
                             .genre(genre)
-                            .year(yearNum != null ? yearNum.intValue() : 2026)
+                            .year(yearNum != null ? yearNum.intValue() : java.time.LocalDate.now().getYear())
                             .price(priceNum != null ? priceNum.doubleValue() : 18.0)
-                            .rating(ratingNum != null ? ratingNum.doubleValue() : 4.8)
+                            .rating(ratingNum != null ? ratingNum.doubleValue() : 0.0)
                             .auditorium(auditorium)
                             .showtimes(showtimes)
                             .synopsis(synopsis)
                             .director(director)
                             .status("NOW_SHOWING")
-                            .aiPick(true)
-                            .duration("2h 15m")
-                            .occupancyRate(80)
-                            .suggestedSeats(List.of("B3", "B4", "C3"))
-                            .posterUrl("https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=600&auto=format&fit=crop")
-                            .rottenTomatoes(92)
-                            .metacritic(85)
-                            .imdbRating(8.5)
-                            .criticConsensus(title + " delivers an electrifying and unforgettable cinematic experience.")
-                            .topCriticQuote("\"A monumental theatrical masterpiece.\" — Rolling Stone")
-                            .reviewsCount(240)
-                            .trailerUrl("https://www.youtube.com/embed/zSWdZVtXT7E")
-                            .cast("Ensemble Cast")
+                            .aiPick(false)
+                            .duration(duration)
+                            .occupancyRate(0)
+                            .suggestedSeats(Collections.emptyList())
+                            .posterUrl("")
+                            .rottenTomatoes(0)
+                            .metacritic(0)
+                            .imdbRating(0.0)
+                            .criticConsensus("")
+                            .topCriticQuote("")
+                            .reviewsCount(0)
+                            .trailerUrl("")
+                            .cast("")
                             .ageRating("PG-13")
                             .build());
 

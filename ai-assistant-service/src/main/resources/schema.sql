@@ -1,6 +1,25 @@
 -- CineMind Relational Schema
+CREATE TABLE IF NOT EXISTS cinemas (
+    id VARCHAR(64) PRIMARY KEY,
+    name VARCHAR(255) NOT NULL,
+    short_name VARCHAR(128) NOT NULL,
+    neighborhood VARCHAR(128),
+    distance VARCHAR(64),
+    address VARCHAR(255),
+    features TEXT[],
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+INSERT INTO cinemas (id, name, short_name, neighborhood, distance, address, features)
+VALUES
+('flagship-lincoln', 'CineMind Flagship — Lincoln Square', 'Lincoln Square', 'Upper West Side', '1.8 mi', '1998 Broadway, New York, NY', ARRAY['IMAX 70mm Dual Laser', 'Dolby Atmos 128-ch', 'VIP Heated Recliners', 'Craft Dining Bar']),
+('west-end-pavilion', 'CineMind West End Pavilion', 'West End', 'Hell''s Kitchen', '4.2 mi', '610 W 54th St, New York, NY', ARRAY['Dolby Cinema Reference', 'In-Seat Chef Dining', 'Artisan Cocktail Lounge']),
+('uptown-arts-center', 'CineMind Uptown IMAX Arts Center', 'Uptown Arts', 'Carnegie Hill', '6.5 mi', '1220 Lexington Ave, New York, NY', ARRAY['Curated Art Repertory', 'Sommelier Wine Bar', 'Acoustic Wool Baffling'])
+ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS auditoriums (
     id VARCHAR(64) PRIMARY KEY,
+    cinema_id VARCHAR(64) REFERENCES cinemas(id),
     name VARCHAR(255) NOT NULL,
     format VARCHAR(64) NOT NULL,
     capacity INT NOT NULL DEFAULT 30,
@@ -10,14 +29,14 @@ CREATE TABLE IF NOT EXISTS auditoriums (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-INSERT INTO auditoriums (id, name, format, capacity, surge_multiplier, perk, sound_system)
+INSERT INTO auditoriums (id, cinema_id, name, format, capacity, surge_multiplier, perk, sound_system)
 VALUES
-('aud-01', 'Auditorium 1 — Grand GT Laser', 'IMAX 70mm', 30, 1.15, 'Dual 4K Commercial Laser • 1.43:1 Giant Dome', '12-Channel IMAX Immersive Audio'),
-('aud-02', 'Auditorium 2 — Laser Studio', 'Standard 70mm', 30, 1.05, '70mm 5-perf Physical Film Optics • 2.39:1 CinemaScope', 'Dolby 7.1 Studio Surround'),
-('aud-03', 'Auditorium 3 — Pavilion Dolby', 'Dolby Cinema', 30, 1.10, 'Dolby Vision HDR • 128-ch Atmos Spatial Immersion', 'Dolby Atmos 128-ch Spatial'),
-('aud-04', 'Auditorium 4 — Intimate Studio', 'Standard Digital', 30, 1.00, 'Acoustic Wool Baffling • 7.1 Studio Surround', '7.1 Studio Reference'),
-('aud-05', 'Auditorium 5 — ScreenX 270°', 'ScreenX 270°', 30, 1.12, '3-Screen Panoramic Peripheral Immersion', 'Dolby Atmos Multi-Array'),
-('aud-06', 'Auditorium 6 — 3D Laser Dome', 'IMAX 3D Laser', 30, 1.18, 'Active Shutter 4K Laser 3D Reference', '12-Channel IMAX Spatial Audio')
+('aud-01', 'flagship-lincoln', 'Auditorium 1 — Grand GT Laser', 'IMAX 70mm', 30, 1.15, 'Dual 4K Commercial Laser • 1.43:1 Giant Dome', '12-Channel IMAX Immersive Audio'),
+('aud-02', 'west-end-pavilion', 'Auditorium 2 — Laser Studio', 'Standard 70mm', 30, 1.05, '70mm 5-perf Physical Film Optics • 2.39:1 CinemaScope', 'Dolby 7.1 Studio Surround'),
+('aud-03', 'west-end-pavilion', 'Auditorium 3 — Pavilion Dolby', 'Dolby Cinema', 30, 1.10, 'Dolby Vision HDR • 128-ch Atmos Spatial Immersion', 'Dolby Atmos 128-ch Spatial'),
+('aud-04', 'uptown-arts-center', 'Auditorium 4 — Intimate Studio', 'Standard Digital', 30, 1.00, 'Acoustic Wool Baffling • 7.1 Studio Surround', '7.1 Studio Reference'),
+('aud-05', 'flagship-lincoln', 'Auditorium 5 — ScreenX 270°', 'ScreenX 270°', 30, 1.12, '3-Screen Panoramic Peripheral Immersion', 'Dolby Atmos Multi-Array'),
+('aud-06', 'uptown-arts-center', 'Auditorium 6 — 3D Laser Dome', 'IMAX 3D Laser', 30, 1.18, 'Active Shutter 4K Laser 3D Reference', '12-Channel IMAX Spatial Audio')
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS concession_items (

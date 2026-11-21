@@ -52,6 +52,11 @@ public interface MovieCatalogService {
     List<Auditorium> getAuditoriums();
 
     /**
+     * Retrieves all cinema venues with their linked screens from PostgreSQL SSOT.
+     */
+    List<CinemaVenue> getCinemas();
+
+    /**
      * Normalizes YouTube links into embeddable URLs for trailer players.
      */
     static String normalizeTrailerUrl(String url) {

@@ -226,7 +226,7 @@ function TicketsContent() {
             ticketId: id,
             movieTitle: result.ticket?.movieTitle || matched?.movieTitle || 'Admission Pass',
             seats: result.ticket?.seats || matched?.seats || ['General'],
-            auditorium: result.ticket?.auditorium || matched?.auditorium || 'Auditorium 1',
+            auditorium: result.ticket?.auditorium || matched?.auditorium || 'Assigned Screen',
             timestamp: nowStr,
             status: isGranted ? 'GRANTED' : 'DENIED',
             note: result.message,
@@ -289,7 +289,7 @@ function TicketsContent() {
         ticketId: ticketId,
         movieTitle: selectedTicket?.movieTitle || 'Staff Override',
         seats: selectedTicket?.seats || [],
-        auditorium: selectedTicket?.auditorium || 'Auditorium 1',
+        auditorium: selectedTicket?.auditorium || 'Assigned Screen',
         timestamp: nowStr,
         status: 'OVERRIDE',
         note: `Admitted under supervisor discretion by ${currentUser?.fullName || 'Usher'}`,
@@ -677,7 +677,7 @@ function TicketsContent() {
                           <div className="border-y sm:border-y-0 sm:border-x border-emerald-500/20 py-2 sm:py-0 sm:px-3">
                             <span className="text-[10px] uppercase font-semibold text-emerald-300/70 block">Auditorium Entry</span>
                             <span className="text-sm font-bold text-purple-400 mt-0.5 block">
-                              {validationResult.ticket?.auditorium || 'Auditorium 1'}
+                              {validationResult.ticket?.auditorium || selectedTicket?.auditorium || 'Assigned Screen'}
                             </span>
                             <span className="text-[11px] text-zinc-400">Gate #2 Left Entrance</span>
                           </div>

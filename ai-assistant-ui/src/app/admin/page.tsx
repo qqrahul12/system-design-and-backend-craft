@@ -276,13 +276,14 @@ export default function AdminPage() {
   }
 
   // Add Movie Form state
+  const [circuitAuditoriums, setCircuitAuditoriums] = useState<any[]>([])
   const [newTitle, setNewTitle] = useState('')
   const [newGenre, setNewGenre] = useState('Sci-Fi')
   const [newYear, setNewYear] = useState(2026)
   const [newReleaseDate, setNewReleaseDate] = useState('2026-05-22')
   const [newDuration, setNewDuration] = useState('2h 20m')
   const [newPrice, setNewPrice] = useState(17.5)
-  const [newAuditorium, setNewAuditorium] = useState('Auditorium 1 — Grand GT Laser')
+  const [newAuditorium, setNewAuditorium] = useState('')
   const [newShowtimes, setNewShowtimes] = useState('1:00 PM, 4:30 PM, 8:00 PM')
   const [newSynopsis, setNewSynopsis] = useState('')
   const [newPosterUrl, setNewPosterUrl] = useState('https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=600&auto=format&fit=crop')
@@ -294,22 +295,25 @@ export default function AdminPage() {
   const fetchData = async () => {
     setIsLoading(true)
     try {
-      // 1. Fetch live movies
-      const moviesData = await movieService.getMovies()
+      const [moviesData, analyticsData, authData, auditoriumsData] = await Promise.all([
+        movieService.getMovies().catch(() => []),
+        adminService.getAnalytics().catch(() => null),
+        authService.getCurrentUser().catch(() => null),
+        movieService.getAuditoriums().catch(() => []),
+      ])
+
       if (moviesData) {
         setMovies(moviesData as any)
       }
-
-      // 2. Fetch live analytics
-      const analyticsData = await adminService.getAnalytics()
       if (analyticsData) {
         setAnalytics(analyticsData as any)
       }
-
-      // 3. Fetch active user auth persona
-      const authData = await authService.getCurrentUser()
       if (authData) {
         setCurrentUser(authData as any)
+      }
+      if (auditoriumsData && auditoriumsData.length > 0) {
+        setCircuitAuditoriums(auditoriumsData)
+        setNewAuditorium((prev) => prev || auditoriumsData[0].name)
       }
     } catch (err) {
       console.warn('Backend offline, using fallback state', err)
@@ -461,7 +465,7 @@ export default function AdminPage() {
         setNewDuration(drafted.duration || '2h 15m')
         setNewPrice(drafted.price || 16.5)
         setNewSynopsis(drafted.synopsis || '')
-        setNewAuditorium(drafted.auditorium || 'Auditorium 1 — Grand GT Laser')
+        setNewAuditorium(drafted.auditorium || (circuitAuditoriums[0]?.name ?? ''))
         setNewShowtimes(drafted.showtimes || '1:00 PM, 4:30 PM, 8:00 PM')
         if (drafted.trailerUrl) setNewTrailerUrl(drafted.trailerUrl)
         if (drafted.director) setNewDirector(drafted.director)
@@ -582,7 +586,7 @@ export default function AdminPage() {
     setNewDuration('2h 20m')
     setNewPrice(17.5)
     setNewSynopsis('')
-    setNewAuditorium('Auditorium 1 — Grand GT Laser')
+    setNewAuditorium(circuitAuditoriums[0]?.name ?? '')
     setNewShowtimes('1:00 PM, 4:30 PM, 8:00 PM')
     setNewTrailerUrl('https://www.youtube.com/watch?v=zSWdZVtXT7E')
     setNewDirector('Denis Villeneuve')
@@ -1047,15 +1051,11 @@ export default function AdminPage() {
 
           {/* Auditorium Utilization Matrix */}
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-            {[
-              { id: 'screen-1', name: 'Screen 1', format: 'IMAX 70mm Auditorium', keyword: 'Auditorium 1' },
-              { id: 'screen-2', name: 'Screen 2', format: '70mm Large Format', keyword: 'Auditorium 2' },
-              { id: 'screen-3', name: 'Screen 3', format: 'Dolby Cinema Atmos', keyword: 'Auditorium 3' },
-            ].map((scr, idx) => {
+            {circuitAuditoriums.map((scr) => {
               const matchingMovies = movies.filter(
                 (m) =>
-                  m.auditorium?.toLowerCase().includes(scr.keyword.toLowerCase()) ||
-                  m.auditorium?.toLowerCase().includes(scr.format.toLowerCase())
+                  m.auditorium === scr.name ||
+                  m.auditorium?.toLowerCase().includes(scr.format?.toLowerCase() || '')
               )
               const titles = matchingMovies.map((m) => m.title).slice(0, 2).join(', ') || 'No current screenings'
               const avgOcc =
@@ -1076,8 +1076,9 @@ export default function AdminPage() {
                   </div>
                   <h4 className="mt-2 text-base font-bold text-white">{scr.format}</h4>
                   <p className="mt-1 truncate text-xs text-zinc-400">Showing: {titles}</p>
+                  {scr.perk && <p className="mt-1 truncate text-[10px] text-zinc-500">{scr.perk}</p>}
                   <div className="mt-4 flex items-center justify-between text-xs text-zinc-300">
-                    <span>Auditorium Status</span>
+                    <span>Capacity: {scr.capacity} Seats</span>
                     <span>{avgOcc}% Occupancy</span>
                   </div>
                   <div className="mt-2 h-2 w-full rounded-full bg-zinc-800">
@@ -1631,11 +1632,11 @@ export default function AdminPage() {
                   onChange={(e) => setNewAuditorium(e.target.value)}
                   className="w-full rounded-xl border border-zinc-800 bg-zinc-950 px-3.5 py-2 text-sm text-white focus:border-purple-500 focus:outline-none"
                 >
-                  <option value="IMAX 70mm Auditorium 1">IMAX 70mm Auditorium 1</option>
-                  <option value="70mm Large Format Screen 2">70mm Large Format Screen 2</option>
-                  <option value="Dolby Cinema Auditorium 3">Dolby Cinema Auditorium 3</option>
-                  <option value="ScreenX 270° Panoramic">ScreenX 270° Panoramic</option>
-                  <option value="Indie Studio 4">Indie Studio 4</option>
+                  {circuitAuditoriums.map((a) => (
+                    <option key={a.id} value={a.name}>
+                      {a.name} ({a.format})
+                    </option>
+                  ))}
                 </select>
               </div>
 

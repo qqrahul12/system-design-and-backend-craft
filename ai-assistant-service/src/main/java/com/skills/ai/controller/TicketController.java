@@ -67,10 +67,19 @@ public class TicketController {
 
     @PostMapping("/lock")
     public ResponseEntity<TicketService.SeatLock> acquireSeatLock(@RequestBody Map<String, Object> req) {
-        String movie = (String) req.getOrDefault("movieTitle", "Interstellar");
-        String showtime = (String) req.getOrDefault("showTime", "7:30 PM");
+        String movie = (String) req.get("movieTitle");
+        String showtime = (String) req.get("showTime");
         @SuppressWarnings("unchecked")
-        List<String> seats = req.containsKey("seats") ? (List<String>) req.get("seats") : List.of("B3", "B4");
+        List<String> seats = (List<String>) req.get("seats");
+        if (movie == null || movie.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "movieTitle is required");
+        }
+        if (showtime == null || showtime.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "showTime is required");
+        }
+        if (seats == null || seats.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "seats are required");
+        }
         return ResponseEntity.ok(ticketService.acquireSeatLock(movie, showtime, seats));
     }
 
@@ -83,12 +92,19 @@ public class TicketController {
 
     @PostMapping("/issue")
     public DigitalTicket issueTicket(@RequestBody Map<String, Object> req) {
-        String movie = (String) req.getOrDefault("movieTitle", "Inception");
-        String showTime = (String) req.getOrDefault("showTime", "9:30 PM");
-        String format = (String) req.getOrDefault("format", "IMAX 70mm");
-        String auditorium = (String) req.getOrDefault("auditorium", "Auditorium 1 (Dolby)");
-        List<String> seats = req.containsKey("seats") ? (List<String>) req.get("seats") : List.of("B3", "B4");
-        double amount = req.containsKey("totalPaid") ? ((Number) req.get("totalPaid")).doubleValue() : 24.00;
+        String movie = (String) req.get("movieTitle");
+        String showTime = (String) req.getOrDefault("showTime", "7:00 PM");
+        String format = (String) req.getOrDefault("format", "Standard Digital");
+        String auditorium = (String) req.getOrDefault("auditorium", "");
+        @SuppressWarnings("unchecked")
+        List<String> seats = (List<String>) req.get("seats");
+        if (movie == null || movie.isBlank()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "movieTitle is required");
+        }
+        if (seats == null || seats.isEmpty()) {
+            throw new org.springframework.web.server.ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST, "seats are required");
+        }
+        double amount = req.containsKey("totalPaid") ? ((Number) req.get("totalPaid")).doubleValue() : 0.0;
         java.time.Instant issuedAt = null;
         if (req.containsKey("issuedAt") && req.get("issuedAt") != null) {
             try {

@@ -85,13 +85,25 @@ interface Movie {
 }
 
 const GENRES = ['All', 'Sci-Fi', 'Epic', 'Drama', 'Action', 'Romance']
-const SCREENING_DATES = [
-  { id: 'today', label: 'Today', date: 'Nov 14', dayName: 'Thursday' },
-  { id: 'tomorrow', label: 'Tomorrow', date: 'Nov 15', dayName: 'Friday' },
-  { id: 'sat', label: 'Sat', date: 'Nov 16', dayName: 'Saturday' },
-  { id: 'sun', label: 'Sun', date: 'Nov 17', dayName: 'Sunday' },
-  { id: 'mon', label: 'Mon', date: 'Nov 18', dayName: 'Monday' },
-]
+
+function getDynamicScreeningDates() {
+  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  const result = []
+  const today = new Date()
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(today)
+    d.setDate(today.getDate() + i)
+    const id = i === 0 ? 'today' : i === 1 ? 'tomorrow' : days[d.getDay()].substring(0, 3).toLowerCase()
+    const label = i === 0 ? 'Today' : i === 1 ? 'Tomorrow' : days[d.getDay()].substring(0, 3)
+    const date = `${months[d.getMonth()]} ${d.getDate()}`
+    const dayName = days[d.getDay()]
+    result.push({ id, label, date, dayName })
+  }
+  return result
+}
+
+const SCREENING_DATES = getDynamicScreeningDates()
 const ROWS = ['A', 'B', 'C', 'D', 'E']
 const COLS_LEFT = [1, 2, 3]
 const COLS_RIGHT = [4, 5, 6]
@@ -159,127 +171,22 @@ interface CinemaVenue {
   id: string
   name: string
   shortName: string
-  neighborhood: string
-  distance: string
-  address: string
-  features: string[]
-  screens: {
+  neighborhood?: string
+  distance?: string
+  address?: string
+  features?: string[]
+  screens?: {
     id: string
     name: string
     format: string
-    tech: string
-    aspectRatio: string
-    soundSystem: string
-    baseMultiplier: number
-    capacity: number
+    tech?: string
+    aspectRatio?: string
+    soundSystem?: string
+    baseMultiplier?: number
+    capacity?: number
+    perk?: string
   }[]
 }
-
-const CINEMA_VENUES: CinemaVenue[] = [
-  {
-    id: 'flagship-lincoln',
-    name: 'CineMind Flagship — Lincoln Square',
-    shortName: 'Lincoln Square',
-    neighborhood: 'Upper West Side',
-    distance: '1.8 mi',
-    address: '1998 Broadway, New York, NY',
-    features: ['IMAX 70mm Dual Laser', 'Dolby Atmos 128-ch', 'VIP Heated Recliners', 'Craft Dining Bar'],
-    screens: [
-      {
-        id: 'screen-ls-1',
-        name: 'Auditorium 1 — Grand GT Laser',
-        format: 'IMAX 70mm',
-        tech: 'Dual 4K Commercial Laser',
-        aspectRatio: '1.43:1 Giant Dome',
-        soundSystem: '12-Channel IMAX Immersion',
-        baseMultiplier: 1.15,
-        capacity: 30,
-      },
-      {
-        id: 'screen-ls-2',
-        name: 'Auditorium 2 — Dolby Prime Stage',
-        format: 'Dolby Cinema',
-        tech: 'Dual Christie 6P 4K Laser HDR',
-        aspectRatio: '2.39:1 CinemaScope',
-        soundSystem: '128-Channel Dolby Atmos',
-        baseMultiplier: 1.05,
-        capacity: 30,
-      },
-      {
-        id: 'screen-ls-3',
-        name: 'Auditorium 3 — Laser Studio A',
-        format: 'Standard 4K Laser',
-        tech: 'Barco Series 4 Laser',
-        aspectRatio: '2.39:1 Scope',
-        soundSystem: '7.1 Studio Surround',
-        baseMultiplier: 1.0,
-        capacity: 30,
-      },
-    ],
-  },
-  {
-    id: 'west-end-pavilion',
-    name: 'CineMind West End Pavilion',
-    shortName: 'West End',
-    neighborhood: "Hell's Kitchen",
-    distance: '4.2 mi',
-    address: '610 W 54th St, New York, NY',
-    features: ['Dolby Cinema Reference', 'In-Seat Chef Dining', 'Artisan Cocktail Lounge'],
-    screens: [
-      {
-        id: 'screen-we-1',
-        name: 'Auditorium A — Pavilion Dolby 1',
-        format: 'Dolby Cinema',
-        tech: 'Dual Dolby 4K Laser HDR',
-        aspectRatio: '2.39:1 CinemaScope',
-        soundSystem: 'Dolby Atmos Spatial Audio',
-        baseMultiplier: 1.05,
-        capacity: 30,
-      },
-      {
-        id: 'screen-we-2',
-        name: 'Auditorium B — Classic Laser 2',
-        format: 'Standard 4K Laser',
-        tech: 'Christie 4K Laser',
-        aspectRatio: '1.85:1 Flat',
-        soundSystem: '5.1 Surround',
-        baseMultiplier: 1.0,
-        capacity: 30,
-      },
-    ],
-  },
-  {
-    id: 'uptown-arts-center',
-    name: 'CineMind Uptown IMAX Arts Center',
-    shortName: 'Uptown Arts',
-    neighborhood: 'Carnegie Hill',
-    distance: '6.5 mi',
-    address: '1220 Lexington Ave, New York, NY',
-    features: ['Curated Art Repertory', 'Sommelier Wine Bar', 'Acoustic Wool Baffling'],
-    screens: [
-      {
-        id: 'screen-up-1',
-        name: 'Auditorium I — Arts IMAX Dome',
-        format: 'IMAX 70mm',
-        tech: 'Single IMAX Laser Curved Arc',
-        aspectRatio: '1.90:1 Expanded',
-        soundSystem: '12-Channel Immersive',
-        baseMultiplier: 1.15,
-        capacity: 30,
-      },
-      {
-        id: 'screen-up-2',
-        name: 'Auditorium II — Intimate Studio B',
-        format: 'Standard 4K Laser',
-        tech: 'Barco 4K Laser',
-        aspectRatio: '1.85:1 Flat',
-        soundSystem: 'Dolby Atmos 64-ch',
-        baseMultiplier: 1.0,
-        capacity: 30,
-      },
-    ],
-  },
-]
 
 interface SeatSightline {
   seatId: string
@@ -406,50 +313,76 @@ interface SmartExperienceRecommendation {
   matchScore: number
 }
 
-function getSmartExperienceRecommendation(movie: Movie): SmartExperienceRecommendation {
+function getSmartExperienceRecommendation(movie: Movie, venues: any[]): SmartExperienceRecommendation | null {
   const isLargeFormatEpic =
     ['Sci-Fi', 'Action', 'Epic'].includes(movie.genre) ||
     /dune|avatar|mickey|oppenheimer|interstellar|blade runner|mad max|matrix/i.test(movie.title)
 
+  const flagship = venues.find((v) => v.id === 'flagship-lincoln') || venues[0]
+  const secondary = venues.find((v) => v.id === 'west-end-pavilion') || venues[1] || venues[0]
+  const targetVenue = (isLargeFormatEpic ? flagship : secondary) || {
+    id: 'flagship-lincoln',
+    name: 'CineMind Flagship — Lincoln Square',
+    shortName: 'Lincoln Square',
+    distance: '1.8 mi',
+    screens: [],
+  }
+
+  const targetScreen = targetVenue.screens?.find((s: any) =>
+    isLargeFormatEpic ? s.format?.includes('IMAX') : s.format?.includes('Dolby')
+  ) || targetVenue.screens?.[0]
+
+  const audName = movie.auditorium || targetScreen?.name || 'Grand GT Laser'
+  const formatName = targetScreen?.format || (isLargeFormatEpic ? 'IMAX 70mm' : 'Dolby Cinema')
+
   if (isLargeFormatEpic) {
     return {
-      venueId: 'flagship-lincoln',
-      venueName: 'CineMind Flagship — Lincoln Square',
-      shortName: 'Lincoln Square',
-      distance: '1.8 mi',
-      format: 'IMAX 70mm',
-      auditorium: 'Auditorium 1 — Grand GT Laser',
+      venueId: targetVenue.id,
+      venueName: targetVenue.name,
+      shortName: targetVenue.shortName,
+      distance: targetVenue.distance || '1.8 mi',
+      format: formatName,
+      auditorium: audName,
       sweetSpotSeats: ['C3', 'C4'],
-      headline: 'IMAX 70mm GT Laser • Optical & Acoustic Reference',
-      reasoning: `${movie.title} features epic visual sequences captured for giant 1.43:1 aspect ratio. Lincoln Square's Dual GT Laser delivers 40% expanded vertical imagery with 128-channel Dolby Atmos tuned directly to Center Rows C & D.`,
-      tags: ['1.43:1 Expanded Aspect', 'Dual 4K Commercial Laser', 'Row C Optical Sweet Spot'],
+      headline: `${formatName} • Optical & Acoustic Reference`,
+      reasoning: `${movie.title} features epic visual sequences captured for giant aspect ratio. ${targetVenue.shortName}'s ${formatName} delivers reference imagery tuned directly to Center Rows C & D.`,
+      tags: ['Expanded Aspect', 'Commercial Laser', 'Row C Optical Sweet Spot'],
       matchScore: 99,
     }
   }
 
   return {
-    venueId: 'west-end-pavilion',
-    venueName: 'CineMind West End Pavilion',
-    shortName: 'West End',
-    distance: '4.2 mi',
-    format: 'Dolby Cinema',
-    auditorium: 'Auditorium A — Pavilion Dolby 1',
+    venueId: targetVenue.id,
+    venueName: targetVenue.name,
+    shortName: targetVenue.shortName,
+    distance: targetVenue.distance || '4.2 mi',
+    format: formatName,
+    auditorium: audName,
     sweetSpotSeats: ['C3', 'C4'],
-    headline: 'Dolby Cinema Dual Laser • Intimate Acoustic Stage',
-    reasoning: `Intimate drama in ${movie.title} benefits from Dolby Vision's 1,000,000:1 contrast ratio, deep true blacks, and pin-drop acoustic clarity at Center Heated Recliners C3 & C4.`,
-    tags: ['Dolby Vision HDR', 'Sub-bass Transducer Recliners', 'In-Seat Chef Dining'],
+    headline: `${formatName} • Intimate Acoustic Stage`,
+    reasoning: `Intimate drama in ${movie.title} benefits from high contrast ratio, deep true blacks, and pin-drop acoustic clarity at Center Heated Recliners C3 & C4.`,
+    tags: ['True Contrast', 'Sub-bass Transducer Recliners', 'In-Seat Chef Dining'],
     matchScore: 97,
   }
 }
 
 export default function BookingPage() {
   const [movies, setMovies] = useState<Movie[]>([])
+  const [cinemaVenues, setCinemaVenues] = useState<any[]>([])
 
   useEffect(() => {
     movieService.getMovies()
       .then((data) => {
         if (data && Array.isArray(data) && data.length > 0) {
           setMovies(data as any)
+        }
+      })
+      .catch(() => {})
+
+    movieService.getCinemas()
+      .then((venues) => {
+        if (venues && Array.isArray(venues) && venues.length > 0) {
+          setCinemaVenues(venues)
         }
       })
       .catch(() => {})
@@ -519,13 +452,25 @@ export default function BookingPage() {
   const [showAllVenues, setShowAllVenues] = useState<boolean>(false)
 
   const selectedCinema = useMemo(() => {
-    return CINEMA_VENUES.find((c) => c.id === selectedCinemaId) || CINEMA_VENUES[0]
-  }, [selectedCinemaId])
+    return (
+      cinemaVenues.find((c) => c.id === selectedCinemaId) ||
+      cinemaVenues[0] || {
+        id: 'flagship-lincoln',
+        name: 'CineMind Flagship — Lincoln Square',
+        shortName: 'Lincoln Square',
+        neighborhood: 'Upper West Side',
+        distance: '1.8 mi',
+        address: '1998 Broadway, New York, NY',
+        features: ['IMAX 70mm Dual Laser', 'Dolby Atmos 128-ch'],
+        screens: [],
+      }
+    )
+  }, [cinemaVenues, selectedCinemaId])
 
   const smartRecommendation = useMemo(() => {
     if (!selectedMovie) return null
-    return getSmartExperienceRecommendation(selectedMovie)
-  }, [selectedMovie])
+    return getSmartExperienceRecommendation(selectedMovie, cinemaVenues)
+  }, [selectedMovie, cinemaVenues])
 
   const activeSightlineSeatId = hoveredSeat || (selectedSeats.length > 0 ? selectedSeats[0] : 'C3')
   const activeSightline = useMemo(() => getSeatSightline(activeSightlineSeatId), [activeSightlineSeatId])
@@ -994,8 +939,10 @@ REASON: <1 sentence why it matches>`
     setBookingConfirmation(null)
     setLockWarning(null)
 
-    const rec = getSmartExperienceRecommendation(movie)
-    setSelectedCinemaId(rec.venueId)
+    const rec = getSmartExperienceRecommendation(movie, cinemaVenues)
+    if (rec) {
+      setSelectedCinemaId(rec.venueId)
+    }
 
     const times = movie.showtimes ? movie.showtimes.split(',').map((s) => s.trim()) : []
     const time = customShowtime || times[0] || ''
@@ -1003,7 +950,7 @@ REASON: <1 sentence why it matches>`
 
     const defaultFmt =
       customFormat ||
-      rec.format ||
+      (rec ? rec.format : undefined) ||
       (movie.auditorium?.includes('IMAX')
         ? 'IMAX 70mm'
         : movie.auditorium?.includes('Dolby')
@@ -1143,7 +1090,8 @@ REASON: <1 sentence why it matches>`
 
     const totalAmount = priceBreakdown.total
     const showTime = selectedShowtime
-    const auditorium = `${selectedFormat} (${selectedCinema.shortName} • ${selectedMovie.auditorium || 'Auditorium 1'})`
+    const fallbackAudName = (selectedCinema.screens && selectedCinema.screens[0]?.name) || 'Auditorium'
+    const auditorium = `${selectedFormat} (${selectedCinema.shortName} • ${selectedMovie.auditorium || fallbackAudName})`
 
     try {
       if (paymentMethod === 'WALLET') {
@@ -1769,7 +1717,7 @@ REASON: <1 sentence why it matches>`
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                      {CINEMA_VENUES.map((venue) => {
+                      {cinemaVenues.map((venue) => {
                         const isVenueActive = selectedCinemaId === venue.id
                         return (
                           <div
@@ -1784,7 +1732,7 @@ REASON: <1 sentence why it matches>`
                               <div>
                                 <h5 className="text-xs font-bold text-white flex items-center gap-1.5">
                                   <span>{venue.name}</span>
-                                  {venue.id === smartRecommendation.venueId && (
+                                  {smartRecommendation && venue.id === smartRecommendation.venueId && (
                                     <span className="text-[9px] bg-purple-500/20 text-purple-300 px-1.5 py-0.2 rounded border border-purple-500/40">
                                       AI Pick
                                     </span>
@@ -1804,7 +1752,7 @@ REASON: <1 sentence why it matches>`
 
                             {/* Screen options for this venue */}
                             <div className="mt-2.5 space-y-1.5">
-                              {venue.screens.map((screen) => {
+                              {(venue.screens || []).map((screen: any) => {
                                 const isScreenActive = isVenueActive && selectedFormat === screen.format
                                 return (
                                   <button
@@ -1822,7 +1770,7 @@ REASON: <1 sentence why it matches>`
                                   >
                                     <div>
                                       <div className="font-semibold">{screen.name}</div>
-                                      <div className="text-[9px] text-zinc-500 font-mono">{screen.tech}</div>
+                                      <div className="text-[9px] text-zinc-500 font-mono">{screen.perk || screen.soundSystem || screen.tech || 'Precision Laser'}</div>
                                     </div>
                                     <span className="font-mono text-[10px] text-zinc-400">
                                       {screen.format}

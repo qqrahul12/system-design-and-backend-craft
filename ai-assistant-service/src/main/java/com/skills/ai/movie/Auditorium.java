@@ -5,6 +5,7 @@ package com.skills.ai.movie;
  */
 public record Auditorium(
         String id,
+        String cinemaId,
         String name,
         String format,
         int capacity,

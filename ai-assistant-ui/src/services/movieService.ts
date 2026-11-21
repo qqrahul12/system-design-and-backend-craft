@@ -31,12 +31,24 @@ export interface Movie {
 
 export interface Auditorium {
   id: string;
+  cinemaId?: string;
   name: string;
   format: string;
   capacity: number;
   surgeMultiplier: number;
   perk?: string;
   soundSystem?: string;
+}
+
+export interface CinemaVenue {
+  id: string;
+  name: string;
+  shortName: string;
+  neighborhood?: string;
+  distance?: string;
+  address?: string;
+  features: string[];
+  screens?: Auditorium[];
 }
 
 export const movieService = {
@@ -72,4 +84,7 @@ export const movieService = {
 
   getAuditoriums: (): Promise<Auditorium[]> =>
     apiClient.get<Auditorium[]>('/api/v1/movies/auditoriums'),
+
+  getCinemas: (): Promise<CinemaVenue[]> =>
+    apiClient.get<CinemaVenue[]>('/api/v1/movies/cinemas'),
 };

@@ -3,6 +3,8 @@ package com.skills.ai.agent;
 import com.skills.ai.concessions.ConcessionsService;
 import com.skills.ai.mcp.McpToolDefinition;
 import com.skills.ai.mcp.McpToolRegistry;
+import com.skills.ai.movie.Auditorium;
+import com.skills.ai.movie.MovieCatalogService;
 import com.skills.ai.session.SessionStoreService;
 import com.skills.ai.session.SessionSummary;
 import com.skills.ai.telemetry.TraceCollectorService;
@@ -43,6 +45,7 @@ public class MultiAgentOrchestratorService {
     private final SessionStoreService sessionStore;
     private final ConcessionsService concessionsService;
     private final TicketService ticketService;
+    private final MovieCatalogService movieCatalogService;
 
     public MultiAgentOrchestratorService(
             McpToolRegistry toolRegistry,
@@ -51,7 +54,8 @@ public class MultiAgentOrchestratorService {
             TraceCollectorService traceCollector,
             SessionStoreService sessionStore,
             ConcessionsService concessionsService,
-            TicketService ticketService) {
+            TicketService ticketService,
+            MovieCatalogService movieCatalogService) {
         this.toolRegistry = toolRegistry;
         this.geminiChatClient = geminiChatClient;
         this.groqChatClient = groqChatClient;
@@ -59,6 +63,7 @@ public class MultiAgentOrchestratorService {
         this.sessionStore = sessionStore;
         this.concessionsService = concessionsService;
         this.ticketService = ticketService;
+        this.movieCatalogService = movieCatalogService;
     }
 
     public List<AgentPersona> getAgentRoster() {
@@ -322,6 +327,11 @@ public class MultiAgentOrchestratorService {
             }
         }
 
+        // Resolve dynamic auditorium & format from SSOT catalog
+        var circuitAuds = movieCatalogService.getAuditoriums();
+        String primaryAudName = circuitAuds.isEmpty() ? "Auditorium 1" : circuitAuds.get(0).name();
+        String primaryFormat = circuitAuds.isEmpty() ? "IMAX 70mm" : circuitAuds.get(0).format();
+
         // Extract or record real digital ticket
         String issuedTicketId = null;
         var matcher = java.util.regex.Pattern.compile("ID=([A-Z0-9-]+)").matcher(payText);
@@ -329,7 +339,7 @@ public class MultiAgentOrchestratorService {
             issuedTicketId = matcher.group(1);
         } else {
             DigitalTicket dt = ticketService.issueTicket(
-                    searchTarget, "7:30 PM", "IMAX 70mm", "Auditorium 1 (Dolby Atmos)", assignedSeats, finalAmount);
+                    searchTarget, "7:30 PM", primaryFormat, primaryAudName, assignedSeats, finalAmount);
             issuedTicketId = dt.ticketId();
         }
 
@@ -338,10 +348,15 @@ public class MultiAgentOrchestratorService {
         if (objective.toLowerCase().contains("popcorn") || objective.toLowerCase().contains("snack") ||
                 objective.toLowerCase().contains("food") || objective.toLowerCase().contains("concession")) {
             try {
+                var menu = concessionsService.getMenu();
+                var firstItem = menu.isEmpty() ? null : menu.get(0);
+                String itemName = firstItem != null ? firstItem.name() : "Artisan Popcorn";
+                double itemPrice = firstItem != null ? firstItem.price() : 9.50;
+                String deliverySeat = primaryAudName + ", Seat " + (assignedSeats.isEmpty() ? "C3" : assignedSeats.get(0));
                 var order = concessionsService.placeOrder(
-                        List.of(Map.of("name", "Artisan Truffle Butter Popcorn", "qty", 1, "price", 9.50)),
-                        "Auditorium 1 (Dolby), Seat B3",
-                        9.50
+                        List.of(Map.of("name", itemName, "qty", 1, "price", itemPrice)),
+                        deliverySeat,
+                        itemPrice
                 );
                 createdOrderId = order.orderId();
             } catch (Exception ignored) {}
@@ -471,7 +486,7 @@ public class MultiAgentOrchestratorService {
                 "TXN-" + UUID.randomUUID().toString().substring(0, 8).toUpperCase(),
                 searchTarget,
                 "7:30 PM",
-                "Auditorium 1 (Dolby Atmos)",
+                primaryAudName,
                 assignedSeats,
                 finalAmount,
                 createdOrderId

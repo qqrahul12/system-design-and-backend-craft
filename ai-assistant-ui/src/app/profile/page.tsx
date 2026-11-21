@@ -535,7 +535,7 @@ export default function ProfilePage() {
                           <div>
                             <h4 className="text-sm font-bold text-white">{t.movieTitle}</h4>
                             <p className="text-[11px] text-zinc-400">
-                              {t.auditorium || 'Auditorium 1'} • {t.showtime || 'Today'}
+                              {t.auditorium || 'Assigned Screen'} • {t.showtime || 'Today'}
                             </p>
                           </div>
                         </div>

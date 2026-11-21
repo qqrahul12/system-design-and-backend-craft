@@ -43,6 +43,7 @@ import {
   concessionsService,
   ticketService,
   walletService,
+  movieService,
 } from '@/services'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 
@@ -136,6 +137,7 @@ function ConcessionsContent() {
   const [walletBalance, setWalletBalance] = useState<number>(175.00)
   const [currentUser, setCurrentUser] = useState<any>(null)
   const [personas, setPersonas] = useState<any[]>([])
+  const [circuitAuditoriums, setCircuitAuditoriums] = useState<any[]>([])
 
   // Staff POS Counter Mode State
   // Role-Aligned Concessions Mode: Patron Self-Order vs Staff POS Counter vs Usher Delivery Checklist
@@ -169,6 +171,12 @@ function ConcessionsContent() {
     authService.getPersonas()
       .then((p) => {
         if (p && Array.isArray(p)) setPersonas(p)
+      })
+      .catch(() => {})
+
+    movieService.getAuditoriums()
+      .then((auds: any) => {
+        if (auds && Array.isArray(auds)) setCircuitAuditoriums(auds)
       })
       .catch(() => {})
   }, [])
@@ -343,14 +351,14 @@ function ConcessionsContent() {
             movieTitle: movieParam,
             showTime: 'Current Screening',
             format: 'IMAX 70mm',
-            auditorium: auditoriumParam || 'IMAX 70mm Auditorium 1',
+            auditorium: auditoriumParam || (circuitAuditoriums[0]?.name ?? ''),
             seats: parsedSeats,
             status: 'ISSUED',
           }
           list = [synth, ...list]
           setSelectedTicketId(synth.ticketId)
         }
-        const aud = auditoriumParam || match?.auditorium || 'Auditorium 1'
+        const aud = auditoriumParam || match?.auditorium || (circuitAuditoriums[0]?.name ?? '')
         if (parsedSeats.length === 1) {
           setDeliverySeat(`${aud}, Seat ${parsedSeats[0]}`)
         } else if (parsedSeats.length > 1) {
@@ -359,7 +367,7 @@ function ConcessionsContent() {
       } else if (list.length > 0) {
         const latest = list[list.length - 1]
         setSelectedTicketId(latest.ticketId)
-        const aud = latest.auditorium || 'Auditorium 1'
+        const aud = latest.auditorium || (circuitAuditoriums[0]?.name ?? '')
         if (latest.seats && latest.seats.length > 0) {
           if (latest.seats.length === 1) {
             setDeliverySeat(`${aud}, Seat ${latest.seats[0]}`)
@@ -376,7 +384,7 @@ function ConcessionsContent() {
 
   const handleSelectTicket = (ticket: UserTicket) => {
     setSelectedTicketId(ticket.ticketId)
-    const aud = ticket.auditorium || 'Auditorium 1'
+    const aud = ticket.auditorium || (circuitAuditoriums[0]?.name ?? '')
     if (ticket.seats && ticket.seats.length > 0) {
       if (ticket.seats.length === 1) {
         setDeliverySeat(`${aud}, Seat ${ticket.seats[0]}`)
@@ -1182,7 +1190,8 @@ function ConcessionsContent() {
                         setPosCustomerType('PATRON_SEAT')
                         if (personas.length > 0) {
                           setPosCustomerName(personas[0].fullName)
-                          setDeliverySeat('Auditorium 1, Seat C3')
+                          const audName = circuitAuditoriums[0]?.name || (userTickets[0]?.auditorium ?? '')
+                          setDeliverySeat(personas[0].defaultSeat || `${audName}, Seat C3`)
                         }
                       }}
                       className={`py-1 rounded-lg font-semibold transition ${
@@ -1210,7 +1219,10 @@ function ConcessionsContent() {
                               type="button"
                               onClick={() => {
                                 setPosCustomerName(p.fullName)
-                                setDeliverySeat(p.defaultSeat || `Auditorium 1 — Grand GT Laser, Seat C${(personas.indexOf(p) % 6) + 1}`)
+                                const patronAud = circuitAuditoriums.length > 0
+                                  ? circuitAuditoriums[personas.indexOf(p) % circuitAuditoriums.length].name
+                                  : (userTickets[0]?.auditorium ?? '')
+                                setDeliverySeat(p.defaultSeat || `${patronAud}, Seat C${(personas.indexOf(p) % 6) + 1}`)
                               }}
                               className={`text-[10px] px-2 py-0.5 rounded border transition ${
                                 isMatch
@@ -1227,7 +1239,7 @@ function ConcessionsContent() {
                         type="text"
                         value={deliverySeat}
                         onChange={(e) => setDeliverySeat(e.target.value)}
-                        placeholder="Destination (e.g. Auditorium 1, Seat C3)"
+                        placeholder={`Destination (${circuitAuditoriums[0]?.name || 'Auditorium'}, Seat C3)`}
                         className="w-full text-xs px-2.5 py-1.5 rounded-lg bg-zinc-950 border border-zinc-800 text-white focus:outline-none focus:border-purple-500"
                       />
                     </div>
@@ -1725,7 +1737,7 @@ function ConcessionsContent() {
               <div>
                 <span className="font-bold text-white text-sm">{activeTicket.movieTitle}</span>
                 <span className="text-zinc-500 mx-2">•</span>
-                <span className="text-zinc-400">{activeTicket.auditorium || 'Auditorium 1'}</span>
+                <span className="text-zinc-400">{activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}</span>
                 <span className="text-zinc-500 mx-2">•</span>
                 <span className="text-zinc-400">{activeTicket.showTime || 'Today'}</span>
                 {activeTicket.format && (
@@ -1749,12 +1761,12 @@ function ConcessionsContent() {
                     type="button"
                     onClick={() =>
                       handleSelectSeatDestination(
-                        `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                        `${activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}, Seats ${activeTicket.seats.join(', ')}`
                       )
                     }
                     className={`rounded-lg px-3 py-1.5 text-xs font-semibold border transition ${
                       deliverySeat ===
-                      `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                      `${activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}, Seats ${activeTicket.seats.join(', ')}`
                         ? 'bg-amber-500 text-black border-amber-400 font-bold shadow-sm shadow-amber-500/30'
                         : 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:bg-zinc-700 hover:text-white'
                     }`}
@@ -1765,7 +1777,7 @@ function ConcessionsContent() {
 
                 {activeTicket.seats &&
                   activeTicket.seats.map((seat) => {
-                    const fullTarget = `${activeTicket.auditorium || 'Auditorium 1'}, Seat ${seat}`
+                    const fullTarget = `${activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}, Seat ${seat}`
                     const isSelected = deliverySeat === fullTarget
                     return (
                       <button
@@ -2054,12 +2066,12 @@ function ConcessionsContent() {
                           type="button"
                           onClick={() =>
                             setDeliverySeat(
-                              `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                              `${activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}, Seats ${activeTicket.seats.join(', ')}`
                             )
                           }
                           className={`text-[10px] px-2 py-0.5 rounded border transition ${
                             deliverySeat ===
-                            `${activeTicket.auditorium || 'Auditorium 1'}, Seats ${activeTicket.seats.join(', ')}`
+                            `${activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}, Seats ${activeTicket.seats.join(', ')}`
                               ? 'bg-amber-500 text-black border-amber-400 font-bold'
                               : 'bg-zinc-900 text-zinc-400 border-zinc-800 hover:text-white'
                           }`}
@@ -2068,7 +2080,7 @@ function ConcessionsContent() {
                         </button>
                       )}
                       {activeTicket.seats.map((seat) => {
-                        const fullTarget = `${activeTicket.auditorium || 'Auditorium 1'}, Seat ${seat}`
+                        const fullTarget = `${activeTicket.auditorium || (circuitAuditoriums[0]?.name ?? '')}, Seat ${seat}`
                         const isSelected = deliverySeat === fullTarget
                         return (
                           <button
@@ -2103,7 +2115,7 @@ function ConcessionsContent() {
                     type="text"
                     value={deliverySeat}
                     onChange={(e) => setDeliverySeat(e.target.value)}
-                    placeholder="e.g. Auditorium 1, Seat B3"
+                    placeholder={`e.g. ${circuitAuditoriums[0]?.name || 'Auditorium'}, Seat B3`}
                     className="w-full rounded-lg border border-zinc-800 bg-zinc-900 px-3 py-1.5 text-xs text-white focus:border-amber-500 focus:outline-none"
                   />
                   <p className="text-[10px] text-zinc-500">

@@ -93,4 +93,9 @@ public class MovieController {
     public ResponseEntity<List<Auditorium>> getAuditoriums() {
         return ResponseEntity.ok(movieCatalogService.getAuditoriums());
     }
+
+    @GetMapping("/cinemas")
+    public ResponseEntity<List<CinemaVenue>> getCinemas() {
+        return ResponseEntity.ok(movieCatalogService.getCinemas());
+    }
 }

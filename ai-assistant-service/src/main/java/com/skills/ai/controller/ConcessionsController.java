@@ -17,6 +17,7 @@ import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -42,16 +43,16 @@ public class ConcessionsController {
 
     @PostMapping("/recommend")
     public List<ConcessionCombo> recommendCombos(@RequestBody(required = false) Map<String, Object> body) {
-        String genre = body != null && body.containsKey("genre") ? (String) body.get("genre") : "Sci-Fi";
+        String genre = body != null && body.containsKey("genre") ? (String) body.get("genre") : "";
         int partySize = body != null && body.containsKey("partySize") ? ((Number) body.get("partySize")).intValue() : 2;
         return concessionsService.recommendCombos(genre, partySize);
     }
 
     @PostMapping("/order")
     public ResponseEntity<ConcessionOrder> placeOrder(@RequestBody Map<String, Object> req) {
-        List<Map<String, Object>> items = (List<Map<String, Object>>) req.getOrDefault("items", List.of());
-        String deliverySeat = (String) req.getOrDefault("deliverySeat", "Express VIP Counter");
-        double total = req.containsKey("total") ? ((Number) req.get("total")).doubleValue() : 18.50;
+        List<Map<String, Object>> items = (List<Map<String, Object>>) req.getOrDefault("items", Collections.emptyList());
+        String deliverySeat = (String) req.getOrDefault("deliverySeat", "Pickup Counter");
+        double total = req.containsKey("total") ? ((Number) req.get("total")).doubleValue() : 0.0;
         java.time.Instant createdAt = null;
         if (req.containsKey("createdAt") && req.get("createdAt") != null) {
             try {
