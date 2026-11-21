@@ -17,7 +17,7 @@ import {
   Server,
   Code2,
 } from 'lucide-react'
-import { telemetryService, authService, type UserPersona } from '@/services'
+import { telemetryService, authService, type UserPersona, Permissions, rbacPolicyEngine } from '@/services'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 interface TraceSpan {
@@ -109,16 +109,16 @@ export default function TracingPage() {
     : 0
 
   const isAuthorized = Boolean(
-    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+    currentUser && currentUser.isAuthenticated && rbacPolicyEngine.hasPermission(currentUser, Permissions.APM_TRACES)
   )
 
   if (!isAuthorized && !isLoadingAuth) {
     return (
       <RbacAccessShield
         title="APM Waterfall Telemetry Clearance Required"
-        requiredRole="EXECUTIVE_ADMIN"
+        requiredPermission={Permissions.APM_TRACES}
         currentUser={currentUser}
-        description="Detailed APM OpenTelemetry waterfall traces are restricted to EXECUTIVE_ADMIN clearance. Inspection of distributed spans and LLM latency traces requires executive authorization."
+        description="Detailed APM OpenTelemetry waterfall traces require APM_TRACES clearance. Inspection of distributed spans and LLM latency traces requires verified authorization."
       />
     )
   }

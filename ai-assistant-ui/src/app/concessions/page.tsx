@@ -44,6 +44,8 @@ import {
   ticketService,
   walletService,
   movieService,
+  Permissions,
+  rbacPolicyEngine,
 } from '@/services'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 
@@ -708,12 +710,13 @@ function ConcessionsContent() {
     }
   }
 
-  const isUsher = currentUser?.role === 'AUDITORIUM_USHER'
-  const isManager = currentUser?.role === 'CINEMA_MANAGER' || currentUser?.role === 'EXECUTIVE_ADMIN'
-  const isStaff = isUsher || isManager
-  const effectiveViewMode = isManager
+  const hasDispatchPerm = rbacPolicyEngine.hasPermission(currentUser, Permissions.DISPATCH_FNB_ORDER)
+  const hasMenuPerm = rbacPolicyEngine.hasPermission(currentUser, Permissions.MANAGE_FNB_MENU)
+  const isManager = hasMenuPerm
+  const isStaff = hasDispatchPerm || hasMenuPerm
+  const effectiveViewMode = hasMenuPerm
     ? concessionsViewMode
-    : isUsher
+    : hasDispatchPerm
     ? (concessionsViewMode === 'POS_COUNTER' ? 'USHER_DISPATCH' : concessionsViewMode)
     : 'PATRON'
 
@@ -1528,15 +1531,8 @@ function ConcessionsContent() {
                   : `PREP IN PROGRESS (~${activeOrder.estimatedMinutes} MIN)`}
               </span>
 
-              {/* Expediter Stage Fast-Forward Controls (Restricted to Staff Roles) */}
-              {Boolean(
-                currentUser &&
-                currentUser.isAuthenticated &&
-                (currentUser.role === 'AUDITORIUM_USHER' ||
-                 currentUser.role === 'CINEMA_MANAGER' ||
-                 currentUser.role === 'EXECUTIVE_ADMIN' ||
-                 (currentUser.permissions && (currentUser.permissions.includes('DISPATCH_FNB_ORDER') || currentUser.permissions.includes('MANAGE_FNB_MENU'))))
-              ) && activeOrder.status === 'PREPARING' && (
+              {/* Expediter Stage Fast-Forward Controls (Restricted to DISPATCH_FNB_ORDER Permission) */}
+              {rbacPolicyEngine.hasPermission(currentUser, Permissions.DISPATCH_FNB_ORDER) && activeOrder.status === 'PREPARING' && (
                 <button
                   onClick={() => handleAdvanceStatus('PLATED', activeOrder.orderId)}
                   disabled={isAdvancingStatus}
@@ -1546,14 +1542,7 @@ function ConcessionsContent() {
                   <Sparkles className="h-3 w-3" /> Mark Plated
                 </button>
               )}
-              {Boolean(
-                currentUser &&
-                currentUser.isAuthenticated &&
-                (currentUser.role === 'AUDITORIUM_USHER' ||
-                 currentUser.role === 'CINEMA_MANAGER' ||
-                 currentUser.role === 'EXECUTIVE_ADMIN' ||
-                 (currentUser.permissions && (currentUser.permissions.includes('DISPATCH_FNB_ORDER') || currentUser.permissions.includes('MANAGE_FNB_MENU'))))
-              ) && activeOrder.status === 'READY' && (
+              {rbacPolicyEngine.hasPermission(currentUser, Permissions.DISPATCH_FNB_ORDER) && activeOrder.status === 'READY' && (
                 <button
                   onClick={() => handleAdvanceStatus('DELIVERED', activeOrder.orderId)}
                   disabled={isAdvancingStatus}

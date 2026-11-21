@@ -32,7 +32,7 @@ import {
   Ticket,
   UtensilsCrossed,
 } from 'lucide-react'
-import { agentService, authService, type UserPersona } from '@/services'
+import { agentService, authService, type UserPersona, Permissions, rbacPolicyEngine } from '@/services'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 const API_BASE =
@@ -572,16 +572,16 @@ export default function MultiAgentOrchestratorPage() {
   const topologyOrder = ['supervisor', 'catalog', 'inventory', 'rag_policy', 'billing', 'critic']
 
   const isAuthorized = Boolean(
-    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+    currentUser && currentUser.isAuthenticated && rbacPolicyEngine.hasPermission(currentUser, Permissions.AGENT_ORCHESTRATE)
   )
 
   if (!isAuthorized && !isLoadingAuth) {
     return (
       <RbacAccessShield
         title="Autonomous Swarm Clearance Required"
-        requiredRole="EXECUTIVE_ADMIN"
+        requiredPermission={Permissions.AGENT_ORCHESTRATE}
         currentUser={currentUser}
-        description="The Autonomous Agent Swarm is restricted to EXECUTIVE_ADMIN clearance. Multi-agent DAG orchestration and low-level MCP tool dispatch require executive credentials."
+        description="The Autonomous Agent Swarm is restricted to users with AGENT_ORCHESTRATE permission. Multi-agent DAG orchestration and low-level MCP tool dispatch require verified clearance."
       />
     )
   }

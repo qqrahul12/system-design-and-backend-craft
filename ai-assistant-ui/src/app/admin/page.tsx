@@ -29,7 +29,7 @@ import {
   UserCheck,
   Crown,
 } from 'lucide-react'
-import { adminService, movieService, authService } from '@/services'
+import { adminService, movieService, authService, Permissions, rbacPolicyEngine } from '@/services'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
@@ -602,22 +602,24 @@ export default function AdminPage() {
     return matchesSearch && matchesGenre
   })
 
-  // Role-Based UI Gating: Strictly require authenticated EXECUTIVE_ADMIN privileges
-  const isExecutiveAdmin = Boolean(
-    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+  // Permission-Based Access Control (PBAC): Check ADMIN_ACCESS or VIEW_BOX_OFFICE permissions
+  const isAuthorized = Boolean(
+    currentUser && currentUser.isAuthenticated && (
+      rbacPolicyEngine.hasAnyPermission(currentUser, [Permissions.ADMIN_ACCESS, Permissions.VIEW_BOX_OFFICE])
+    )
   )
 
-  if (!isExecutiveAdmin) {
+  if (!isAuthorized) {
     return (
       <div className="mx-auto max-w-3xl py-12 px-4 space-y-6">
         {/* Toast Notification */}
         {toast && <Toast {...toast} onClose={() => setToast(null)} />}
 
         <RbacAccessShield
-          title="Executive Clearance Required"
-          requiredRoles={['EXECUTIVE_ADMIN']}
+          title="Executive & Administrative Clearance Required"
+          requiredPermissions={[Permissions.ADMIN_ACCESS, Permissions.VIEW_BOX_OFFICE]}
           currentUser={currentUser}
-          description="Access to Circuit Executive Operations, Yield Multipliers, APM Telemetry, and Circuit Analytics is strictly restricted to EXECUTIVE_ADMIN clearance."
+          description="Access to Circuit Executive Operations, Yield Multipliers, APM Telemetry, and Circuit Analytics requires ADMIN_ACCESS or VIEW_BOX_OFFICE permissions."
           onRoleSwitched={switchToAdminPersona}
         />
       </div>

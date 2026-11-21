@@ -39,6 +39,7 @@ import {
 } from 'lucide-react'
 import { ticketService } from '@/services/ticketService'
 import { authService } from '@/services/authService'
+import { Permissions, rbacPolicyEngine } from '@/services/rbacRegistry'
 
 const API_BASE =
   typeof window !== 'undefined'
@@ -105,7 +106,7 @@ function TicketsContent() {
       .then((u) => {
         if (u) {
           setCurrentUser(u)
-          if (u.role === 'AUDITORIUM_USHER' || u.role === 'CINEMA_MANAGER') {
+          if (rbacPolicyEngine.hasPermission(u, Permissions.SCAN_GATE_PASS)) {
             setViewMode('GATE_SCANNER')
           }
         }
@@ -337,10 +338,7 @@ function TicketsContent() {
   const isStaff = Boolean(
     currentUser &&
     currentUser.isAuthenticated &&
-    (currentUser.role === 'AUDITORIUM_USHER' ||
-     currentUser.role === 'CINEMA_MANAGER' ||
-     currentUser.role === 'EXECUTIVE_ADMIN' ||
-     (currentUser.permissions && currentUser.permissions.includes('SCAN_GATE_PASS')))
+    rbacPolicyEngine.hasPermission(currentUser, Permissions.SCAN_GATE_PASS)
   )
   const effectiveViewMode = isStaff ? viewMode : 'PATRON_PASS'
 
@@ -355,7 +353,7 @@ function TicketsContent() {
       )}
 
       {/* Staff Gate Attendant Mode Banner */}
-      {currentUser?.role === 'AUDITORIUM_USHER' && (
+      {rbacPolicyEngine.hasPermission(currentUser, Permissions.OVERRIDE_TURNSTILE) && (
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 px-4 py-2.5 rounded-2xl border border-indigo-500/40 bg-indigo-950/30 text-xs text-indigo-200">
           <div className="flex items-center gap-2 font-semibold">
             <ShieldCheck className="h-4 w-4 text-indigo-400" />
@@ -1079,15 +1077,8 @@ function TicketsContent() {
 
         {/* Right Column: Gate Validation Simulator & Wallet Drawer (5 cols) */}
         <div className="lg:col-span-5 space-y-6">
-          {/* Gate Scanner Simulator Box (Restricted to Ushers / Managers / Admins with SCAN_GATE_PASS) */}
-          {Boolean(
-            currentUser &&
-            currentUser.isAuthenticated &&
-            (currentUser.role === 'AUDITORIUM_USHER' ||
-             currentUser.role === 'CINEMA_MANAGER' ||
-             currentUser.role === 'EXECUTIVE_ADMIN' ||
-             (currentUser.permissions && currentUser.permissions.includes('SCAN_GATE_PASS')))
-          ) ? (
+          {/* Gate Scanner Simulator Box (Restricted via SCAN_GATE_PASS Permission) */}
+          {rbacPolicyEngine.hasPermission(currentUser, Permissions.SCAN_GATE_PASS) ? (
             <div className="rounded-2xl border border-[#262626] bg-[#121212] p-5 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">

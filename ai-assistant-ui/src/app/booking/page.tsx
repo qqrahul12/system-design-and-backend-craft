@@ -49,6 +49,8 @@ import {
   walletService,
   ticketService,
   llmopsService,
+  Permissions,
+  rbacPolicyEngine,
 } from '@/services'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 
@@ -391,7 +393,7 @@ export default function BookingPage() {
       .then((u) => {
         if (u) {
           setCurrentUser(u as any)
-          if (u.role === 'CINEMA_MANAGER' || u.role === 'EXECUTIVE_ADMIN') {
+          if (rbacPolicyEngine.hasPermission(u as any, Permissions.MANAGE_THEATRE)) {
             setManagerHouseReserveMode(true)
           }
         }
@@ -1946,8 +1948,8 @@ REASON: <1 sentence why it matches>`
               </div>
             )}
 
-            {/* Manager House Reserve & Seating Control Panel (CINEMA_MANAGER / EXECUTIVE_ADMIN) */}
-            {(currentUser?.role === 'CINEMA_MANAGER' || currentUser?.role === 'EXECUTIVE_ADMIN') && (
+            {/* Manager House Reserve & Seating Control Panel (MANAGE_THEATRE Permission) */}
+            {rbacPolicyEngine.hasPermission(currentUser, Permissions.MANAGE_THEATRE) && (
               <div className="rounded-2xl border border-indigo-500/40 bg-gradient-to-r from-indigo-950/40 via-zinc-900 to-zinc-950 p-4 sm:p-5 shadow-xl space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-zinc-800 pb-3">
                   <div className="flex items-center gap-2.5">
@@ -2847,42 +2849,6 @@ REASON: <1 sentence why it matches>`
               <span className="text-sm font-mono font-black text-emerald-400">
                 ${priceBreakdown.total.toFixed(2)}
               </span>
-            </div>
-
-            {/* Quick 1-Click Persona Sign-In */}
-            <div className="space-y-2">
-              <span className="text-[11px] font-mono uppercase tracking-wider text-zinc-500 font-semibold">
-                Instant 1-Click Sign In
-              </span>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {(personas && personas.length > 0 ? personas : []).slice(0, 2).map((p: any) => (
-                  <button
-                    key={p.role}
-                    type="button"
-                    onClick={() => handleLoginAndBook(p.role)}
-                    disabled={isAuthLoading}
-                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#1c1c1c] hover:bg-[#252525] border border-zinc-800 hover:border-purple-500/40 text-left transition group"
-                  >
-                    {p.avatarUrl || p.avatar ? (
-                      <img
-                        src={p.avatarUrl || p.avatar}
-                        alt={p.fullName || p.name || p.role}
-                        className="w-8 h-8 rounded-full object-cover border border-purple-500/50"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-purple-900/40 border border-purple-500/50 flex items-center justify-center text-xs">
-                        👤
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white group-hover:text-purple-300">
-                        {p.fullName || p.name || p.roleDisplayName || p.role}
-                      </p>
-                      <p className="text-[10px] text-amber-400">{p.roleDisplayName || p.role}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
             </div>
 
             {/* Actions: Sign In page OR Continue as Guest */}

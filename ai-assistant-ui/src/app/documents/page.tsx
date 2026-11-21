@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { Upload, Search, Database, FileText, Cpu, MessageSquare, CheckCircle, Clock, Sparkles, BookOpen, FileUp } from 'lucide-react'
-import { ragService, authService, type UserPersona } from '@/services'
+import { ragService, authService, type UserPersona, Permissions, rbacPolicyEngine } from '@/services'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 interface Citation {
@@ -116,16 +116,16 @@ export default function DocumentsPage() {
   }
 
   const isAuthorized = Boolean(
-    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+    currentUser && currentUser.isAuthenticated && rbacPolicyEngine.hasPermission(currentUser, Permissions.RAG_INGESTION)
   )
 
   if (!isAuthorized && !isLoadingAuth) {
     return (
       <RbacAccessShield
         title="Vector & Script Knowledge Ingestion Clearance Required"
-        requiredRole="EXECUTIVE_ADMIN"
+        requiredPermission={Permissions.RAG_INGESTION}
         currentUser={currentUser}
-        description="RAG knowledge base ingestion, semantic document chunking, and vector index mutations require EXECUTIVE_ADMIN clearance."
+        description="RAG knowledge base ingestion, semantic document chunking, and vector index mutations require RAG_INGESTION permission."
       />
     )
   }

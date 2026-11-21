@@ -4,6 +4,7 @@ import React, { useState, useEffect, ReactNode } from 'react'
 import Link from 'next/link'
 import { Lock, ShieldCheck, Key, User, Loader2 } from 'lucide-react'
 import { authService, UserPersona } from '@/services/authService'
+import { rbacPolicyEngine } from '@/services/rbacRegistry'
 
 export interface RbacAccessShieldProps {
   /** Section or page heading */
@@ -14,6 +15,8 @@ export interface RbacAccessShieldProps {
   requiredRoles?: string[]
   /** Specific permission required */
   requiredPermission?: string
+  /** Multiple permissions (OR logic - user must have at least one) */
+  requiredPermissions?: string[]
   /** Explicit authentication requirement (default: true if role/permission passed) */
   requiresAuth?: boolean
   /** Optional pre-fetched user. If omitted, RbacAccessShield manages session state internally */
@@ -54,6 +57,7 @@ export function RbacAccessShield({
   requiredRole,
   requiredRoles,
   requiredPermission,
+  requiredPermissions,
   requiresAuth = true,
   currentUser: propUser,
   description,
@@ -122,8 +126,8 @@ export function RbacAccessShield({
     (user && user.role && targetRoles.includes(user.role))
 
   const hasPermissionMatch =
-    !requiredPermission ||
-    (user && user.permissions && user.permissions.includes(requiredPermission))
+    (!requiredPermission || (user && user.permissions && user.permissions.includes(requiredPermission))) &&
+    (!requiredPermissions || (user && rbacPolicyEngine.hasAnyPermission(user, requiredPermissions)))
 
   const isAuthorized =
     (!requiresAuth || isAuthenticated) && hasRoleMatch && hasPermissionMatch

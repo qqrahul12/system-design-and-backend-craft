@@ -31,7 +31,7 @@ import {
   Flame,
   X,
 } from 'lucide-react'
-import { authService, concessionsService, movieService, ticketService, walletService, apiClient } from '@/services'
+import { authService, concessionsService, movieService, ticketService, walletService, apiClient, Permissions, rbacPolicyEngine } from '@/services'
 import { formatCurrency, getCurrencySymbol } from '@/services/walletService'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
@@ -220,10 +220,17 @@ function ManagerPortalContent() {
     loadData()
   }, [])
 
-  const isAuthorized =
+  const isAuthorized = Boolean(
     currentUser &&
     currentUser.isAuthenticated &&
-    (currentUser.role === 'CINEMA_MANAGER' || currentUser.role === 'EXECUTIVE_ADMIN')
+    rbacPolicyEngine.hasAnyPermission(currentUser, [
+      Permissions.MANAGE_THEATRE,
+      Permissions.MANAGE_FNB_MENU,
+      Permissions.MANAGE_RBAC,
+      Permissions.DISPATCH_FNB_ORDER,
+      Permissions.ADMIN_ACCESS,
+    ])
+  )
 
   const handleElevateRole = async (targetRole = 'CINEMA_MANAGER') => {
     try {
@@ -361,9 +368,15 @@ function ManagerPortalContent() {
       {!isAuthorized && !isLoading && (
         <RbacAccessShield
           title="Cinema Manager Operations Clearance Required"
-          requiredRoles={['CINEMA_MANAGER', 'EXECUTIVE_ADMIN']}
+          requiredPermissions={[
+            Permissions.MANAGE_THEATRE,
+            Permissions.MANAGE_FNB_MENU,
+            Permissions.MANAGE_RBAC,
+            Permissions.DISPATCH_FNB_ORDER,
+            Permissions.ADMIN_ACCESS,
+          ]}
           currentUser={currentUser}
-          description="The Manager Operations Portal is strictly reserved for CINEMA_MANAGER and EXECUTIVE_ADMIN roles to manage Auth sessions, RBAC matrices, Gourmet F&B menus, and Theatres."
+          description="The Manager Operations Portal requires operational permissions (MANAGE_THEATRE, MANAGE_FNB_MENU, or MANAGE_RBAC) to manage Auth sessions, RBAC matrices, and menus."
           onRoleSwitched={loadData}
         />
       )}

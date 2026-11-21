@@ -11,3 +11,4 @@ export * from './telemetryService';
 export * from './ragService';
 export * from './llmopsService';
 export * from './sessionService';
+export * from './rbacRegistry';

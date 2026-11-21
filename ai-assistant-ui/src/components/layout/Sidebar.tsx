@@ -30,7 +30,7 @@ import {
   Layers,
 } from 'lucide-react'
 import { clsx } from 'clsx'
-import { authService, walletService, apiClient } from '@/services'
+import { authService, walletService, apiClient, Permissions, rbacPolicyEngine } from '@/services'
 import { formatCurrency } from '@/services/walletService'
 
 const API_BASE =
@@ -45,13 +45,13 @@ interface NavItem {
   description: string
   badge?: string
   requiresAuth?: boolean
-  allowedRoles?: string[]
+  requiredPermissions?: string[]
 }
 
 interface NavSection {
   title: string
   requiresAuth?: boolean
-  allowedRoles?: string[]
+  requiredPermissions?: string[]
   items: NavItem[]
 }
 
@@ -88,7 +88,7 @@ const navSections: NavSection[] = [
         description: 'HMAC QR gate check-in',
         badge: 'VIP',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'AUDITORIUM_USHER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.VIEW_TICKETS, Permissions.SCAN_GATE_PASS],
       },
       {
         href: '/wallet',
@@ -97,7 +97,7 @@ const navSections: NavSection[] = [
         description: 'Multi-currency stored value',
         badge: 'VIP',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.BOOK_SEATS, Permissions.ORDER_FNB],
       },
       {
         href: '/split',
@@ -106,7 +106,7 @@ const navSections: NavSection[] = [
         description: 'Group bill splitting & settle',
         badge: 'NEW',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.BOOK_SEATS, Permissions.ORDER_FNB],
       },
       {
         href: '/profile',
@@ -114,14 +114,20 @@ const navSections: NavSection[] = [
         icon: User,
         description: 'Switch persona & roles',
         requiresAuth: true,
-        allowedRoles: ['VIP_PATRON', 'STANDARD_GUEST', 'CINEMA_MANAGER', 'AUDITORIUM_USHER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.VIEW_CATALOG],
       },
     ],
   },
   {
     title: 'Manager View',
     requiresAuth: true,
-    allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+    requiredPermissions: [
+      Permissions.MANAGE_THEATRE,
+      Permissions.MANAGE_FNB_MENU,
+      Permissions.MANAGE_RBAC,
+      Permissions.DISPATCH_FNB_ORDER,
+      Permissions.ADMIN_ACCESS,
+    ],
     items: [
       {
         href: '/manager',
@@ -130,7 +136,7 @@ const navSections: NavSection[] = [
         description: 'All-in-one cinema operations',
         badge: 'MGR',
         requiresAuth: true,
-        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.MANAGE_THEATRE, Permissions.DISPATCH_FNB_ORDER, Permissions.ADMIN_ACCESS],
       },
       {
         href: '/manager?tab=auth',
@@ -138,7 +144,7 @@ const navSections: NavSection[] = [
         icon: Key,
         description: 'Sessions, tokens & revocation',
         requiresAuth: true,
-        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.MANAGE_RBAC, Permissions.ADMIN_ACCESS],
       },
       {
         href: '/manager?tab=rbac',
@@ -146,7 +152,7 @@ const navSections: NavSection[] = [
         icon: Shield,
         description: 'Role-permission governance',
         requiresAuth: true,
-        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.MANAGE_RBAC, Permissions.ADMIN_ACCESS],
       },
       {
         href: '/manager?tab=menu',
@@ -154,7 +160,7 @@ const navSections: NavSection[] = [
         icon: UtensilsCrossed,
         description: 'Dishes, stock & AI combos',
         requiresAuth: true,
-        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.MANAGE_FNB_MENU, Permissions.ADMIN_ACCESS],
       },
       {
         href: '/manager?tab=theatre',
@@ -162,14 +168,21 @@ const navSections: NavSection[] = [
         icon: Film,
         description: 'Auditoriums, seats & surge',
         requiresAuth: true,
-        allowedRoles: ['CINEMA_MANAGER', 'EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.MANAGE_THEATRE, Permissions.CATALOG_MUTATE, Permissions.ADMIN_ACCESS],
       },
     ],
   },
   {
     title: 'Admin View',
     requiresAuth: true,
-    allowedRoles: ['EXECUTIVE_ADMIN'],
+    requiredPermissions: [
+      Permissions.ADMIN_ACCESS,
+      Permissions.VIEW_BOX_OFFICE,
+      Permissions.AGENT_ORCHESTRATE,
+      Permissions.APM_TRACES,
+      Permissions.LLMOPS_TELEMETRY,
+      Permissions.RAG_INGESTION,
+    ],
     items: [
       {
         href: '/admin',
@@ -178,7 +191,7 @@ const navSections: NavSection[] = [
         description: 'Box office, yield & POs',
         badge: 'PRO',
         requiresAuth: true,
-        allowedRoles: ['EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.ADMIN_ACCESS, Permissions.VIEW_BOX_OFFICE],
       },
       {
         href: '/agent',
@@ -186,7 +199,7 @@ const navSections: NavSection[] = [
         icon: Bot,
         description: '7-Agent booking DAG & logs',
         requiresAuth: true,
-        allowedRoles: ['EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.AGENT_ORCHESTRATE],
       },
       {
         href: '/tracing',
@@ -195,7 +208,7 @@ const navSections: NavSection[] = [
         description: 'OpenTelemetry spans & latency',
         badge: 'NEW',
         requiresAuth: true,
-        allowedRoles: ['EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.APM_TRACES],
       },
       {
         href: '/analytics',
@@ -203,7 +216,7 @@ const navSections: NavSection[] = [
         icon: Zap,
         description: 'Semantic cache & injection filter',
         requiresAuth: true,
-        allowedRoles: ['EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.LLMOPS_TELEMETRY],
       },
       {
         href: '/documents',
@@ -211,7 +224,7 @@ const navSections: NavSection[] = [
         icon: FileText,
         description: 'Vector embeddings & RAG',
         requiresAuth: true,
-        allowedRoles: ['EXECUTIVE_ADMIN'],
+        requiredPermissions: [Permissions.RAG_INGESTION],
       },
     ],
   },
@@ -374,16 +387,18 @@ export default function Sidebar() {
     if (!isAuthenticated) {
       return !item.requiresAuth
     }
-    if (item.allowedRoles && (!currentUser || !item.allowedRoles.includes(currentUser.role))) {
-      return false
+    if (item.requiredPermissions && item.requiredPermissions.length > 0) {
+      return rbacPolicyEngine.hasAnyPermission(currentUser, item.requiredPermissions)
     }
-    return true
+    return rbacPolicyEngine.canAccessRoute(currentUser, item.href)
   }
 
   const isSectionVisible = (section: NavSection) => {
     if (section.requiresAuth && !isAuthenticated) return false
-    if (section.allowedRoles && (!isAuthenticated || !currentUser || !section.allowedRoles.includes(currentUser.role))) {
-      return false
+    if (section.requiredPermissions && section.requiredPermissions.length > 0) {
+      if (!rbacPolicyEngine.hasAnyPermission(currentUser, section.requiredPermissions)) {
+        return false
+      }
     }
     return section.items.some((item) => isItemVisible(item))
   }

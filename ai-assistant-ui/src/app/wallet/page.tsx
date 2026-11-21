@@ -31,6 +31,7 @@ import {
 } from 'lucide-react'
 import { walletService, formatCurrency, getCurrencySymbol } from '@/services/walletService'
 import { authService, UserPersona } from '@/services/authService'
+import { Permissions, rbacPolicyEngine } from '@/services/rbacRegistry'
 import { apiClient } from '@/services/apiClient'
 import { Toast, type ToastMessage } from '@/components/ui/AlertToast'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
@@ -151,7 +152,7 @@ export default function WalletPage() {
       .then((u) => {
         setCurrentUser(u)
         setIsLoadingAuth(false)
-        if (u && (u.role === 'CINEMA_MANAGER' || u.role === 'EXECUTIVE_ADMIN')) {
+        if (u && rbacPolicyEngine.hasPermission(u, Permissions.MANAGE_THEATRE)) {
           setManagerViewMode('REGISTER_VAULT')
         } else {
           setManagerViewMode('PERSONAL_WALLET')
@@ -167,8 +168,7 @@ export default function WalletPage() {
   }, [])
 
   const isManager = Boolean(
-    currentUser &&
-    (currentUser.role === 'CINEMA_MANAGER' || currentUser.role === 'EXECUTIVE_ADMIN')
+    currentUser && rbacPolicyEngine.hasPermission(currentUser, Permissions.MANAGE_THEATRE)
   )
 
   const handleIssueCustomerComp = async () => {

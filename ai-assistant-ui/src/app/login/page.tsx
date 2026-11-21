@@ -166,53 +166,8 @@ export default function LoginPage() {
               Welcome to CineMind AI
             </h1>
             <p className="text-xs text-[#888] leading-relaxed">
-              Sign in to manage your high-concurrency movie bookings, access the CineCash Digital Wallet, track squad expenses, or test enterprise roles with live RBAC.
+              Sign in to manage your high-concurrency movie bookings, access the CineCash Digital Wallet, track squad expenses, or access enterprise operations with role-based access control.
             </p>
-          </div>
-
-          {/* Quick Demo Switcher Cards — loaded from API */}
-          <div className="space-y-2.5">
-            <span className="text-[11px] font-mono uppercase tracking-wider text-[#666] font-semibold">
-              Instant 1-Click Persona Login
-            </span>
-            {personasLoading ? (
-              <div className="flex items-center gap-2 text-xs text-[#666] py-2">
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                <span>Loading personas from server…</span>
-              </div>
-            ) : personas.length === 0 ? (
-              <p className="text-xs text-[#666] py-2">No demo personas available. Use the form to sign in.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                {personas.map((p) => (
-                  <button
-                    key={p.role}
-                    type="button"
-                    disabled={loading}
-                    onClick={() => handleLogin(undefined, p.email, p.role)}
-                    className="flex items-center gap-2.5 p-2.5 rounded-xl bg-[#161616] hover:bg-[#202020] border border-[#252525] hover:border-purple-500/40 text-left transition group disabled:opacity-50"
-                  >
-                    {(p.avatarUrl || p.avatar) ? (
-                      <img
-                        src={p.avatarUrl ?? p.avatar}
-                        alt={p.fullName ?? p.name ?? p.role}
-                        className="w-8 h-8 rounded-full object-cover border border-[#333]"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-purple-800/40 flex items-center justify-center border border-[#333]">
-                        <UserCheck className="h-4 w-4 text-purple-400" />
-                      </div>
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-white truncate group-hover:text-purple-300">
-                        {p.fullName ?? p.name ?? p.role}
-                      </p>
-                      <p className="text-[10px] text-[#888] truncate">{p.roleDisplayName ?? p.role}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-            )}
           </div>
 
           <div className="flex items-center gap-2 text-xs text-[#666] pt-2">

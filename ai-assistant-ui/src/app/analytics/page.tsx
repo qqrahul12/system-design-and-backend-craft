@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { TrendingUp, Zap, Layers, DollarSign, RefreshCw, Trash2, ShieldAlert } from 'lucide-react'
-import { llmopsService, authService, type UserPersona } from '@/services'
+import { llmopsService, authService, type UserPersona, Permissions, rbacPolicyEngine } from '@/services'
 import { RbacAccessShield } from '@/components/ui/RbacAccessShield'
 
 interface MetricsData {
@@ -76,16 +76,16 @@ export default function AnalyticsPage() {
   }
 
   const isAuthorized = Boolean(
-    currentUser && currentUser.isAuthenticated && currentUser.role === 'EXECUTIVE_ADMIN'
+    currentUser && currentUser.isAuthenticated && rbacPolicyEngine.hasPermission(currentUser, Permissions.LLMOPS_TELEMETRY)
   )
 
   if (!isAuthorized && !isLoadingAuth) {
     return (
       <RbacAccessShield
         title="LLMOps & Telemetry Clearance Required"
-        requiredRole="EXECUTIVE_ADMIN"
+        requiredPermission={Permissions.LLMOPS_TELEMETRY}
         currentUser={currentUser}
-        description="LLMOps telemetry metrics, prompt injection firewall logs, and cache eviction controls require EXECUTIVE_ADMIN clearance."
+        description="LLMOps telemetry metrics, prompt injection firewall logs, and cache eviction controls require LLMOPS_TELEMETRY permission."
       />
     )
   }
